@@ -1,8 +1,14 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Sequelize, Options } from 'sequelize';
 import { execSync } from 'child_process';
 import pg from 'pg';
 import env from './env.js';
 import logger from './logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '../../');
 
 interface SSLConfig {
   ssl?: {
@@ -110,7 +116,12 @@ export const connectDatabase = async (): Promise<void> => {
   // Run pending migrations
   try {
     logger.info('Running database migrations...');
-    execSync('npx sequelize-cli db:migrate', { stdio: 'inherit' });
+    const configPath = path.join(projectRoot, 'sequelize.config.cjs');
+    const migrationsPath = path.join(projectRoot, 'migrations');
+    execSync(
+      `npx sequelize-cli db:migrate --config "${configPath}" --migrations-path "${migrationsPath}"`,
+      { stdio: 'inherit', cwd: projectRoot }
+    );
     logger.info('Migrations complete');
   } catch (error) {
     logger.error('Migration failed', error);
