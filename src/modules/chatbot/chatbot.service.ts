@@ -248,14 +248,12 @@ export interface CreateDealWithConfigInput {
     maxAcceptablePrice: number;
     minOrderQuantity: number;
     preferredQuantity?: number;
-    volumeDiscountExpectation?: number;
   };
 
   // Payment Terms
   paymentTerms: {
     minDays: number;
     maxDays: number;
-    advancePaymentLimit?: number;
     acceptedMethods?: ('BANK_TRANSFER' | 'CREDIT' | 'LC')[];
   };
 
@@ -510,6 +508,9 @@ export const createDealWithConfigService = async (
       throw new CustomError('Requisition not found', 404);
     }
 
+    // Resolve the currency from the requisition (source of truth)
+    const requisitionCurrencyCode = (requisition.typeOfCurrency as string) || 'USD';
+
     // Validate vendor exists
     const vendor = await models.User.findByPk(input.vendorId);
     if (!vendor) {
@@ -519,8 +520,14 @@ export const createDealWithConfigService = async (
     // Build negotiation config from wizard input
     const { priceQuantity, paymentTerms, delivery, contractSla, negotiationControl, customParameters } = input;
 
-    // Calculate concession step based on price range
-    const priceRange = priceQuantity.maxAcceptablePrice - priceQuantity.targetUnitPrice;
+    // Convert unit prices to total prices using order quantity
+    // Vendors always bid on total contract value, so all thresholds must be totals too
+    const orderQty = priceQuantity.minOrderQuantity || 1;
+    const targetTotalPrice = priceQuantity.targetUnitPrice * orderQty;
+    const maxTotalPrice = priceQuantity.maxAcceptablePrice * orderQty;
+
+    // Calculate concession step based on total price range
+    const priceRange = maxTotalPrice - targetTotalPrice;
     const concessionStep = priceRange / (negotiationControl?.maxRounds || 10);
 
     // Build payment terms utility based on accepted methods
@@ -572,9 +579,9 @@ export const createDealWithConfigService = async (
         total_price: {
           weight: priceWeight,
           direction: 'minimize',
-          anchor: priceQuantity.targetUnitPrice * 0.85,
-          target: priceQuantity.targetUnitPrice,
-          max_acceptable: priceQuantity.maxAcceptablePrice,
+          anchor: targetTotalPrice * 0.85,
+          target: targetTotalPrice,
+          max_acceptable: maxTotalPrice,
           concession_step: concessionStep,
         },
         payment_terms: {
@@ -588,6 +595,8 @@ export const createDealWithConfigService = async (
       max_rounds: maxRounds,
       // Store priority for counter-offer logic
       priority: input.priority,
+      // Currency from requisition — used for all price display (symbol, formatting)
+      currency: requisitionCurrencyCode,
     };
 
     // Adaptive Features: Historical Anchor Adjustment & Dynamic Rounds
@@ -1008,7 +1017,6 @@ interface SmartDefaultsResponse {
   priceQuantity: {
     targetUnitPrice: number | null;
     maxAcceptablePrice: number | null;
-    volumeDiscountExpectation: number | null;
     // New fields for auto-populating from requisition totals
     totalQuantity: number | null;
     totalTargetPrice: number | null;
@@ -1017,7 +1025,6 @@ interface SmartDefaultsResponse {
   paymentTerms: {
     minDays: number;
     maxDays: number;
-    advancePaymentLimit: number | null;
     // Additional payment fields from requisition
     paymentTermsText: string | null;      // e.g., "Net 30", "Net 60"
     netPaymentDay: number | null;         // Parsed net payment day
@@ -1031,18 +1038,14 @@ interface SmartDefaultsResponse {
     maxDeliveryDate?: string | null;      // Maps to requiredDate in wizard
     negotiationClosureDate?: string | null; // Maps to deadline in wizard Step 3
   };
-  // Requisition priorities for auto-populating Step 4 weights
-  priorities: {
-    pricePriority: number | null;         // 0-100, weight for price parameters
-    deliveryPriority: number | null;      // 0-100, weight for delivery parameters
-    paymentTermsPriority: number | null;  // 0-100, weight for payment terms
-  };
   // BATNA and discount limits from requisition
   negotiationLimits: {
     batna: number | null;                 // Best Alternative to Negotiated Agreement
     maxDiscount: number | null;           // Maximum discount allowed
     discountedValue: number | null;       // Discounted value calculation
   };
+  /** Currency code from the requisition (e.g. "USD", "INR", "GBP") */
+  currency: string;
   source: 'vendor_history' | 'similar_deals' | 'industry_default' | 'combined';
   confidence: number;
 }
@@ -1152,34 +1155,6 @@ export const getSmartDefaultsService = async (
     const targetUnitPrice = Math.round(averageTarget * 100) / 100;
     const maxAcceptablePrice = Math.round(averageTarget * 1.2 * 100) / 100;
 
-    // Helper to convert priority string ('high', 'medium', 'low') to numeric value (0-100)
-    // If already numeric, parse it directly
-    const convertPriorityToNumber = (priority: string | null | undefined): number | null => {
-      if (!priority) return null;
-
-      // Check if it's already a number
-      const numericValue = parseFloat(priority);
-      if (!isNaN(numericValue)) return numericValue;
-
-      // Convert string priority to numeric scale
-      const priorityLower = priority.toLowerCase().trim();
-      switch (priorityLower) {
-        case 'high':
-          return 50;  // High priority = 50 weight
-        case 'medium':
-          return 30;  // Medium priority = 30 weight
-        case 'low':
-          return 20;  // Low priority = 20 weight
-        default:
-          return null;
-      }
-    };
-
-    // Extract priority values from requisition (stored as strings like 'high', 'medium', 'low' or as numbers)
-    const pricePriority = convertPriorityToNumber(requisition.pricePriority);
-    const deliveryPriority = convertPriorityToNumber(requisition.deliveryPriority);
-    const paymentTermsPriority = convertPriorityToNumber(requisition.paymentTermsPriority);
-
     // Extract payment terms details from requisition
     const paymentTermsText = requisition.payment_terms || null;
     const netPaymentDay = requisition.net_payment_day
@@ -1197,7 +1172,6 @@ export const getSmartDefaultsService = async (
       priceQuantity: {
         targetUnitPrice,
         maxAcceptablePrice,
-        volumeDiscountExpectation: avgVolumeDiscount,
         // New total fields from requisition
         totalQuantity: finalTotalQuantity,
         totalTargetPrice: finalTotalTargetPrice,
@@ -1206,7 +1180,6 @@ export const getSmartDefaultsService = async (
       paymentTerms: {
         minDays: netPaymentDay || 30,  // Use requisition's net payment day if available
         maxDays: (netPaymentDay || 30) + 30,  // Allow 30 days flexibility
-        advancePaymentLimit: prePaymentPercentage || 20, // Use requisition's pre-payment or default 20%
         // Additional payment fields from requisition
         paymentTermsText,
         netPaymentDay,
@@ -1219,18 +1192,13 @@ export const getSmartDefaultsService = async (
         maxDeliveryDate,        // Maps to requiredDate in wizard
         negotiationClosureDate, // Maps to deadline in wizard Step 3
       },
-      // Requisition priorities for auto-populating Step 4 weights
-      priorities: {
-        pricePriority,
-        deliveryPriority,
-        paymentTermsPriority,
-      },
       // BATNA and discount limits from requisition
       negotiationLimits: {
         batna,
         maxDiscount,
         discountedValue,
       },
+      currency: (requisition.typeOfCurrency as string) || 'USD',
       source,
       confidence,
     };
@@ -1271,42 +1239,67 @@ const formatDeliveryForMessage = (deliveryDate: string | null | undefined, deliv
   return dateText;
 };
 
+/** Map currency code → display symbol */
+const CURRENCY_SYMBOL_MAP: Record<string, string> = {
+  USD: '$',
+  INR: '₹',
+  EUR: '€',
+  GBP: '£',
+  AUD: 'A$',
+};
+
+/** Format a price with the correct currency symbol for a deal */
+const formatPrice = (amount: number, currencyCode: string): string => {
+  const symbol = CURRENCY_SYMBOL_MAP[currencyCode] ?? currencyCode + ' ';
+  return `${symbol}${amount.toLocaleString()}`;
+};
+
 /**
  * Generate Accordo response text based on decision
  * Now includes delivery date and days in response messages
  */
-const generateAccordoResponseText = (decision: Decision, config: NegotiationConfig): string => {
+const generateAccordoResponseText = (decision: Decision, config: NegotiationConfig, vendorOffer?: { total_price?: number | null; payment_terms?: string | null; delivery_date?: string | null; delivery_days?: number | null } | null): string => {
   const { action, counterOffer, utilityScore } = decision;
+  const currencyCode = (config as any).currency || 'USD';
 
   // Format delivery if available in counterOffer
   const deliveryText = formatDeliveryForMessage(counterOffer?.delivery_date, counterOffer?.delivery_days);
 
   switch (action) {
-    case 'ACCEPT':
+    case 'ACCEPT': {
+      // For ACCEPT, show the vendor's accepted price (not a counter offer)
+      const acceptedPrice = vendorOffer?.total_price;
+      const acceptedTerms = vendorOffer?.payment_terms;
       const acceptDelivery = deliveryText ? ` and delivery by ${deliveryText}` : '';
-      return `I'm pleased to accept your offer. We have a deal at $${counterOffer?.total_price || 'agreed'} with ${counterOffer?.payment_terms || 'agreed'} payment terms${acceptDelivery}. Thank you for the negotiation.`;
+      const priceStr = acceptedPrice ? formatPrice(acceptedPrice, currencyCode) : 'the agreed amount';
+      const termsStr = acceptedTerms || 'the agreed terms';
+      return `We are pleased to accept your offer of ${priceStr} with ${termsStr} payment terms${acceptDelivery}. This meets our procurement requirements and we look forward to formalizing the agreement. Thank you for working with us.`;
+    }
 
-    case 'COUNTER':
+    case 'COUNTER': {
       const targetPriceValue = config.parameters?.total_price?.target ?? ((config.parameters as Record<string, unknown>)?.unit_price as { target?: number } | undefined)?.target ?? 1000;
       const priceText = counterOffer?.total_price
-        ? `$${counterOffer.total_price}`
-        : `$${targetPriceValue}`;
+        ? formatPrice(counterOffer.total_price, currencyCode)
+        : formatPrice(targetPriceValue, currencyCode);
       const termsText = counterOffer?.payment_terms || 'Net 60';
       const counterDelivery = deliveryText ? `, delivery by ${deliveryText}` : '';
-      return `Thank you for your offer. Based on our analysis, I'd like to counter with ${priceText}, ${termsText} payment terms${counterDelivery}. This would give us a utility score of ${((utilityScore || 0) * 100).toFixed(0)}%.`;
+      return `Thank you for your offer. After careful review, we would like to counter with ${priceText}, ${termsText} payment terms${counterDelivery}. We believe these terms reflect a fair path forward for both parties.`;
+    }
 
     case 'WALK_AWAY':
-      return `I appreciate your time, but unfortunately the current offer doesn't meet our minimum requirements. The utility score of ${((utilityScore || 0) * 100).toFixed(0)}% falls below our walkaway threshold. We'll need to conclude this negotiation.`;
+      return `I appreciate your time, but unfortunately the current terms do not align with our procurement requirements. We have reached the limit of what is workable within our constraints and will need to conclude this negotiation.`;
 
-    case 'ESCALATE':
+    case 'ESCALATE': {
       const escalateDelivery = deliveryText ? `, delivery by ${deliveryText}` : '';
-      return `This negotiation has reached a point where I need to escalate it to a human decision-maker for review. Our counter-proposal is ${counterOffer?.total_price ? `$${counterOffer.total_price}` : 'pending'} with ${counterOffer?.payment_terms || 'negotiable'} terms${escalateDelivery}. Thank you for your patience.`;
+      const escalatePrice = counterOffer?.total_price ? formatPrice(counterOffer.total_price, currencyCode) : 'pending';
+      return `This negotiation has reached a point where I need to escalate it to a human decision-maker for review. Our counter-proposal is ${escalatePrice} with ${counterOffer?.payment_terms || 'negotiable'} terms${escalateDelivery}. Thank you for your patience.`;
+    }
 
     case 'ASK_CLARIFY':
       return `I need some clarification on your offer. Could you please provide more details about the pricing, payment terms, and delivery timeline?`;
 
     default:
-      return `Thank you for your message. Our analysis shows a utility score of ${((utilityScore || 0) * 100).toFixed(0)}%.`;
+      return `Thank you for your message. We have reviewed the details and will be in touch shortly regarding the next steps.`;
   }
 };
 
@@ -1430,7 +1423,7 @@ export const processVendorMessageService = async (
     });
 
     // Generate and save ACCORDO response message
-    const accordoResponseText = generateAccordoResponseText(decision, config);
+    const accordoResponseText = generateAccordoResponseText(decision, config, extractedOffer);
     const accordoMessageId = uuidv4();
     const accordoMessage = await models.ChatbotMessage.create({
       id: accordoMessageId,
@@ -2670,12 +2663,10 @@ export interface ExtendedNegotiationConfig extends NegotiationConfig {
       maxAcceptablePrice: number;
       minOrderQuantity: number;
       preferredQuantity?: number;
-      volumeDiscountExpectation?: number;
     };
     paymentTerms: {
       minDays: number;
       maxDays: number;
-      advancePaymentLimit?: number;
       acceptedMethods?: ('BANK_TRANSFER' | 'CREDIT' | 'LC')[];
     };
     delivery: {
@@ -3350,6 +3341,7 @@ export interface RequisitionWithDeals {
   estimatedValue: number | null;
   deadline: string | null;
   createdAt: string;
+  typeOfCurrency: string | null;
 
   // Aggregated stats
   vendorCount: number;
@@ -3546,6 +3538,7 @@ export const getRequisitionsWithDealsService = async (
         estimatedValue: requisition.totalPrice || requisition.totalEstimatedAmount as number | null,
         deadline: requisition.negotiationClosureDate?.toISOString() || null,
         createdAt: requisition.createdAt.toISOString(),
+        typeOfCurrency: (requisition.typeOfCurrency as string) || null,
         vendorCount,
         activeDeals,
         completedDeals,
@@ -3823,6 +3816,7 @@ export const getRequisitionDealsService = async (
       estimatedValue: requisition.totalPrice || requisition.totalEstimatedAmount as number | null,
       deadline: requisition.negotiationClosureDate?.toISOString() || null,
       createdAt: requisition.createdAt.toISOString(),
+      typeOfCurrency: (requisition.typeOfCurrency as string) || null,
       vendorCount,
       activeDeals,
       completedDeals,
@@ -4436,7 +4430,7 @@ export const getRequisitionsForNegotiationService = async (): Promise<{
         projectId: req.projectId,
         projectName: (req as any).Project?.projectName || 'Unknown Project',
         status: req.status || 'Open',
-        estimatedValue: (req.totalEstimatedAmount as number) || 0,  // Frontend expects estimatedValue
+        estimatedValue: (req.totalPrice as number) || (req.totalEstimatedAmount as number) || 0,
         negotiationClosureDate: req.negotiationClosureDate?.toISOString() || null,
         createdAt: req.createdAt.toISOString(),
         vendorCount: Array.isArray(contracts) ? contracts.length : 1,

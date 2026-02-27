@@ -98,7 +98,7 @@ export const createRequisionService = async (
     delete cleanedData.maximum_delivery_date;
 
     // Parse and validate date fields - multipart form data sends dates as strings
-    const dateFields = ['deliveryDate', 'negotiationClosureDate', 'benchmarkingDate', 'maxDeliveryDate'];
+    const dateFields = ['deliveryDate', 'negotiationClosureDate', 'maxDeliveryDate'];
     for (const field of dateFields) {
       if (cleanedData[field]) {
         // Handle empty strings
@@ -115,17 +115,6 @@ export const createRequisionService = async (
           }
         }
       }
-    }
-
-    // Convert priority numbers to strings (database expects STRING type)
-    if (cleanedData.pricePriority !== undefined) {
-      cleanedData.pricePriority = String(cleanedData.pricePriority);
-    }
-    if (cleanedData.deliveryPriority !== undefined) {
-      cleanedData.deliveryPriority = String(cleanedData.deliveryPriority);
-    }
-    if (cleanedData.paymentTermsPriority !== undefined) {
-      cleanedData.paymentTermsPriority = String(cleanedData.paymentTermsPriority);
     }
 
     // Ensure projectId is a number (multipart form data can send it as string)
@@ -372,9 +361,6 @@ export const updateRequisitionService = async (
       net_payment_day: oldRequisition.net_payment_day,
       pre_payment_percentage: oldRequisition.pre_payment_percentage,
       post_payment_percentage: oldRequisition.post_payment_percentage,
-      pricePriority: oldRequisition.pricePriority,
-      deliveryPriority: oldRequisition.deliveryPriority,
-      paymentTermsPriority: oldRequisition.paymentTermsPriority,
     };
 
     // Handle field name mapping: frontend might send maximum_delivery_date but backend expects maxDeliveryDate
@@ -409,7 +395,6 @@ export const updateRequisitionService = async (
       'subject', 'category', 'deliveryDate', 'negotiationClosureDate', 'typeOfCurrency',
       'totalQuantity', 'totalPrice', 'totalMaxPrice', 'finalPrice', 'status', 'payment_terms', 'net_payment_day',
       'pre_payment_percentage', 'post_payment_percentage', 'maxDeliveryDate',
-      'pricePriority', 'deliveryPriority', 'paymentTermsPriority', 'benchmarkingDate',
       'batna', 'discountedValue', 'maxDiscount'
     ];
 
@@ -444,7 +429,7 @@ export const updateRequisitionService = async (
     }
 
     // Parse and validate date fields - multipart form data sends dates as strings
-    const dateFields = ['deliveryDate', 'negotiationClosureDate', 'benchmarkingDate', 'maxDeliveryDate'];
+    const dateFields = ['deliveryDate', 'negotiationClosureDate', 'maxDeliveryDate'];
     for (const field of dateFields) {
       if (cleanedData[field] !== undefined) {
         // Handle empty strings
@@ -461,23 +446,6 @@ export const updateRequisitionService = async (
           }
         }
       }
-    }
-
-    // Convert priority numbers to strings (database expects STRING type)
-    if (cleanedData.pricePriority !== undefined) {
-      cleanedData.pricePriority = cleanedData.pricePriority === '' || cleanedData.pricePriority === null
-        ? null
-        : String(cleanedData.pricePriority);
-    }
-    if (cleanedData.deliveryPriority !== undefined) {
-      cleanedData.deliveryPriority = cleanedData.deliveryPriority === '' || cleanedData.deliveryPriority === null
-        ? null
-        : String(cleanedData.deliveryPriority);
-    }
-    if (cleanedData.paymentTermsPriority !== undefined) {
-      cleanedData.paymentTermsPriority = cleanedData.paymentTermsPriority === '' || cleanedData.paymentTermsPriority === null
-        ? null
-        : String(cleanedData.paymentTermsPriority);
     }
 
     console.log('Cleaned data for update:', cleanedData);
@@ -616,9 +584,6 @@ export const updateRequisitionService = async (
         net_payment_day: cleanedData.net_payment_day ?? oldState.net_payment_day,
         pre_payment_percentage: cleanedData.pre_payment_percentage ?? oldState.pre_payment_percentage,
         post_payment_percentage: cleanedData.post_payment_percentage ?? oldState.post_payment_percentage,
-        pricePriority: cleanedData.pricePriority ?? oldState.pricePriority,
-        deliveryPriority: cleanedData.deliveryPriority ?? oldState.deliveryPriority,
-        paymentTermsPriority: cleanedData.paymentTermsPriority ?? oldState.paymentTermsPriority,
       };
 
       // Calculate diff between old and new state

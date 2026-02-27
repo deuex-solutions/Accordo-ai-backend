@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getSmartDefaultsService } from '../chatbot.service.js';
-import models from '../../../models/index.js';
+import { getSmartDefaultsService } from '../../../src/modules/chatbot/chatbot.service.js';
+import models from '../../../src/models/index.js';
 import {
   createMockCompany,
   createMockUser,
@@ -9,7 +9,7 @@ import {
   createMockRequisitionProduct,
   createMockRole,
   createMockProduct,
-} from '../../../../tests/factories.js';
+} from '../../helpers/factories.js';
 
 describe('Smart Defaults Service - Date Extraction', () => {
   let company: any;

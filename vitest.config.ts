@@ -5,7 +5,16 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: './tests/setup.ts',
+    env: {
+      DB_NAME: 'accordo_test',
+      NODE_ENV: 'test',
+      JWT_ACCESS_TOKEN_SECRET: 'test-secret-key',
+      JWT_REFRESH_TOKEN_SECRET: 'test-refresh-secret-key',
+    },
+    setupFiles: './tests/helpers/setup.ts',
+    include: [
+      'tests/integration/**/*.test.ts',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

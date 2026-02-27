@@ -39,9 +39,6 @@ const FIELD_LABELS: Record<string, string> = {
   net_payment_day: 'Net Payment Days',
   pre_payment_percentage: 'Pre-Payment Percentage',
   post_payment_percentage: 'Post-Payment Percentage',
-  pricePriority: 'Price Priority',
-  deliveryPriority: 'Delivery Priority',
-  paymentTermsPriority: 'Payment Terms Priority',
   qty: 'Quantity',
   targetPrice: 'Target Price',
   maximum_price: 'Maximum Price',
@@ -78,11 +75,6 @@ const formatValue = (value: any, field: string): string => {
     if (!isNaN(num)) {
       return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
-  }
-
-  // Priority fields
-  if (field.includes('Priority') || field.includes('priority')) {
-    return `Priority ${value}`;
   }
 
   return String(value);
@@ -152,9 +144,6 @@ export const calculateRequisitionDiff = (
     'net_payment_day',
     'pre_payment_percentage',
     'post_payment_percentage',
-    'pricePriority',
-    'deliveryPriority',
-    'paymentTermsPriority',
   ];
 
   // Compare requisition fields

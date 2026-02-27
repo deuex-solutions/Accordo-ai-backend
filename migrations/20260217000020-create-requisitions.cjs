@@ -81,22 +81,6 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: true,
       },
-      benchmarkedAt: {
-        type: Sequelize.DATE,
-        allowNull: true,
-      },
-      benchmarkingDate: {
-        type: Sequelize.DATE,
-        allowNull: true,
-      },
-      benchmarkedBy: {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-      },
-      benchmarkResponse: {
-        type: Sequelize.TEXT,
-        allowNull: true,
-      },
       payment_terms: {
         type: Sequelize.STRING,
         allowNull: true,
@@ -115,18 +99,6 @@ module.exports = {
       },
       maxDeliveryDate: {
         type: Sequelize.DATE,
-        allowNull: true,
-      },
-      pricePriority: {
-        type: Sequelize.STRING,
-        allowNull: true,
-      },
-      deliveryPriority: {
-        type: Sequelize.STRING,
-        allowNull: true,
-      },
-      paymentTermsPriority: {
-        type: Sequelize.STRING,
         allowNull: true,
       },
       batna: {

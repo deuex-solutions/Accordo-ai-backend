@@ -108,13 +108,12 @@ export const getProductsService = async (
   };
 
   if (search) {
-    // Multi-field OR search: Category, Name, Brand, HSN/SAC code (tds field)
+    // Multi-field OR search: Category, Name, Brand (tds is numeric, excluded from text search)
     queryOptions.where = {
       [Op.or]: [
         { category: { [Op.iLike]: `%${search}%` } },
         { productName: { [Op.iLike]: `%${search}%` } },
         { brandName: { [Op.iLike]: `%${search}%` } },
-        { tds: { [Op.iLike]: `%${search}%` } },
       ],
     };
   }

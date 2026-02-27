@@ -149,6 +149,12 @@ export interface ProcessConversationMessageResult {
      * Updated deal status
      */
     dealStatus: 'NEGOTIATING' | 'ACCEPTED' | 'WALKED_AWAY' | 'ESCALATED';
+
+    /**
+     * Delay in milliseconds that was applied server-side before sending this response.
+     * Frontend should show a typing indicator for this duration before rendering the message.
+     */
+    delayMs?: number;
   };
   error?: string;
 }

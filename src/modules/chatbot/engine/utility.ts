@@ -44,6 +44,8 @@ export interface NegotiationConfig {
   max_rounds: number;
   /** Negotiation priority/strategy: HIGH=Maximize Savings, MEDIUM=Fair Deal, LOW=Quick Close */
   priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+  /** Currency code from the requisition (e.g. "USD", "INR", "GBP") */
+  currency?: string;
 }
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));

@@ -171,76 +171,6 @@ export function createValueFunctions(
   };
 
   // ============================================
-  // Volume Discount Value Function
-  // Value: Percentage of deal value
-  // Formula: Deal Value × Discount %
-  // ============================================
-
-  functions['volumeDiscountExpectation'] = {
-    parameterId: 'volumeDiscountExpectation',
-    parameterName: 'Volume Discount',
-    unitValue: dealValue / 100, // Deal value per 1%
-    unitDescription: 'per percentage point',
-    calculate: (current, proposed) => {
-      const currentDiscount = current ?? 0;
-      const proposedDiscount = proposed ?? currentDiscount;
-      const unitChange = proposedDiscount - currentDiscount;
-      const dollarImpact = unitChange * (dealValue / 100);
-
-      // Higher discount = better for PM
-      const isFavorable = unitChange > 0;
-
-      return {
-        dollarImpact: Math.round(dollarImpact * 100) / 100,
-        percentChange: unitChange,
-        unitChange,
-        isFavorable,
-        narrative: unitChange === 0
-          ? 'No change in volume discount'
-          : isFavorable
-            ? `${unitChange}% additional discount = $${Math.abs(dollarImpact).toLocaleString()} savings`
-            : `${Math.abs(unitChange)}% less discount = $${Math.abs(dollarImpact).toLocaleString()} additional cost`,
-      };
-    },
-  };
-
-  // ============================================
-  // Advance Payment Value Function
-  // Value: Opportunity cost of advance payment
-  // Formula: Advance Amount × Interest Rate × Time
-  // ============================================
-
-  const advancePaymentUnitValue = dealValue * dailyInterestRate * 30; // 30 days opportunity cost
-
-  functions['advancePaymentLimit'] = {
-    parameterId: 'advancePaymentLimit',
-    parameterName: 'Advance Payment',
-    unitValue: advancePaymentUnitValue,
-    unitDescription: 'per percentage point of advance',
-    calculate: (current, proposed) => {
-      const currentAdvance = current ?? 0;
-      const proposedAdvance = proposed ?? currentAdvance;
-      const unitChange = proposedAdvance - currentAdvance;
-      const dollarImpact = -unitChange * advancePaymentUnitValue; // Negative because advance is a cost
-
-      // Lower advance = better for PM
-      const isFavorable = unitChange < 0;
-
-      return {
-        dollarImpact: Math.round(dollarImpact * 100) / 100,
-        percentChange: unitChange,
-        unitChange,
-        isFavorable,
-        narrative: unitChange === 0
-          ? 'No change in advance payment'
-          : isFavorable
-            ? `${Math.abs(unitChange)}% less advance = $${Math.abs(dollarImpact).toLocaleString()} opportunity cost saved`
-            : `${unitChange}% more advance = $${Math.abs(dollarImpact).toLocaleString()} opportunity cost`,
-      };
-    },
-  };
-
-  // ============================================
   // Delivery Value Function
   // Value: Cost of delay (inventory holding, project delays)
   // Typical: 0.1-0.5% of deal value per day
@@ -387,16 +317,6 @@ export function calculateOfferValue(
       proposedOffer.payment_terms_days ?? null
     );
     parameterImpacts['paymentTermsRange'] = impact;
-    totalDollarImpact += impact.dollarImpact;
-  }
-
-  // Calculate volume discount impact
-  if (valueFunctions['volumeDiscountExpectation']) {
-    const impact = valueFunctions['volumeDiscountExpectation'].calculate(
-      currentOffer.volume_discount ?? null,
-      proposedOffer.volume_discount ?? null
-    );
-    parameterImpacts['volumeDiscountExpectation'] = impact;
     totalDollarImpact += impact.dollarImpact;
   }
 

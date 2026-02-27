@@ -6,6 +6,21 @@
  *
  * This module replaces the intent-based llamaReplyGenerator with a more
  * context-aware approach using the full conversation history and deal context.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * NOTE (Feb 2026): This file is NO LONGER called by conversationService.ts.
+ *
+ * The CONVERSATION mode pipeline now uses the deterministic intent layer:
+ *   buildNegotiationIntent() → personaRenderer() → validateLlmOutput()
+ *
+ * This file is retained for:
+ *   1. INSIGHTS mode compatibility (if ever routed here)
+ *   2. Vendor simulation / test harnesses
+ *   3. Reference implementation
+ *
+ * Do NOT re-add this to conversationService.ts without updating the intent layer.
+ * See: src/llm/personaRenderer.ts
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import type { ConversationIntent, Offer, Decision, RefusalType } from './types.js';

@@ -31,7 +31,6 @@ export interface DealContext {
     paymentTerms?: {
       minDays: number;
       maxDays: number;
-      advancePaymentLimit?: number;
     };
     delivery?: {
       requiredDate: string;

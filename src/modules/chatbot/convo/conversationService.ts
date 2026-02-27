@@ -5,11 +5,14 @@
  * Processes vendor messages through the full pipeline:
  * 1. Validate deal and permissions
  * 2. Parse vendor offer
- * 3. Get decision from engine
+ * 3. Get decision from engine (deterministic — unchanged)
  * 4. Classify intent
- * 5. Generate LLM reply
- * 6. Update conversation state
- * 7. Save messages and deal state
+ * 5. Build NegotiationIntent (hard boundary — no commercial data leaks to LLM)
+ * 6. Render response via personaRenderer (LLM as language renderer only)
+ * 7. Validate LLM output (untrusted — enforce price and word rules)
+ * 8. Simulate typing delay + trigger frontend indicator
+ * 9. Update conversation state
+ * 10. Save messages and deal state
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -40,7 +43,13 @@ import {
   shouldAutoStartConversation,
   getDefaultGreeting,
 } from './conversationManager.js';
-import { generateAccordoReply } from './openaiReplyGenerator.js';
+import { detectVendorTone } from '../engine/toneDetector.js';
+import { buildNegotiationIntent } from '../../../negotiation/intent/buildNegotiationIntent.js';
+import { renderNegotiationMessage } from '../../../llm/personaRenderer.js';
+import { validateLlmOutput, ValidationError } from '../../../llm/validateLlmOutput.js';
+import { getFallbackResponse } from '../../../llm/fallbackTemplates.js';
+import { simulateTypingDelay } from '../../../delivery/simulateTypingDelay.js';
+import { logNegotiationStep } from '../../../metrics/logNegotiationStep.js';
 
 /**
  * Start a new conversation
@@ -278,22 +287,83 @@ export async function processConversationMessage(
       refusalType,
     });
 
-    // 10. Generate conversation history for LLM context
-    const conversationHistory = allMessages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    // 10. Detect vendor tone (metadata only — feeds NegotiationIntent)
+    const toneHistory = allMessages.map((msg) => ({ role: msg.role as 'VENDOR' | 'ACCORDO' | 'SYSTEM', content: msg.content }));
+    const toneResult = detectVendorTone([...toneHistory, { role: 'VENDOR', content: vendorMessage }]);
 
-    // 11. Generate Accordo reply using OpenAI GPT-3.5 (with Qwen3 fallback)
-    const accordoReplyContent = await generateAccordoReply(intent, conversationHistory, {
-      counterOffer: decision.counterOffer || undefined,
-      vendorOffer,
-      decision,
-      preference: detectedPreference,
-      refusalType,
-    }, dealId);
+    // 11. Resolve price boundaries for intent builder (used to clamp allowedPrice)
+    const storedConfig = deal.negotiationConfigJson as any;
+    const targetPrice: number | undefined =
+      storedConfig?.parameters?.total_price?.target ??
+      storedConfig?.wizardConfig?.priceQuantity?.targetUnitPrice ??
+      undefined;
+    const maxAcceptablePrice: number | undefined =
+      storedConfig?.parameters?.total_price?.max_acceptable ??
+      storedConfig?.wizardConfig?.priceQuantity?.maxAcceptablePrice ??
+      undefined;
 
-    // 12. Update conversation state
+    // 12. Build NegotiationIntent — the hard boundary between engine and LLM
+    const negotiationIntent = buildNegotiationIntent({
+      action: decision.action as 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY' | 'ASK_CLARIFY',
+      utilityScore: decision.utilityScore,
+      counterPrice: decision.counterOffer?.total_price ?? null,
+      counterPaymentTerms: decision.counterOffer?.payment_terms ?? null,
+      counterDelivery: decision.counterOffer?.delivery_date
+        ? `by ${decision.counterOffer.delivery_date}`
+        : decision.counterOffer?.delivery_days
+          ? `within ${decision.counterOffer.delivery_days} days`
+          : null,
+      concerns: [],
+      tone: toneResult.primaryTone,
+      targetPrice,
+      maxAcceptablePrice,
+    });
+
+    // 13. Get non-commercial context for persona (safe to pass to LLM)
+    const personaContext = {
+      dealTitle: deal.title ?? undefined,
+      vendorName: (deal as any).Vendor?.name ?? undefined,
+      productCategory: (deal as any).Requisition?.title ?? undefined,
+    };
+
+    // 14. Render response via LLM persona renderer
+    //     LLM receives: intent (no commercial data except allowedPrice for COUNTER) + vendorMessage + dealTitle/vendor/category
+    let accordoReplyContent: string;
+    let fromLlm = false;
+
+    const renderResult = await renderNegotiationMessage(negotiationIntent, vendorMessage, personaContext);
+
+    // 15. Validate LLM output — LLM is untrusted
+    try {
+      accordoReplyContent = validateLlmOutput(renderResult.message, negotiationIntent);
+      fromLlm = renderResult.fromLlm;
+    } catch (validationError) {
+      if (validationError instanceof ValidationError) {
+        logger.warn('[ConversationService] LLM output failed validation, using fallback', {
+          dealId,
+          reason: validationError.reason,
+          action: negotiationIntent.action,
+        });
+      }
+      // Silent fallback — vendor never knows
+      accordoReplyContent = getFallbackResponse(negotiationIntent);
+      fromLlm = false;
+    }
+
+    // 16. Log the negotiation step (audit trail — no LLM text, no scores)
+    logNegotiationStep({
+      action: negotiationIntent.action,
+      firmness: negotiationIntent.firmness,
+      round: deal.round + 1,
+      counterPrice: negotiationIntent.allowedPrice,
+      vendorTone: negotiationIntent.vendorTone,
+      dealId,
+      fromLlm,
+    });
+
+    // 17. Simulate typing delay + capture delayMs for frontend typing indicator
+    const { delayMs } = await simulateTypingDelay(negotiationIntent.action);
+
     const newConversationState = updateConversationState(
       conversationState,
       intent,
@@ -302,7 +372,7 @@ export async function processConversationMessage(
       detectedPreference
     );
 
-    // 13. Save vendor message
+    // 19. Save vendor message
     const vendorMessageRecord = await models.ChatbotMessage.create({
       id: uuidv4(),
       dealId: deal.id,
@@ -317,7 +387,7 @@ export async function processConversationMessage(
       createdAt: new Date(),
     });
 
-    // 14. Save Accordo reply
+    // 20. Save Accordo reply
     const accordoMessageRecord = await models.ChatbotMessage.create({
       id: uuidv4(),
       dealId: deal.id,
@@ -332,7 +402,7 @@ export async function processConversationMessage(
       createdAt: new Date(),
     });
 
-    // 15. Update deal state
+    // 21. Update deal state
     deal.round += 1;
     deal.latestVendorOffer = vendorOffer as any;
     deal.latestDecisionAction = decision.action;
@@ -367,6 +437,7 @@ export async function processConversationMessage(
         conversationState: newConversationState,
         revealAvailable: explainability !== null,
         dealStatus: deal.status,
+        delayMs,
       },
     };
   } catch (error) {

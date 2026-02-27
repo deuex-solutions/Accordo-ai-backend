@@ -5,8 +5,9 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-key';
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express, { Express } from 'express';
-import models from '../../../models/index.js';
-import chatbotRoutes from '../chatbot.routes.js';
+import models from '../../../src/models/index.js';
+import chatbotRoutes from '../../../src/modules/chatbot/chatbot.routes.js';
+import { errorHandler } from '../../../src/middlewares/error-handler.js';
 import {
   createMockCompany,
   createMockUser,
@@ -16,7 +17,7 @@ import {
   createMockRole,
   createMockProduct,
   createMockVendor,
-} from '../../../../tests/factories.js';
+} from '../../helpers/factories.js';
 import jwt from 'jsonwebtoken';
 
 // Test JWT secret
@@ -38,6 +39,7 @@ describe('Smart Defaults API - Date Extraction', () => {
     app = express();
     app.use(express.json());
     app.use('/api/chatbot', chatbotRoutes);
+    app.use(errorHandler);
   });
 
   beforeEach(async () => {

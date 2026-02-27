@@ -647,10 +647,8 @@ export interface AdaptiveFeaturesConfig {
 export const ACCORDO_DEFAULTS = {
   targetUnitPrice: null as number | null,
   maxAcceptablePrice: null as number | null,
-  volumeDiscountExpectation: null as number | null,
   paymentTermsMinDays: 30,        // Net 30
   paymentTermsMaxDays: 60,        // Net 60
-  advancePaymentLimit: null as number | null,
   warrantyPeriodMonths: 12,       // 1 year
   lateDeliveryPenaltyPerDay: 1,   // 1%
   qualityStandards: [] as string[],
@@ -667,12 +665,10 @@ export const ACCORDO_DEFAULTS = {
  * Removed: paymentTermsRange, partialDelivery, lateDeliveryPenalty, maxRounds, walkawayThreshold
  */
 export const DEFAULT_WEIGHTS = {
-  targetUnitPrice: 35,
-  maxAcceptablePrice: 20,
-  volumeDiscountExpectation: 10,
-  advancePaymentLimit: 5,
+  targetUnitPrice: 40,
+  maxAcceptablePrice: 25,
   deliveryDate: 15,
-  warrantyPeriod: 10,
+  warrantyPeriod: 15,
   qualityStandards: 5,
 } as const;
 
@@ -730,12 +726,10 @@ export interface WizardConfig {
     maxAcceptablePrice: number | null;
     minOrderQuantity: number | null;
     preferredQuantity?: number | null;
-    volumeDiscountExpectation?: number | null;
   };
   paymentTerms: {
     minDays: number | null;
     maxDays: number | null;
-    advancePaymentLimit?: number | null;
     acceptedMethods?: ('BANK_TRANSFER' | 'CREDIT' | 'LC')[];
   };
   delivery: {
@@ -787,10 +781,8 @@ export interface ResolvedNegotiationConfig {
   // Resolved VALUES (user if provided, else default)
   targetPrice: number;
   maxAcceptablePrice: number;
-  volumeDiscountExpectation: number | null;
   paymentTermsMinDays: number;
   paymentTermsMaxDays: number;
-  advancePaymentLimit: number | null;
   deliveryDate: Date | null;
   preferredDeliveryDate: Date | null;
   partialDeliveryAllowed: boolean;

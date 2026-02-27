@@ -63,7 +63,6 @@ export const createDealWithConfigSchema = Joi.object({
       'any.required': 'Minimum order quantity is required',
     }),
     preferredQuantity: Joi.number().integer().positive().allow(null).optional(),
-    volumeDiscountExpectation: Joi.number().min(0).max(50).allow(null).optional(),
   }).required(),
 
   // Payment Terms
@@ -74,7 +73,6 @@ export const createDealWithConfigSchema = Joi.object({
     maxDays: Joi.number().integer().positive().required().messages({
       'any.required': 'Maximum payment days is required',
     }),
-    advancePaymentLimit: Joi.number().min(0).max(50).allow(null).optional(),
     acceptedMethods: Joi.array()
       .items(Joi.string().valid('BANK_TRANSFER', 'CREDIT', 'LC'))
       .default(['BANK_TRANSFER']),

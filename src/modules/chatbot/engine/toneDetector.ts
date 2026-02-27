@@ -23,10 +23,21 @@ export type VendorTone = 'formal' | 'casual' | 'urgent' | 'firm' | 'friendly';
 
 /**
  * Tone detection result with confidence score
+ *
+ * Role in the new pipeline (Feb 2026):
+ * - primaryTone and intensity feed NegotiationIntent.vendorTone
+ * - Tone is now metadata only — it no longer drives template selection or wording
+ * - getResponseStyleRecommendation() is deprecated (kept for INSIGHTS mode compatibility)
  */
 export interface ToneDetectionResult {
   primaryTone: VendorTone;
   confidence: number;
+  /**
+   * Intensity of the detected tone (0–1).
+   * Derived from confidence — a stronger signal = higher intensity.
+   * Used by NegotiationIntent to calibrate firmness expression.
+   */
+  intensity: number;
   indicators: string[];
   allTones: Partial<Record<VendorTone, number>>;
 }
@@ -160,6 +171,7 @@ export function detectVendorTone(messages: ToneMessage[]): ToneDetectionResult {
     return {
       primaryTone: 'friendly',
       confidence: 0.5,
+      intensity: 0.5,
       indicators: [],
       allTones: { friendly: 1 }
     };
@@ -215,6 +227,8 @@ export function detectVendorTone(messages: ToneMessage[]): ToneDetectionResult {
   return {
     primaryTone,
     confidence,
+    // Intensity mirrors confidence — capped at 1.0, floored at 0.1
+    intensity: Math.max(0.1, Math.min(1.0, confidence)),
     indicators: uniqueIndicators,
     allTones: aggregatedScores
   };
@@ -237,6 +251,11 @@ export function getToneDescription(tone: VendorTone): string {
 
 /**
  * Get recommended response style for a given tone
+ *
+ * @deprecated Feb 2026 — Tone is now metadata only in the CONVERSATION pipeline.
+ * In the new pipeline, vendorTone is passed into NegotiationIntent and the LLM
+ * is instructed to mirror it. This function is kept only for INSIGHTS mode
+ * compatibility (responseGenerator.ts) and should not be used in new code.
  */
 export function getResponseStyleRecommendation(tone: VendorTone): {
   style: string;

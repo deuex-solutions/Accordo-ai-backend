@@ -65,18 +65,11 @@ export class Requisition extends Model<
   declare createdBy: number | null;
   declare fulfilledAt: Date | null;
   declare fulfilledBy: number | null;
-  declare benchmarkedAt: Date | null;
-  declare benchmarkingDate: Date | null;
-  declare benchmarkedBy: number | null;
-  declare benchmarkResponse: string | null;
   declare payment_terms: string | null;
   declare net_payment_day: string | null;
   declare pre_payment_percentage: number | null;
   declare post_payment_percentage: number | null;
   declare maxDeliveryDate: Date | null;
-  declare pricePriority: string | null;
-  declare deliveryPriority: string | null;
-  declare paymentTermsPriority: string | null;
   declare batna: number | null;
   declare discountedValue: number | null;
   declare maxDiscount: number | null;
@@ -146,18 +139,11 @@ export default function requisitionModel(sequelize: Sequelize): typeof Requisiti
       createdBy: DataTypes.INTEGER,
       fulfilledAt: DataTypes.DATE,
       fulfilledBy: DataTypes.INTEGER,
-      benchmarkedAt: DataTypes.DATE,
-      benchmarkingDate: DataTypes.DATE,
-      benchmarkedBy: DataTypes.INTEGER,
-      benchmarkResponse: DataTypes.TEXT,
       payment_terms: DataTypes.STRING,
       net_payment_day: DataTypes.STRING,
       pre_payment_percentage: DataTypes.DOUBLE,
       post_payment_percentage: DataTypes.DOUBLE,
       maxDeliveryDate: DataTypes.DATE,
-      pricePriority: DataTypes.STRING,
-      deliveryPriority: DataTypes.STRING,
-      paymentTermsPriority: DataTypes.STRING,
       batna: DataTypes.DOUBLE,
       discountedValue: DataTypes.DOUBLE,
       maxDiscount: DataTypes.DOUBLE,

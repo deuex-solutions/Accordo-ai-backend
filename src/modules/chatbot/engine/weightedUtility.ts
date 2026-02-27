@@ -151,10 +151,8 @@ export function buildWeightedConfig(
   step2Data: {
     targetUnitPrice?: number;
     maxAcceptablePrice?: number;
-    volumeDiscountExpectation?: number;
     paymentTermsMin?: number;
     paymentTermsMax?: number;
-    advancePaymentLimit?: number;
     deliveryDate?: string | Date;
     partialDelivery?: boolean;
   },
@@ -216,28 +214,6 @@ export function buildWeightedConfig(
       max: maxDays,
       options: termsOptions,
       optionUtilities,
-    } as WeightedParameterConfig;
-  }
-
-  // Build advance payment config
-  if (step4Weights.advancePayment && step4Weights.advancePayment > 0) {
-    parameters.advancePayment = {
-      id: "advancePayment",
-      ...defaults.advancePayment,
-      weight: step4Weights.advancePayment,
-      target: 0, // Ideal: no advance payment
-      max: step2Data.advancePaymentLimit ?? 50,
-    } as WeightedParameterConfig;
-  }
-
-  // Build volume discount config
-  if (step4Weights.volumeDiscount && step4Weights.volumeDiscount > 0) {
-    parameters.volumeDiscount = {
-      id: "volumeDiscount",
-      ...defaults.volumeDiscount,
-      weight: step4Weights.volumeDiscount,
-      target: step2Data.volumeDiscountExpectation ?? 10,
-      min: 0,
     } as WeightedParameterConfig;
   }
 
@@ -601,13 +577,6 @@ export function resolveNegotiationConfig(
     sources['maxAcceptablePrice'] = 'calculated';
   }
 
-  // Volume discount
-  const volumeDiscountExpectation = getValueWithSource(
-    'volumeDiscountExpectation',
-    wizardConfig?.priceQuantity?.volumeDiscountExpectation,
-    ACCORDO_DEFAULTS.volumeDiscountExpectation
-  );
-
   // Payment terms
   const paymentTermsMinDays = getValueWithSource(
     'paymentTermsMinDays',
@@ -619,12 +588,6 @@ export function resolveNegotiationConfig(
     'paymentTermsMaxDays',
     wizardConfig?.paymentTerms?.maxDays,
     ACCORDO_DEFAULTS.paymentTermsMaxDays
-  );
-
-  const advancePaymentLimit = getValueWithSource(
-    'advancePaymentLimit',
-    wizardConfig?.paymentTerms?.advancePaymentLimit,
-    ACCORDO_DEFAULTS.advancePaymentLimit
   );
 
   // Delivery dates
@@ -778,10 +741,8 @@ export function resolveNegotiationConfig(
     // Values
     targetPrice,
     maxAcceptablePrice,
-    volumeDiscountExpectation,
     paymentTermsMinDays,
     paymentTermsMaxDays,
-    advancePaymentLimit,
     deliveryDate,
     preferredDeliveryDate,
     partialDeliveryAllowed,
@@ -870,53 +831,6 @@ export function calculateWeightedUtilityFromResolved(
     };
     totalUtility += contribution;
     totalWeight += weights.maxAcceptablePrice;
-  }
-
-  // Volume Discount Utility
-  if (weights.volumeDiscountExpectation > 0 && vendorOffer.volume_discount != null) {
-    const targetDiscount = resolvedConfig.volumeDiscountExpectation ?? 10;
-    const discountUtility = Math.min(1, vendorOffer.volume_discount / targetDiscount);
-    const contribution = discountUtility * (weights.volumeDiscountExpectation / 100);
-    parameterUtilities['volumeDiscountExpectation'] = {
-      parameterId: 'volumeDiscountExpectation',
-      parameterName: 'Volume Discount',
-      utility: discountUtility,
-      weight: weights.volumeDiscountExpectation,
-      contribution,
-      currentValue: vendorOffer.volume_discount,
-      targetValue: targetDiscount,
-      status: getStatusFromScore(discountUtility),
-      color: getColorFromScore(discountUtility),
-    };
-    totalUtility += contribution;
-    totalWeight += weights.volumeDiscountExpectation;
-  }
-
-  // ============================================
-  // Payment Parameters
-  // ============================================
-
-  // Advance Payment Utility (lower is better)
-  if (weights.advancePaymentLimit > 0 && vendorOffer.advance_payment_percent != null) {
-    const maxAdvance = resolvedConfig.advancePaymentLimit ?? 50;
-    const advanceUtility = vendorOffer.advance_payment_percent <= maxAdvance
-      ? 1 - (vendorOffer.advance_payment_percent / maxAdvance)
-      : 0;
-    const contribution = advanceUtility * (weights.advancePaymentLimit / 100);
-    parameterUtilities['advancePaymentLimit'] = {
-      parameterId: 'advancePaymentLimit',
-      parameterName: 'Advance Payment',
-      utility: advanceUtility,
-      weight: weights.advancePaymentLimit,
-      contribution,
-      currentValue: vendorOffer.advance_payment_percent,
-      targetValue: 0,
-      maxValue: maxAdvance,
-      status: getStatusFromScore(advanceUtility),
-      color: getColorFromScore(advanceUtility),
-    };
-    totalUtility += contribution;
-    totalWeight += weights.advancePaymentLimit;
   }
 
   // ============================================

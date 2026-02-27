@@ -8,7 +8,7 @@ process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'test-secret-ke
 process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh-secret-key';
 
 // Import AFTER env vars are configured
-import sequelize from '../src/config/database.js';
+import sequelize from '../../src/config/database.js';
 
 // Safety: abort if connected to the dev database
 const dbName = (sequelize as any).config?.database || process.env.DB_NAME;

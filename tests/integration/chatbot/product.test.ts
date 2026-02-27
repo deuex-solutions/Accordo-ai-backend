@@ -3,16 +3,16 @@ import {
   createProductSchema,
   updateProductSchema,
   productIdSchema,
-} from '../src/modules/product/product.validator.js';
+} from '../../../src/modules/product/product.validator.js';
 import {
   createProductService,
   getProductService,
   getProductsService,
   updateProductService,
   deleteProductService,
-} from '../src/modules/product/product.service.js';
-import { createMockProduct, createMockProductNonGst, createMockUser, createMockCompany, createMockRole } from './factories.js';
-import models from '../src/models/index.js';
+} from '../../../src/modules/product/product.service.js';
+import { createMockProduct, createMockProductNonGst, createMockUser, createMockCompany, createMockRole } from '../../helpers/factories.js';
+import models from '../../../src/models/index.js';
 
 describe('Product Validator', () => {
   describe('createProductSchema', () => {
