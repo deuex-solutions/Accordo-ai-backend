@@ -31,6 +31,7 @@ import type { Offer, Decision, Explainability, WizardConfig, ExtendedOffer } fro
 import { sequelize } from '../../../config/database.js';
 import logger from '../../../config/logger.js';
 import * as negotiationLogger from './negotiationLogger.js';
+import { transition, actionToEvent, type DealState } from './negotiationStateMachine.js';
 
 // ============================================================================
 // Import Models
@@ -129,19 +130,13 @@ function generateAccordoResponse(decision: Decision, round: number): string {
 }
 
 /**
- * Determine new deal status based on decision action
+ * Determine new deal status based on decision action using the state machine
  */
-function getDealStatus(action: Decision['action']): 'NEGOTIATING' | 'ACCEPTED' | 'WALKED_AWAY' | 'ESCALATED' {
-  switch (action) {
-    case 'ACCEPT':
-      return 'ACCEPTED';
-    case 'WALK_AWAY':
-      return 'WALKED_AWAY';
-    case 'ESCALATE':
-      return 'ESCALATED';
-    default:
-      return 'NEGOTIATING';
-  }
+function getDealStatus(action: Decision['action'], currentStatus?: string): 'NEGOTIATING' | 'ACCEPTED' | 'WALKED_AWAY' | 'ESCALATED' {
+  const currentState = (currentStatus || 'NEGOTIATING') as DealState;
+  const event = actionToEvent(action);
+  const result = transition(currentState, event);
+  return result.newState;
 }
 
 // ============================================================================
@@ -321,7 +316,7 @@ export async function processVendorTurn(
     // 7. Update Deal State
     // ============================================================================
 
-    const newStatus = getDealStatus(decision.action);
+    const newStatus = getDealStatus(decision.action, deal.status);
     const newRound = currentRound;
 
     await deal.update(

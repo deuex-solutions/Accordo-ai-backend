@@ -1212,6 +1212,7 @@ export const saveVendorMessageInstant = async (
         deal: result.deal,
         extractedOffer: result.extractedOffer,
         pmProcessing: result.pmProcessing,
+        processingState: result.processingState,
       },
     });
   } catch (error) {
@@ -1270,6 +1271,7 @@ export const generatePMResponseAsync = async (
         explainability: result.explainability,
         deal: result.deal,
         generationSource: result.generationSource,
+        meso: result.meso ?? null,  // Include MESO options for frontend
       },
     });
   } catch (error) {

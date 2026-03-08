@@ -51,6 +51,9 @@ import {
   trackOffer,
   type ParameterHistory,
 } from './engine/stallDetector.js';
+import { checkScopeGuard } from './engine/scopeGuard.js';
+import { buildPartialResult, classifyError, getErrorFallbackResponse } from './engine/errorRecovery.js';
+import { sanitizeNegotiationHistory } from './engine/historySanitizer.js';
 
 // ============================================================================
 // Contract-Deal Status Sync
@@ -1509,6 +1512,21 @@ export interface SaveVendorMessageInput {
 }
 
 /**
+ * Processing state for the PM response pipeline.
+ * Frontend uses this to show contextual loading indicators.
+ */
+export interface ProcessingState {
+  /** Current step in the pipeline */
+  step: 'analyzing_offer' | 'calculating_utility' | 'generating_response' | 'complete';
+  /** Estimated time to complete PM response (ms) */
+  estimatedMs: number;
+  /** Whether the extracted offer is complete (has both price and terms) */
+  offerComplete: boolean;
+  /** Deal mode that will be used for response generation */
+  mode: 'INSIGHTS' | 'CONVERSATION';
+}
+
+/**
  * Result from saving vendor message (Phase 1)
  */
 export interface SaveVendorMessageResult {
@@ -1516,6 +1534,7 @@ export interface SaveVendorMessageResult {
   deal: ChatbotDeal;
   extractedOffer: Offer;
   pmProcessing: boolean;
+  processingState: ProcessingState;
 }
 
 /**
@@ -1624,11 +1643,22 @@ export const saveVendorMessageOnlyService = async (
 
     logger.info(`[Phase1] Vendor message saved for deal ${input.dealId} (round ${currentRound}, awaiting PM response)`);
 
+    // Build processing state for frontend loading indicators
+    const dealMode = (deal.mode as 'INSIGHTS' | 'CONVERSATION') || 'INSIGHTS';
+    const offerIsComplete = accumulatedOffer.accumulation?.isComplete ?? false;
+    const processingState: ProcessingState = {
+      step: 'analyzing_offer',
+      estimatedMs: dealMode === 'CONVERSATION' ? 4000 : 1500,
+      offerComplete: offerIsComplete,
+      mode: dealMode,
+    };
+
     return {
       message,
       deal,
       extractedOffer,
       pmProcessing: true,
+      processingState,
     };
   } catch (error) {
     if (error instanceof CustomError) throw error;
@@ -1663,6 +1693,39 @@ export const generatePMResponseAsyncService = async (
     const vendorMessage = await models.ChatbotMessage.findByPk(input.vendorMessageId);
     if (!vendorMessage) {
       throw new CustomError('Vendor message not found', 404);
+    }
+
+    // Scope Guard: reject off-topic messages before expensive processing
+    const scopeCheck = checkScopeGuard(vendorMessage.content, deal.title ?? undefined);
+    if (scopeCheck.isOffTopic) {
+      logger.info(`[Phase2] Off-topic message blocked by scope guard for deal ${input.dealId}`, {
+        category: scopeCheck.category,
+        confidence: scopeCheck.confidence,
+      });
+
+      // Save the redirection response as an ACCORDO message
+      const redirectMessage = await models.ChatbotMessage.create({
+        id: uuidv4(),
+        dealId: input.dealId,
+        role: 'ACCORDO',
+        content: scopeCheck.response!,
+        extractedOffer: null,
+        engineDecision: { action: 'REDIRECT', reason: `Off-topic: ${scopeCheck.category}` } as any,
+        decisionAction: 'REDIRECT',
+        utilityScore: deal.latestUtility ?? null,
+        counterOffer: null,
+        explainabilityJson: null,
+        round: deal.round,
+      });
+
+      return {
+        message: redirectMessage,
+        decision: { action: 'REDIRECT' as any, utilityScore: deal.latestUtility ?? 0, counterOffer: null, reasons: [`Off-topic message: ${scopeCheck.category}`] },
+        explainability: {} as Explainability,
+        deal,
+        generationSource: 'fallback' as const,
+        meso: null,
+      };
     }
 
     // Get conversation history for context
@@ -2086,10 +2149,15 @@ export const generatePMResponseAsyncService = async (
     }
 
     // Generate human-like response using LLM with fallback
-    const conversationHistory = allMessages.map(m => ({
+    // Sanitize conversation history to remove stale negotiation context before LLM call
+    const rawHistory = allMessages.map(m => ({
       role: m.role,
       content: m.content,
     }));
+    const { messages: conversationHistory, sanitizedCount } = sanitizeNegotiationHistory(rawHistory);
+    if (sanitizedCount > 0) {
+      logger.info(`[Phase2] Sanitized ${sanitizedCount} stale messages from conversation history for deal ${input.dealId}`);
+    }
 
     // For ASK_CLARIFY, get the current partial extraction to show what was just provided
     const currentExtraction = parseOfferWithDelivery(vendorMessage.content);
@@ -2207,11 +2275,56 @@ export const generatePMResponseAsyncService = async (
       meso: mesoResult, // Include MESO result for frontend
     };
   } catch (error) {
-    if (error instanceof CustomError) throw error;
-    throw new CustomError(
-      `Failed to generate PM response: ${(error as Error).message}`,
-      500
-    );
+    // Error Recovery: never expose raw errors to vendor
+    const errorCategory = classifyError(error);
+    logger.error(`[Phase2] Error in PM response generation`, {
+      dealId: input.dealId,
+      errorCategory,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+
+    // For deal_not_found, still throw (controller needs to return 404)
+    if (error instanceof CustomError && error.statusCode === 404) throw error;
+
+    // Build a human-readable fallback response
+    const fallbackResponse = getErrorFallbackResponse(errorCategory);
+
+    try {
+      // Try to save the fallback as an ACCORDO message so the vendor sees a response
+      const deal = await models.ChatbotDeal.findByPk(input.dealId);
+      if (deal) {
+        const fallbackMessage = await models.ChatbotMessage.create({
+          id: uuidv4(),
+          dealId: input.dealId,
+          role: 'ACCORDO',
+          content: fallbackResponse,
+          extractedOffer: null,
+          engineDecision: { action: 'ERROR_RECOVERY', errorCategory } as any,
+          decisionAction: 'ERROR_RECOVERY',
+          utilityScore: deal.latestUtility ?? null,
+          counterOffer: null,
+          explainabilityJson: null,
+          round: deal.round,
+        });
+
+        return {
+          message: fallbackMessage,
+          decision: { action: 'ERROR_RECOVERY' as any, utilityScore: deal.latestUtility ?? 0, counterOffer: null, reasons: [`Error recovery: ${errorCategory}`] },
+          explainability: {} as Explainability,
+          deal,
+          generationSource: 'fallback' as const,
+          meso: null,
+        };
+      }
+    } catch (saveError) {
+      logger.error('[Phase2] Failed to save error recovery message', {
+        dealId: input.dealId,
+        saveError: saveError instanceof Error ? saveError.message : String(saveError),
+      });
+    }
+
+    // Last resort: throw with human-readable message
+    throw new CustomError(fallbackResponse, 500);
   }
 };
 
@@ -3301,12 +3414,14 @@ export const resumeDealService = async (dealId: string): Promise<ChatbotDeal> =>
       throw new CustomError('Deal not found', 404);
     }
 
-    if (deal.status !== 'ESCALATED') {
-      throw new CustomError('Only ESCALATED deals can be resumed', 400);
+    // Use state machine to validate and execute the RESUME transition
+    const { transition: smTransition, canTransition: smCanTransition } = await import('./engine/negotiationStateMachine.js');
+    if (!smCanTransition(deal.status as any, 'RESUME')) {
+      throw new CustomError(`Cannot resume deal in '${deal.status}' status. Only ESCALATED deals can be resumed.`, 400);
     }
 
-    // Update deal status
-    deal.status = 'NEGOTIATING';
+    const result = smTransition(deal.status as any, 'RESUME');
+    deal.status = result.newState;
     await deal.save();
 
     // Add system message

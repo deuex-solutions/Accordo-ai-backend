@@ -22,6 +22,9 @@ import { formatDeliveryDate, formatDeliveryShort, type DeliveryConfig } from './
 import type { Offer, Decision, AccumulatedOffer, OfferComponent } from './types.js';
 import type { NegotiationConfig } from './utility.js';
 import { getProvidedComponents, getMissingComponents } from './offerAccumulator.js';
+import { detectMilestone, getPersonalityEnrichment, applyPersonality, type MilestoneDetectionInput } from './personalityLayer.js';
+import { getToneAwareTemplate, type TemplateContext } from './toneTemplates.js';
+import { generatePromptAddenda, type AddendaContext } from './promptAddenda.js';
 
 /**
  * Input for response generation
@@ -40,6 +43,12 @@ export interface ResponseGeneratorInput {
   currentExtraction?: Offer;
   /** Accumulated offer state (for ASK_CLARIFY acknowledgment) */
   accumulatedOffer?: AccumulatedOffer;
+  /** Whether a stall was detected in the negotiation */
+  stallDetected?: boolean;
+  /** Number of consecutive counter-offers */
+  consecutiveCounters?: number;
+  /** Whether the vendor made a concession from their previous offer */
+  vendorConceded?: boolean;
 }
 
 /**
@@ -341,124 +350,31 @@ async function generateLLMResponse(prompt: string, timeoutMs: number = 4000): Pr
 }
 
 /**
- * Enhanced fallback templates with delivery
+ * Build template context from response generator input
  */
-const FALLBACK_TEMPLATES = {
-  ACCEPT: (input: ResponseGeneratorInput, tone: VendorTone, concerns: VendorConcern[]): string => {
-    const { vendorOffer, deliveryConfig } = input;
-    const delivery = formatDeliveryFromOffer(vendorOffer) || formatDeliveryFromConfig(deliveryConfig);
-    const concernAck = concerns.length > 0 ? getAcknowledgmentSentence(concerns) : '';
+function buildTemplateContext(input: ResponseGeneratorInput, concerns: VendorConcern[]): TemplateContext {
+  const { vendorOffer, counterOffer, deliveryConfig } = input;
+  const vendorDelivery = formatDeliveryFromOffer(vendorOffer) || formatDeliveryFromConfig(deliveryConfig);
+  const counterDelivery = counterOffer
+    ? formatDeliveryFromOffer(counterOffer)
+    : formatDeliveryFromConfig(deliveryConfig);
+  const concernAck = concerns.length > 0 ? getAcknowledgmentSentence(concerns) : '';
 
-    const templates = [
-      `Great news! We accept your offer of $${vendorOffer.total_price?.toFixed(2)} total with ${vendorOffer.payment_terms} and delivery ${delivery}. ${concernAck || 'Thank you for working with us!'}`,
-      `Excellent! We have a deal - $${vendorOffer.total_price?.toFixed(2)} total, ${vendorOffer.payment_terms}, delivered ${delivery}. ${concernAck || 'Looking forward to a great partnership.'}`,
-      `I'm pleased to confirm we accept: $${vendorOffer.total_price?.toFixed(2)} total, ${vendorOffer.payment_terms}, delivery ${delivery}. ${concernAck || 'Appreciate your flexibility!'}`,
-      `We're happy to accept your terms: $${vendorOffer.total_price?.toFixed(2)} total with ${vendorOffer.payment_terms} payment and ${delivery} delivery. ${concernAck || "Let's finalize the paperwork."}`,
-      `Deal! $${vendorOffer.total_price?.toFixed(2)} total, ${vendorOffer.payment_terms}, ${delivery}. ${concernAck || 'Thank you for the productive negotiation.'}`,
-    ];
-
-    // Adjust formality based on tone
-    const formalTemplates = [
-      `We are pleased to formally accept your offer of $${vendorOffer.total_price?.toFixed(2)} total with ${vendorOffer.payment_terms} payment terms and delivery ${delivery}. ${concernAck || 'We appreciate your professionalism throughout this negotiation.'}`,
-    ];
-
-    if (tone === 'formal') {
-      return formalTemplates[Math.floor(Math.random() * formalTemplates.length)];
-    }
-
-    return templates[Math.floor(Math.random() * templates.length)];
-  },
-
-  COUNTER: (input: ResponseGeneratorInput, tone: VendorTone, concerns: VendorConcern[]): string => {
-    const { vendorOffer, counterOffer, deliveryConfig } = input;
-    const counterDelivery = formatDeliveryFromOffer(counterOffer) || formatDeliveryFromConfig(deliveryConfig);
-    const concernAck = concerns.length > 0 ? getAcknowledgmentSentence(concerns) + ' ' : '';
-
-    const templates = [
-      `${concernAck}Thank you for your offer. We'd like to propose $${counterOffer?.total_price?.toFixed(2)} total with ${counterOffer?.payment_terms} and delivery ${counterDelivery}. This better aligns with our project requirements.`,
-      `${concernAck}I appreciate the offer of $${vendorOffer.total_price?.toFixed(2)}. Our counter: $${counterOffer?.total_price?.toFixed(2)} total, ${counterOffer?.payment_terms}, delivery ${counterDelivery}. Can we meet in the middle?`,
-      `${concernAck}Your proposal is noted. Given our constraints, we can offer $${counterOffer?.total_price?.toFixed(2)} total, ${counterOffer?.payment_terms}, with delivery ${counterDelivery}. Let me know your thoughts.`,
-      `${concernAck}Thanks for the offer. We're looking at $${counterOffer?.total_price?.toFixed(2)} total with ${counterOffer?.payment_terms} payment and ${counterDelivery} delivery. Does this work for you?`,
-      `${concernAck}I've reviewed your offer. We can do $${counterOffer?.total_price?.toFixed(2)} total, ${counterOffer?.payment_terms}, delivered ${counterDelivery}. This helps us stay within budget.`,
-    ];
-
-    const formalTemplates = [
-      `${concernAck}Thank you for your proposal. We would like to respectfully counter with $${counterOffer?.total_price?.toFixed(2)} total, ${counterOffer?.payment_terms} payment terms, and delivery ${counterDelivery}. We believe this arrangement would be mutually beneficial.`,
-    ];
-
-    if (tone === 'formal') {
-      return formalTemplates[Math.floor(Math.random() * formalTemplates.length)];
-    }
-
-    return templates[Math.floor(Math.random() * templates.length)];
-  },
-
-  WALK_AWAY: (input: ResponseGeneratorInput, tone: VendorTone, concerns: VendorConcern[]): string => {
-    const templates = [
-      `I appreciate your time and effort in this negotiation. Unfortunately, we're unable to proceed with the current terms. I hope we can work together on future opportunities.`,
-      `Thank you for the discussions. Regrettably, the offer doesn't align with our current requirements. We'd welcome the chance to reconnect on future projects.`,
-      `We've valued this negotiation, but can't move forward with these terms. Thank you for your understanding, and we hope to collaborate in the future.`,
-      `I want to thank you for your patience throughout this process. Unfortunately, we're not able to reach an agreement this time. Best of luck, and I hope our paths cross again.`,
-      `While I appreciate your offer, we're unable to proceed given our current constraints. Thank you for your professionalism, and I hope we can explore opportunities down the road.`,
-    ];
-
-    return templates[Math.floor(Math.random() * templates.length)];
-  },
-
-  ESCALATE: (): string => {
-    const templates = [
-      `This requires some additional review from our team. A colleague will follow up with you shortly to continue the discussion.`,
-      `I'd like to bring in a colleague to review this further. Someone will be in touch soon to continue our conversation.`,
-      `Let me involve a team member to give this the attention it deserves. You'll hear from us shortly.`,
-      `Your offer is being carefully considered. I'm bringing in a senior colleague to ensure we give this the proper attention. We'll be in touch soon.`,
-      `I want to make sure we handle this properly. Let me loop in someone from our team who can help move this forward. You'll hear back shortly.`,
-    ];
-
-    return templates[Math.floor(Math.random() * templates.length)];
-  },
-
-  ASK_CLARIFY: (input: ResponseGeneratorInput): string => {
-    const { vendorOffer, currentExtraction, accumulatedOffer } = input;
-
-    // Get what was provided and what's missing
-    const currentProvided = currentExtraction ? getProvidedComponents(currentExtraction) : [];
-    const missing = getMissingComponents(accumulatedOffer || vendorOffer);
-
-    // Build acknowledgment based on what was provided
-    let acknowledgment = '';
-    if (currentProvided.length > 0) {
-      const priceAcks = ['Got it', 'Thanks for that', 'Noted', 'Perfect'];
-      acknowledgment = `${priceAcks[Math.floor(Math.random() * priceAcks.length)]} - ${currentProvided.join(' and ')}. `;
-    }
-
-    // Build request for missing items
-    const missingRequests: Record<string, string[]> = {
-      'price': [
-        'What about the total price?',
-        'And the pricing?',
-        'Can you share the price?',
-      ],
-      'payment terms': [
-        'What about payment terms?',
-        'How about terms - Net 30, 60?',
-        'And the payment terms?',
-      ],
-      'price and payment terms': [
-        'Can you confirm both price and payment terms?',
-        'What are you thinking for price and terms?',
-      ],
-    };
-
-    const missingKey = missing.length === 2 ? 'price and payment terms' : missing[0] || 'price';
-    const requests = missingRequests[missingKey] || missingRequests['price'];
-    const request = requests[Math.floor(Math.random() * requests.length)];
-
-    return `${acknowledgment}${request}`;
-  }
-};
+  return {
+    vendorPrice: `$${vendorOffer.total_price?.toFixed(2) || '0.00'}`,
+    vendorTerms: vendorOffer.payment_terms || 'not specified',
+    vendorDelivery,
+    counterPrice: `$${counterOffer?.total_price?.toFixed(2) || '0.00'}`,
+    counterTerms: counterOffer?.payment_terms || 'flexible',
+    counterDelivery,
+    concernAck: concernAck ? concernAck + ' ' : '',
+    round: input.round || 1,
+    maxRounds: input.maxRounds || 6,
+  };
+}
 
 /**
- * Generate enhanced fallback response
+ * Generate tone-aware fallback response
  */
 function generateFallback(
   input: ResponseGeneratorInput,
@@ -466,14 +382,16 @@ function generateFallback(
   concerns: VendorConcern[]
 ): string {
   const { action } = input.decision;
+  const ctx = buildTemplateContext(input, concerns);
 
-  const generator = FALLBACK_TEMPLATES[action as keyof typeof FALLBACK_TEMPLATES];
-  if (generator) {
-    return generator(input, tone, concerns);
+  // For ASK_CLARIFY, pass provided/missing info
+  if (action === 'ASK_CLARIFY') {
+    const currentProvided = input.currentExtraction ? getProvidedComponents(input.currentExtraction) : [];
+    const missing = getMissingComponents(input.accumulatedOffer || input.vendorOffer);
+    return getToneAwareTemplate(action, ctx, tone, { provided: currentProvided, missing });
   }
 
-  // Default fallback
-  return `Thank you for your message. I've noted your offer and will respond shortly.`;
+  return getToneAwareTemplate(action, ctx, tone);
 }
 
 /**
@@ -522,14 +440,56 @@ export async function generateHumanLikeResponse(
     round: input.round
   });
 
+  // Detect milestone for personality enrichment
+  const milestoneInput: MilestoneDetectionInput = {
+    action: input.decision.action,
+    round: input.round ?? 1,
+    maxRounds: input.maxRounds ?? 10,
+    previousUtility: undefined, // Caller can extend this
+    currentUtility: input.decision.utilityScore,
+  };
+  const milestone = detectMilestone(milestoneInput);
+  const enrichment = getPersonalityEnrichment(milestone, tone);
+
+  if (milestone !== 'none') {
+    logger.info('[ResponseGenerator] Personality milestone detected', {
+      milestone,
+      tone,
+      round: input.round,
+    });
+  }
+
+  // Generate dynamic prompt addenda based on negotiation context
+  const addendaCtx: AddendaContext = {
+    round: input.round ?? 1,
+    maxRounds: input.maxRounds ?? 10,
+    utilityScore: input.decision.utilityScore,
+    action: input.decision.action,
+    vendorTone: tone,
+    stallDetected: input.stallDetected,
+    consecutiveCounters: input.consecutiveCounters,
+    vendorConceded: input.vendorConceded,
+    dealTitle: input.dealTitle,
+    acceptThreshold: input.config.accept_threshold,
+    walkawayThreshold: input.config.walkaway_threshold,
+  };
+  const { addenda, promptSuffix } = generatePromptAddenda(addendaCtx);
+
+  if (addenda.length > 0) {
+    logger.info('[ResponseGenerator] Dynamic addenda applied', {
+      addendaIds: addenda.map(a => a.id),
+      round: input.round,
+    });
+  }
+
   // Try LLM first
-  const prompt = buildPrompt(input, tone, concerns);
+  const prompt = buildPrompt(input, tone, concerns) + promptSuffix;
   const llmResponse = await generateLLMResponse(prompt);
 
   if (llmResponse && validateResponse(llmResponse, input.decision.action)) {
     const elapsed = Date.now() - startTime;
     return {
-      response: llmResponse.trim(),
+      response: applyPersonality(llmResponse.trim(), enrichment),
       source: 'llm',
       tone,
       concerns,
@@ -543,7 +503,7 @@ export async function generateHumanLikeResponse(
   const elapsed = Date.now() - startTime;
 
   return {
-    response: fallbackResponse,
+    response: applyPersonality(fallbackResponse, enrichment),
     source: 'fallback',
     tone,
     concerns,
