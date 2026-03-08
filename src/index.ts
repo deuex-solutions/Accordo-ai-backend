@@ -56,9 +56,10 @@ process.on('uncaughtException', (error: ErrorWithStack) => {
     console.info('Database connection established');
 
     const app = createExpressApp();
-    app.listen(env.port, () => {
-      logger.info(`Server listening on http://localhost:${env.port}`);
-      console.info(`Server listening on http://localhost:${env.port}`);
+    const host = process.env.HOST || '0.0.0.0';
+    app.listen(env.port, host, () => {
+      logger.info(`Server listening on http://${host}:${env.port}`);
+      console.info(`Server listening on http://${host}:${env.port}`);
 
       // Start deadline scheduler for bid comparison
       startDeadlineScheduler();
