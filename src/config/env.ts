@@ -1,33 +1,13 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { parseDatabaseUrl } from '../utils/parseDatabaseUrl.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const envPath = path.resolve(__dirname, '../../.env');
 dotenv.config({ path: envPath });
-
-/**
- * Parse DATABASE_URL connection string into individual fields.
- * Format: postgres://user:password@host:port/database
- */
-function parseDatabaseUrl(url: string): {
-  host: string;
-  port: number;
-  name: string;
-  username: string;
-  password: string;
-} {
-  const parsed = new URL(url);
-  return {
-    host: parsed.hostname,
-    port: Number(parsed.port) || 5432,
-    name: parsed.pathname.replace(/^\//, ''),
-    username: decodeURIComponent(parsed.username),
-    password: decodeURIComponent(parsed.password),
-  };
-}
 
 const dbUrlParsed = process.env.DATABASE_URL
   ? parseDatabaseUrl(process.env.DATABASE_URL)
