@@ -110,7 +110,7 @@ function nextBetterTerms(
   config: NegotiationConfig,
   t: Offer['payment_terms']
 ): string {
-  const opts = config.parameters.payment_terms.options; // ["Net 30","Net 60","Net 90"]
+  const opts = config.parameters?.payment_terms?.options ?? ['Net 30', 'Net 60', 'Net 90'] as const;
 
   // If null or undefined, return first option
   if (!t) return opts[0];
@@ -140,7 +140,7 @@ function nextBetterTerms(
  * Typically Net 90 (longest payment time)
  */
 function bestTerms(config: NegotiationConfig): string {
-  const opts = config.parameters.payment_terms.options;
+  const opts = config.parameters?.payment_terms?.options ?? ['Net 30', 'Net 60', 'Net 90'];
   return opts[opts.length - 1];
 }
 
@@ -369,6 +369,18 @@ export function calculateDynamicCounter(
   return { price: counterPrice, terms: chosenTerms, strategy };
 }
 
+/**
+ * Returns true if the proposed counter offer is effectively identical to the vendor's offer.
+ * In that case we should ACCEPT rather than echo the vendor's own terms back as a "counter".
+ */
+function counterMatchesVendorOffer(counter: Offer, vendorOffer: Offer): boolean {
+  const priceMatch = counter.total_price != null &&
+    vendorOffer.total_price != null &&
+    Math.abs(counter.total_price - vendorOffer.total_price) < 0.01;
+  const termsMatch = counter.payment_terms === vendorOffer.payment_terms;
+  return priceMatch && termsMatch;
+}
+
 export function decideNextMove(
   config: NegotiationConfig,
   vendorOffer: Offer,
@@ -477,6 +489,14 @@ export function decideNextMove(
         delivery_days: delivery.delivery_days,
       };
 
+      if (counterMatchesVendorOffer(counter, vendorOffer)) {
+        return {
+          action: 'MESO',
+          utilityScore: totalUtility(config, vendorOffer),
+          counterOffer: null,
+          reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+        };
+      }
       return {
         action: 'COUNTER',
         utilityScore: 0,
@@ -539,6 +559,15 @@ export function decideNextMove(
       delivery_days: delivery.delivery_days,
     };
 
+    if (counterMatchesVendorOffer(counter, vendorOffer)) {
+      return {
+        action: 'MESO',
+        utilityScore: u,
+        counterOffer: null,
+        reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+      };
+    }
+
     let reason = `Utility ${(u * 100).toFixed(0)}% below threshold`;
     if (inPreferenceExploration) {
       reason += ` - preference exploration: ${explorationRoundsRemaining} round(s) remaining`;
@@ -599,6 +628,15 @@ export function decideNextMove(
     }
     reason += `. Counter at $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`;
 
+    if (counterMatchesVendorOffer(counter, vendorOffer)) {
+      return {
+        action: 'MESO',
+        utilityScore: u,
+        counterOffer: null,
+        reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+      };
+    }
+
     return {
       action: 'COUNTER',
       utilityScore: u,
@@ -621,6 +659,15 @@ export function decideNextMove(
   };
 
   reasons.push(`${dynamicCounter.strategy}: Counter at $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`);
+
+  if (counterMatchesVendorOffer(counter, vendorOffer)) {
+    return {
+      action: 'MESO',
+      utilityScore: u,
+      counterOffer: null,
+      reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+    };
+  }
 
   return { action: 'COUNTER', utilityScore: u, counterOffer: counter, reasons };
 }
@@ -681,7 +728,7 @@ export function decideWithWeightedUtility(
   // ============================================
 
   const resolvedConfig = resolveNegotiationConfig(wizardConfig, legacyConfig ? {
-    total_price: legacyConfig.parameters.total_price,
+    total_price: legacyConfig.parameters?.total_price ?? (legacyConfig.parameters as any)?.unit_price,
     accept_threshold: legacyConfig.accept_threshold,
     escalate_threshold: legacyConfig.escalate_threshold,
     walkaway_threshold: legacyConfig.walkaway_threshold,

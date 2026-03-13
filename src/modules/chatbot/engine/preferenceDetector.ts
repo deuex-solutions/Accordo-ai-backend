@@ -344,9 +344,9 @@ export function updateNegotiationState(
 
   // Calculate price concession if we have previous offer
   if (
-    previousVendorOffer !== null &&
-    previousVendorOffer.total_price !== null &&
-    currentVendorOffer.total_price !== null
+    previousVendorOffer != null &&
+    previousVendorOffer.total_price != null &&
+    currentVendorOffer.total_price != null
   ) {
     const priceConcession = calculatePriceConcession(
       previousVendorOffer.total_price,

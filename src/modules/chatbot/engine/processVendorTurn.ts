@@ -231,8 +231,9 @@ export async function processVendorTurn(
     const tUtility = extractedOffer.payment_terms !== null
       ? termsUtility(config, extractedOffer.payment_terms)
       : 0;
-    const totalUtil = pUtility * config.parameters.total_price.weight +
-                      tUtility * config.parameters.payment_terms.weight;
+    const priceWeight = (config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.weight ?? 0.6;
+    const termsWeight = config.parameters?.payment_terms?.weight ?? 0.4;
+    const totalUtil = pUtility * priceWeight + tUtility * termsWeight;
 
     // ENHANCED LOGGING: Utility Calculation
     negotiationLogger.logUtilityCalculation(pUtility, tUtility, totalUtil, config);

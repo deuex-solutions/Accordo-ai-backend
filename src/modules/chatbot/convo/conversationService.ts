@@ -266,7 +266,7 @@ export async function processConversationMessage(
         try {
           const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
           const resolvedConfig = resolveNegotiationConfig(wizardConfig, {
-            total_price: config.parameters.total_price,
+            total_price: config.parameters?.total_price ?? (config.parameters as any)?.unit_price,
             accept_threshold: config.accept_threshold,
             escalate_threshold: config.escalate_threshold,
             walkaway_threshold: config.walkaway_threshold,

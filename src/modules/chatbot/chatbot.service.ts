@@ -523,11 +523,11 @@ export const createDealWithConfigService = async (
     // Build negotiation config from wizard input
     const { priceQuantity, paymentTerms, delivery, contractSla, negotiationControl, customParameters } = input;
 
-    // Convert unit prices to total prices using order quantity
-    // Vendors always bid on total contract value, so all thresholds must be totals too
+    // Both targetUnitPrice and maxAcceptablePrice from the wizard are total contract values
+    // (not per-unit prices). Do NOT multiply by quantity.
     const orderQty = priceQuantity.minOrderQuantity || 1;
-    const targetTotalPrice = priceQuantity.targetUnitPrice * orderQty;
-    const maxTotalPrice = priceQuantity.maxAcceptablePrice * orderQty;
+    const targetTotalPrice = priceQuantity.targetUnitPrice;
+    const maxTotalPrice = priceQuantity.maxAcceptablePrice;
 
     // Calculate concession step based on total price range
     const priceRange = maxTotalPrice - targetTotalPrice;
@@ -607,7 +607,7 @@ export const createDealWithConfigService = async (
     const adaptiveFeaturesConfig: AdaptiveFeaturesConfig = {
       enabled: true,
       historicalAnchor: false,
-      originalAnchor: negotiationConfig.parameters.total_price.anchor,
+      originalAnchor: (negotiationConfig.parameters?.total_price ?? (negotiationConfig.parameters as any)?.unit_price)?.anchor ?? 0,
       dynamicRounds: {
         softMaxRounds: maxRounds,
         hardMaxRounds: Math.ceil(maxRounds * 1.5),
@@ -619,15 +619,16 @@ export const createDealWithConfigService = async (
     try {
       const insights = await getHistoricalInsights(input.vendorId);
       if (insights.sampleSize > 0) {
-        const originalAnchor = negotiationConfig.parameters.total_price.anchor;
+        const priceParams = negotiationConfig.parameters?.total_price ?? (negotiationConfig.parameters as any)?.unit_price;
+        const originalAnchor = priceParams?.anchor ?? 0;
         const adjustedAnchor = adjustAnchorFromHistory(
           originalAnchor,
-          negotiationConfig.parameters.total_price.target,
+          priceParams?.target ?? 0,
           insights
         );
 
-        if (adjustedAnchor !== originalAnchor) {
-          negotiationConfig.parameters.total_price.anchor = adjustedAnchor;
+        if (adjustedAnchor !== originalAnchor && priceParams) {
+          priceParams.anchor = adjustedAnchor;
           adaptiveFeaturesConfig.historicalAnchor = true;
           adaptiveFeaturesConfig.originalAnchor = originalAnchor;
           logger.info(`[CreateDeal] Historical anchor adjusted for vendor ${input.vendorId}: $${originalAnchor} -> $${adjustedAnchor} (profile: ${insights.vendorBehaviorProfile}, ${insights.sampleSize} deals)`);
@@ -1336,15 +1337,27 @@ export const processVendorMessageService = async (
     if (deal.negotiationConfigJson) {
       // Use the stored config which includes priority-based thresholds, weights, and strategy
       const storedConfig = deal.negotiationConfigJson as NegotiationConfig & { wizardConfig?: unknown };
-      config = {
-        parameters: storedConfig.parameters,
-        accept_threshold: storedConfig.accept_threshold,
-        escalate_threshold: storedConfig.escalate_threshold,
-        walkaway_threshold: storedConfig.walkaway_threshold,
-        max_rounds: storedConfig.max_rounds,
-        priority: storedConfig.priority,
-      };
-      logger.debug(`Using stored negotiation config for deal ${input.dealId} (priority: ${config.priority})`);
+      if (!storedConfig.parameters) {
+        logger.warn(`Deal ${input.dealId} stored config missing parameters, rebuilding from source`);
+        if (deal.requisitionId) {
+          config = await buildConfigFromRequisition(deal.requisitionId);
+        } else if (deal.contractId) {
+          config = await buildConfigFromContract(deal.contractId);
+        } else {
+          const { negotiationConfig } = await import('./engine/config.js');
+          config = negotiationConfig;
+        }
+      } else {
+        config = {
+          parameters: storedConfig.parameters,
+          accept_threshold: storedConfig.accept_threshold,
+          escalate_threshold: storedConfig.escalate_threshold,
+          walkaway_threshold: storedConfig.walkaway_threshold,
+          max_rounds: storedConfig.max_rounds,
+          priority: storedConfig.priority,
+        };
+        logger.debug(`Using stored negotiation config for deal ${input.dealId} (priority: ${config.priority})`);
+      }
     } else if (deal.requisitionId) {
       // Fallback: rebuild from requisition (legacy deals without stored config)
       config = await buildConfigFromRequisition(deal.requisitionId);
@@ -1738,14 +1751,27 @@ export const generatePMResponseAsyncService = async (
     let config: NegotiationConfig;
     if (deal.negotiationConfigJson) {
       const storedConfig = deal.negotiationConfigJson as NegotiationConfig & { wizardConfig?: unknown };
-      config = {
-        parameters: storedConfig.parameters,
-        accept_threshold: storedConfig.accept_threshold,
-        escalate_threshold: storedConfig.escalate_threshold,
-        walkaway_threshold: storedConfig.walkaway_threshold,
-        max_rounds: storedConfig.max_rounds,
-        priority: storedConfig.priority,
-      };
+      // If parameters is missing from stored config (e.g. wizard-only deals), rebuild from requisition/contract
+      if (!storedConfig.parameters) {
+        logger.warn(`[Phase2] Deal ${input.dealId} stored config missing parameters, rebuilding from source`);
+        if (deal.requisitionId) {
+          config = await buildConfigFromRequisition(deal.requisitionId);
+        } else if (deal.contractId) {
+          config = await buildConfigFromContract(deal.contractId);
+        } else {
+          const { negotiationConfig } = await import('./engine/config.js');
+          config = negotiationConfig;
+        }
+      } else {
+        config = {
+          parameters: storedConfig.parameters,
+          accept_threshold: storedConfig.accept_threshold,
+          escalate_threshold: storedConfig.escalate_threshold,
+          walkaway_threshold: storedConfig.walkaway_threshold,
+          max_rounds: storedConfig.max_rounds,
+          priority: storedConfig.priority,
+        };
+      }
     } else if (deal.requisitionId) {
       config = await buildConfigFromRequisition(deal.requisitionId);
     } else if (deal.contractId) {
@@ -1772,6 +1798,14 @@ export const generatePMResponseAsyncService = async (
 
     // Get previous PM counter-offer
     const previousPmOffer = negotiationState ? getLastPmCounter(negotiationState) : null;
+
+    // DEBUG: Log config.parameters to diagnose crash
+    if (!config.parameters) {
+      logger.error(`[Phase2] CRITICAL: config.parameters is undefined for deal ${input.dealId}`, {
+        configKeys: config ? Object.keys(config) : 'config is null',
+        negotiationConfigJsonKeys: deal.negotiationConfigJson ? Object.keys(deal.negotiationConfigJson) : 'null',
+      });
+    }
 
     // Get price config with fallback defaults
     const priceConfig = config.parameters?.total_price ?? (config.parameters as Record<string, unknown>)?.unit_price as typeof config.parameters.total_price ?? {
@@ -2015,11 +2049,13 @@ export const generatePMResponseAsyncService = async (
     // MESO should trigger on:
     // 1. COUNTER decisions (normal case), OR
     // 2. When phase logic says to show MESO
-    const mesoDecisionOk = decision.action === 'COUNTER' || mesoCheckResult.phase === 'MESO_PRESENTATION' || mesoCheckResult.phase === 'FINAL_MESO';
+    const mesoDecisionOk = decision.action === 'COUNTER' || decision.action === 'MESO' || mesoCheckResult.phase === 'MESO_PRESENTATION' || mesoCheckResult.phase === 'FINAL_MESO';
 
     logger.info(`[MESO] Check: action=${decision.action}, enabled=${mesoEnabled}, round=${currentRoundForMeso}, maxRounds=${config.max_rounds}, phase=${mesoCheckResult.phase}, shouldApply=${mesoShouldApply}, showOthers=${mesoCheckResult.showOthers}, isFinal=${mesoCheckResult.isFinal}`);
 
-    if (mesoDecisionOk && mesoEnabled && mesoShouldApply) {
+    // Force MESO when decision engine explicitly requests it (counter = vendor offer)
+    const forceMeso = decision.action === 'MESO';
+    if (mesoDecisionOk && mesoEnabled && (mesoShouldApply || forceMeso)) {
       try {
         // Determine which MESO generation strategy to use
         if (isFinalMesoTrigger) {
@@ -2163,8 +2199,14 @@ export const generatePMResponseAsyncService = async (
     const currentExtraction = parseOfferWithDelivery(vendorMessage.content);
     const accumulatedOffer = 'accumulation' in extractedOffer ? extractedOffer as AccumulatedOffer : undefined;
 
+    // For MESO decisions, treat as COUNTER for response generation so LLM produces
+    // a natural "let me present some options" message instead of an unknown action fallback
+    const responseDecision = decision.action === 'MESO'
+      ? { ...decision, action: 'COUNTER' as const }
+      : decision;
+
     const responseResult = await generateHumanLikeResponse({
-      decision,
+      decision: responseDecision,
       config,
       conversationHistory,
       vendorOffer: extractedOffer,
@@ -2281,6 +2323,7 @@ export const generatePMResponseAsyncService = async (
       dealId: input.dealId,
       errorCategory,
       errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
     });
 
     // For deal_not_found, still throw (controller needs to return 404)
@@ -2355,14 +2398,25 @@ export const generatePMFallbackResponseService = async (
     let config: NegotiationConfig;
     if (deal.negotiationConfigJson) {
       const storedConfig = deal.negotiationConfigJson as NegotiationConfig & { wizardConfig?: unknown };
-      config = {
-        parameters: storedConfig.parameters,
-        accept_threshold: storedConfig.accept_threshold,
-        escalate_threshold: storedConfig.escalate_threshold,
-        walkaway_threshold: storedConfig.walkaway_threshold,
-        max_rounds: storedConfig.max_rounds,
-        priority: storedConfig.priority,
-      };
+      if (!storedConfig.parameters) {
+        if (deal.requisitionId) {
+          config = await buildConfigFromRequisition(deal.requisitionId);
+        } else if (deal.contractId) {
+          config = await buildConfigFromContract(deal.contractId);
+        } else {
+          const { negotiationConfig } = await import('./engine/config.js');
+          config = negotiationConfig;
+        }
+      } else {
+        config = {
+          parameters: storedConfig.parameters,
+          accept_threshold: storedConfig.accept_threshold,
+          escalate_threshold: storedConfig.escalate_threshold,
+          walkaway_threshold: storedConfig.walkaway_threshold,
+          max_rounds: storedConfig.max_rounds,
+          priority: storedConfig.priority,
+        };
+      }
     } else if (deal.requisitionId) {
       config = await buildConfigFromRequisition(deal.requisitionId);
     } else if (deal.contractId) {
@@ -2946,8 +3000,8 @@ export const getDealUtilityService = async (
 
     // Convert legacy config to weighted format if needed
     const weightedConfig = convertLegacyConfig({
-      total_price: config.parameters.total_price,
-      payment_terms: config.parameters.payment_terms,
+      total_price: config.parameters?.total_price ?? (config.parameters as any)?.unit_price,
+      payment_terms: config.parameters?.payment_terms,
       accept_threshold: config.accept_threshold,
       walkaway_threshold: config.walkaway_threshold,
       max_rounds: config.max_rounds,
