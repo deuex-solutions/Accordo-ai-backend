@@ -1618,13 +1618,20 @@ export const saveVendorMessageOnlyService = async (
     let accumulatedOffer: AccumulatedOffer;
 
     if (shouldResetAccumulation(currentExtraction)) {
-      // Vendor provided complete offer - start fresh
+      // Vendor provided complete offer (price AND terms) - start fresh
       accumulatedOffer = createAccumulatedOffer(currentExtraction, vendorMessageId);
       logger.info(`[Phase1] Complete offer detected, resetting accumulation for deal ${input.dealId}`);
     } else {
-      // Merge partial offer with accumulated state
-      accumulatedOffer = mergeOffers(previousAccumulated, currentExtraction, vendorMessageId);
-      logger.info(`[Phase1] Partial offer merged for deal ${input.dealId}`, {
+      // Only merge with previous if the previous offer was also incomplete (partial chain).
+      // If previous was complete, treat this as a new partial offer — don't inherit old terms/price.
+      const previousWasIncomplete = previousAccumulated && !previousAccumulated.accumulation?.isComplete;
+      accumulatedOffer = mergeOffers(
+        previousWasIncomplete ? previousAccumulated : null,
+        currentExtraction,
+        vendorMessageId
+      );
+      logger.info(`[Phase1] Partial offer for deal ${input.dealId}`, {
+        mergedWithPrevious: !!previousWasIncomplete,
         provided: getProvidedComponents(currentExtraction),
         missing: getMissingComponents(accumulatedOffer),
         isComplete: accumulatedOffer.accumulation.isComplete,
@@ -1782,7 +1789,7 @@ export const generatePMResponseAsyncService = async (
     }
 
     // Get vendor offer from the message (may be an AccumulatedOffer)
-    const extractedOffer = vendorMessage.extractedOffer as Offer | AccumulatedOffer || parseOfferWithDelivery(vendorMessage.content);
+    let extractedOffer = vendorMessage.extractedOffer as Offer | AccumulatedOffer || parseOfferWithDelivery(vendorMessage.content);
 
     // Get current negotiation state from deal (stored in convoStateJson)
     let negotiationState: NegotiationState | null = deal.convoStateJson as NegotiationState | null;
@@ -1798,6 +1805,23 @@ export const generatePMResponseAsyncService = async (
 
     // Get previous PM counter-offer
     const previousPmOffer = negotiationState ? getLastPmCounter(negotiationState) : null;
+
+    // Affirmative detection: if vendor sends a short acceptance message ("ok", "agreed", "deal", etc.)
+    // and the extracted offer has no price/terms, substitute the PM's last counter as the accepted offer.
+    const AFFIRMATIVE_PATTERN = /^\s*(ok|okay|sure|agreed|deal|yes|accept|accepted|confirm|confirmed|sounds good|looks good|that works|perfect|fine|great|done|alright|alright then|absolutely|of course|works for me|i accept|we accept|i agree|we agree)\s*[.!]?\s*$/i;
+    const offerMissingPrice = extractedOffer.total_price == null && extractedOffer.payment_terms == null;
+    if (offerMissingPrice && AFFIRMATIVE_PATTERN.test(vendorMessage.content) && previousPmOffer) {
+      logger.info(`[Phase2] Affirmative message detected ("${vendorMessage.content}") — substituting last PM counter as vendor acceptance`, {
+        dealId: input.dealId,
+        pmCounter: previousPmOffer,
+      });
+      extractedOffer = {
+        total_price: previousPmOffer.price,
+        payment_terms: previousPmOffer.terms,
+        delivery_days: previousPmOffer.deliveryDays ?? null,
+        delivery_date: null,
+      };
+    }
 
     // DEBUG: Log config.parameters to diagnose crash
     if (!config.parameters) {
