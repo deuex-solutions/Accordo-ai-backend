@@ -1807,11 +1807,12 @@ export const generatePMResponseAsyncService = async (
     const previousPmOffer = negotiationState ? getLastPmCounter(negotiationState) : null;
 
     // Affirmative detection: if vendor sends a short acceptance message ("ok", "agreed", "deal", etc.)
-    // and the extracted offer has no price/terms, substitute the PM's last counter as the accepted offer.
+    // force ACCEPT using the PM's last counter — bypass utility scoring entirely.
     const AFFIRMATIVE_PATTERN = /^\s*(ok|okay|sure|agreed|deal|yes|accept|accepted|confirm|confirmed|sounds good|looks good|that works|perfect|fine|great|done|alright|alright then|absolutely|of course|works for me|i accept|we accept|i agree|we agree)\s*[.!]?\s*$/i;
-    const offerMissingPrice = extractedOffer.total_price == null && extractedOffer.payment_terms == null;
-    if (offerMissingPrice && AFFIRMATIVE_PATTERN.test(vendorMessage.content) && previousPmOffer) {
-      logger.info(`[Phase2] Affirmative message detected ("${vendorMessage.content}") — substituting last PM counter as vendor acceptance`, {
+    const rawContent = vendorMessage.content.trim();
+    const isVendorAffirmative = AFFIRMATIVE_PATTERN.test(rawContent) && previousPmOffer != null;
+    if (isVendorAffirmative && previousPmOffer) {
+      logger.info(`[Phase2] Affirmative message detected ("${vendorMessage.content}") — forcing ACCEPT on PM's last counter`, {
         dealId: input.dealId,
         pmCounter: previousPmOffer,
       });
@@ -1918,7 +1919,15 @@ export const generatePMResponseAsyncService = async (
     }
 
     // Make decision using the engine with negotiation state for dynamic counters
-    const decision = decideNextMove(config, extractedOffer, deal.round, negotiationState, previousPmOffer, behavioralSignals, adaptiveStrategy);
+    // If vendor sent an affirmative, force ACCEPT — don't run utility scoring
+    const decision = isVendorAffirmative
+      ? {
+          action: 'ACCEPT' as const,
+          utilityScore: 1.0,
+          counterOffer: null,
+          reasons: [`Vendor accepted PM's counter offer of $${extractedOffer.total_price} with ${extractedOffer.payment_terms}.`],
+        }
+      : decideNextMove(config, extractedOffer, deal.round, negotiationState, previousPmOffer, behavioralSignals, adaptiveStrategy);
 
     // Compute explainability
     const explainability = computeExplainability(config, extractedOffer, decision);
