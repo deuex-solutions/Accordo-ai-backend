@@ -1,0 +1,43 @@
+# Production: backend only. Postgres runs separately (e.g. Render Postgres service).
+# Place .env here with DB_HOST pointing to your Postgres (Render internal URL or external).
+#   cd docker/compose/production && docker compose up -d
+
+services:
+  backend:
+    image: ${DOCKER_IMAGE:-accordo-backend:latest}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: accordo-backend-production
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 5002
+    ports:
+      - "${PORT:-5002}:5002"
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:5002/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+volumes:
+  uploads_data:
+  logs_data:

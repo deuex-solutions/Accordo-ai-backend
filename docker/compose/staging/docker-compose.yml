@@ -1,0 +1,56 @@
+# Staging: run from this directory. Place .env here.
+# Usage: docker compose -f docker/compose/staging/docker-compose.yml up -d
+# Or:    cd docker/compose/staging && docker compose up -d
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: accordo-postgres-staging
+    environment:
+      POSTGRES_DB: ${DB_NAME:-accordo}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime
+    image: accordo-backend:staging
+    container_name: accordo-backend-staging
+    env_file: .env
+    environment:
+      NODE_ENV: staging
+      PORT: 5002
+      DB_HOST: postgres
+      DB_PORT: 5432
+    ports:
+      - "${PORT:-5002}:5002"
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:5002/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  uploads_data:
+  logs_data:

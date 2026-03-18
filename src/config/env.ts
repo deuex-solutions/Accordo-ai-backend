@@ -1,12 +1,17 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { parseDatabaseUrl } from '../utils/parseDatabaseUrl.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const envPath = path.resolve(__dirname, '../../.env');
 dotenv.config({ path: envPath });
+
+const dbUrlParsed = process.env.DATABASE_URL
+  ? parseDatabaseUrl(process.env.DATABASE_URL)
+  : null;
 
 export interface DatabaseConfig {
   host: string;
@@ -98,13 +103,13 @@ export const env: EnvironmentConfig = {
   port: Number(process.env.PORT || 5002),
   logLevel: process.env.LOG_LEVEL || 'info',
   database: {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT || 5432),
-    name: process.env.DB_NAME || 'accordo',
-    username: process.env.DB_USERNAME || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    adminDatabase: process.env.DB_ADMIN_DATABASE || 'postgres',
-    ssl: process.env.DB_SSL === 'true',
+    host: process.env.DB_HOST || dbUrlParsed?.host || '127.0.0.1',
+    port: Number(process.env.DB_PORT || dbUrlParsed?.port || 5432),
+    name: process.env.DB_NAME || dbUrlParsed?.name || 'accordo',
+    username: process.env.DB_USERNAME || dbUrlParsed?.username || 'postgres',
+    password: process.env.DB_PASSWORD || dbUrlParsed?.password || 'postgres',
+    adminDatabase: process.env.DB_ADMIN_DATABASE || dbUrlParsed?.name || process.env.DB_NAME || 'postgres',
+    ssl: process.env.DB_SSL === 'true' || !!dbUrlParsed,
     sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
     logging: process.env.DB_LOGGING === 'true',
   },
