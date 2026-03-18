@@ -13,7 +13,7 @@ export interface UserData {
   name: string;
   email: string;
   password: string;
-  type: 'admin' | 'customer' | 'vendor';
+  type: 'super_admin' | 'admin' | 'procurement' | 'vendor';
   role: string;
   companyId: number;
   isActive: boolean;
@@ -36,11 +36,11 @@ export const ROLE_PASSWORDS = {
 // Enterprise role definitions with approval limits
 const enterpriseRoles = [
   { role: 'admin', name: 'Admin', type: 'admin' as const, approvalLimit: undefined },
-  { role: 'procurement', name: 'Procurement Officer', type: 'customer' as const, approvalLimit: undefined },
-  { role: 'pm', name: 'Project Manager', type: 'customer' as const, approvalLimit: undefined },
-  { role: 'manager', name: 'Procurement Manager', type: 'customer' as const, approvalLimit: 10000 },
-  { role: 'director', name: 'Procurement Director', type: 'customer' as const, approvalLimit: 50000 },
-  { role: 'vp', name: 'VP Procurement', type: 'customer' as const, approvalLimit: 500000 },
+  { role: 'procurement', name: 'Procurement Officer', type: 'procurement' as const, approvalLimit: undefined },
+  { role: 'pm', name: 'Project Manager', type: 'procurement' as const, approvalLimit: undefined },
+  { role: 'manager', name: 'Procurement Manager', type: 'procurement' as const, approvalLimit: 10000 },
+  { role: 'director', name: 'Procurement Director', type: 'procurement' as const, approvalLimit: 50000 },
+  { role: 'vp', name: 'VP Procurement', type: 'procurement' as const, approvalLimit: 500000 },
 ];
 
 // Vendor role definitions
@@ -161,7 +161,7 @@ export const systemUsers: UserData[] = [
     name: 'Test Buyer',
     email: 'testbuyer@accordo.ai',
     password: 'TestBuyer@2026!',
-    type: 'customer',
+    type: 'procurement',
     role: 'Test Buyer',
     companyId: 1,
     isActive: true,
@@ -181,7 +181,7 @@ export const systemUsers: UserData[] = [
     name: 'Demo User',
     email: 'demo@accordo.ai',
     password: 'Demo@2026!',
-    type: 'customer',
+    type: 'procurement',
     role: 'Demo User',
     companyId: 1,
     isActive: true,
@@ -204,7 +204,7 @@ export const systemUsers: UserData[] = [
     name: 'AK Super Admin',
     email: 'ak75963@gmail.com',
     password: 'Welcome@56',
-    type: 'admin',
+    type: 'super_admin',
     role: 'Super Administrator',
     companyId: 1, // Accordo Technologies
     isActive: true,
@@ -223,7 +223,7 @@ export const getUserById = (id: number): UserData | undefined =>
 export const getUsersByCompany = (companyId: number): UserData[] =>
   allUsers.filter(u => u.companyId === companyId);
 
-export const getUsersByType = (type: 'admin' | 'customer' | 'vendor'): UserData[] =>
+export const getUsersByType = (type: 'super_admin' | 'admin' | 'procurement' | 'vendor'): UserData[] =>
   allUsers.filter(u => u.type === type);
 
 export const getApprovers = (): UserData[] =>

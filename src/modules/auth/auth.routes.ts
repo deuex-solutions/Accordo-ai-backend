@@ -10,6 +10,7 @@ import {
   resetPasswordAuto,
   refreshToken,
   logout,
+  getRoles,
 } from "./auth.controller.js";
 import { authMiddleware, checkPermission } from "../../middlewares/auth.middleware.js";
 
@@ -26,6 +27,7 @@ authRouter.post("/forgot-password", forgotPassword);
 authRouter.post("/verify-otp", verifyOtp);
 authRouter.put("/reset-password/:userid", resetPassword);
 authRouter.put("/reset-password-auto/:userid", resetPasswordAuto);
+authRouter.get("/roles", getRoles);
 
 /**
  * Protected routes

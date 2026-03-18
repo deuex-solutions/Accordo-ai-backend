@@ -233,7 +233,7 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
         ...userDataWithCompany,
         username,
         password: hashedPassword,
-        userType: 'customer',
+        userType: 'admin',
         status: 'active',
       },
       transaction
@@ -242,7 +242,7 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
     const apiSecret = crypto.randomBytes(32).toString("hex");
     const payload: JWTPayload = {
       userId: newUser.id,
-      userType: 'customer',
+      userType: 'admin',
       companyId: userDataWithCompany.companyId,
     };
     const apiKey = await generateJWT(payload, apiSecret);
@@ -309,7 +309,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
   // Generate new access token
   let payload: JWTPayload = {
     userId: user.id,
-    userType: user.userType ?? 'customer',
+    userType: user.userType ?? 'procurement',
     companyId: user.companyId,
   };
 
@@ -317,7 +317,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
     const role = await getRoleService(user.roleId);
     payload = {
       userId: user.id,
-      userType: user.userType ?? 'customer',
+      userType: user.userType ?? 'procurement',
       companyId: user.companyId,
       roleData: role,
     };
@@ -398,7 +398,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
 
   let payload: JWTPayload = {
     userId: user.id,
-    userType: user.userType ?? 'customer',
+    userType: user.userType ?? 'procurement',
     companyId: user.companyId,
   };
 
@@ -406,7 +406,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
     const role = await getRoleService(user.roleId);
     payload = {
       userId: user.id,
-      userType: user.userType ?? 'customer',
+      userType: user.userType ?? 'procurement',
       companyId: user.companyId,
       roleData: role,
     };

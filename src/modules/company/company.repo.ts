@@ -115,7 +115,7 @@ const repo: CompanyRepository = {
     isDefault: boolean;
   }[]> => {
     const user = await models.User.findByPk(userId);
-    const isAdmin = user?.userType === 'admin';
+    const isAdmin = user?.userType === 'super_admin';
 
     // Build company filter
     const companyFilter = (!isAdmin && user?.companyId) ? `AND c.id = ${user.companyId}` : '';

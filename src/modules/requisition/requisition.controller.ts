@@ -101,10 +101,10 @@ export const updateRequisition = async (
       return;
     }
 
-    // Permission: Admin can edit any; PM can only edit own
+    // Permission: Super Admin can edit any; others can only edit own
     const userType = req.context.userType;
     const userId = req.context.userId;
-    if (userType !== 'admin' && existingRequisition.createdBy !== userId) {
+    if (userType !== 'super_admin' && existingRequisition.createdBy !== userId) {
       res.status(403).json({ message: 'You can only edit requisitions you created' });
       return;
     }

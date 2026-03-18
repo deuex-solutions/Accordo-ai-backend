@@ -20,6 +20,7 @@ export interface SignUpData {
   username?: string;
   companyId?: number;
   password: string;
+  roleId?: number;
 }
 
 /**

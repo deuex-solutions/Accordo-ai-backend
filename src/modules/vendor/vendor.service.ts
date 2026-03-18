@@ -169,7 +169,7 @@ export const createVendorService = async (
 
 /**
  * Get all vendors with filtering and pagination
- * Admin users (userType === 'admin') see all vendors across all companies
+ * Super Admin users (userType === 'super_admin') see all vendors across all companies
  */
 export const getVendorsService = async (
   userId: number,
@@ -233,8 +233,8 @@ export const getVendorsService = async (
 
   const user = await userRepo.getUserProfile(userId);
 
-  // Admin users see all vendors across all companies
-  const isAdmin = user?.userType === 'admin';
+  // Super Admin users see all vendors across all companies
+  const isAdmin = user?.userType === 'super_admin';
 
   if (isAdmin) {
     // For admin users, get all vendors from all companies
