@@ -4,6 +4,7 @@ import { verifyJWT, TokenPayload } from './jwt.service.js';
 import env from '../config/env.js';
 import { checkPermissionService } from '../modules/role/role.service.js';
 import util from '../modules/common/util.js';
+import models from '../models/index.js';
 
 const decodeToken = async (header: string | undefined): Promise<TokenPayload> => {
   if (!header) {
@@ -96,6 +97,15 @@ export const authMiddleware = async (
     }
     const authHeader = req.header('Authorization') || req.header('authorization');
     req.context = await decodeToken(authHeader);
+
+    // Ensure companyId is always present in context (backfill for old tokens)
+    if (req.context.userId && !req.context.companyId) {
+      const user = await models.User.findByPk(req.context.userId, { attributes: ['companyId'], raw: true }) as { companyId?: number } | null;
+      if (user?.companyId) {
+        req.context.companyId = user.companyId;
+      }
+    }
+
     next();
   } catch (error) {
     // Ensure all authentication errors have proper status code

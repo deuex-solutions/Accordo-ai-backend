@@ -323,6 +323,7 @@ export interface ListDealsFilters {
   deleted?: boolean;
   userId?: number;
   vendorId?: number;
+  companyId?: number | null;
 }
 
 export interface PaginatedDealsResponse {
@@ -2632,13 +2633,22 @@ export const listDealsService = async (
 
     const offset = (page - 1) * limit;
 
+    // Company isolation filter via Requisition → Project
+    if (filters.companyId) {
+      where['$Requisition.Project.companyId$'] = filters.companyId;
+    }
+
     const { rows, count } = await models.ChatbotDeal.findAndCountAll({
       where,
       limit,
       offset,
+      subQuery: false,
       order: [['createdAt', 'DESC']],
       include: [
-        { model: models.Requisition, as: 'Requisition', attributes: ['id', 'subject', 'rfqId'] },
+        {
+          model: models.Requisition, as: 'Requisition', attributes: ['id', 'subject', 'rfqId'],
+          include: [{ model: models.Project, as: 'Project', attributes: ['id', 'companyId'] }],
+        },
         { model: models.Contract, as: 'Contract', attributes: ['id', 'status'] },
         { model: models.User, as: 'User', attributes: ['id', 'name', 'email'] },
         { model: models.User, as: 'Vendor', attributes: ['id', 'name', 'email'] },
@@ -3597,6 +3607,7 @@ export interface RequisitionsWithDealsFilters {
   dateTo?: string;
   sortBy?: 'recent_activity' | 'estimated_value' | 'vendor_count' | 'deadline';
   archived?: 'active' | 'archived' | 'all';
+  companyId?: number | null;
 }
 
 /**
@@ -3630,6 +3641,11 @@ export const getRequisitionsWithDealsService = async (
       id: { [Op.in]: requisitionIds },
     };
 
+    // Company isolation filter
+    if (filters.companyId) {
+      whereClause['$Project.companyId$'] = filters.companyId;
+    }
+
     if (filters.projectId) {
       whereClause.projectId = filters.projectId;
     }
@@ -3659,9 +3675,10 @@ export const getRequisitionsWithDealsService = async (
         {
           model: models.Project,
           as: 'Project',
-          attributes: ['id', 'projectName'],
+          attributes: ['id', 'projectName', 'companyId'],
         },
       ],
+      subQuery: false,
       limit,
       offset: (page - 1) * limit,
       order: [['createdAt', 'DESC']],
@@ -3791,7 +3808,8 @@ export const getRequisitionsWithDealsService = async (
  */
 export const getRequisitionDealsService = async (
   requisitionId: number,
-  filters: { status?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; archived?: 'active' | 'archived' | 'all' } = {}
+  filters: { status?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; archived?: 'active' | 'archived' | 'all' } = {},
+  companyId?: number | null
 ): Promise<{
   requisition: RequisitionWithDeals;
   deals: VendorDealSummary[];
@@ -3803,12 +3821,17 @@ export const getRequisitionDealsService = async (
         {
           model: models.Project,
           as: 'Project',
-          attributes: ['id', 'projectName'],
+          attributes: ['id', 'projectName', 'companyId'],
         },
       ],
     });
 
     if (!requisition) {
+      throw new CustomError('Requisition not found', 404);
+    }
+
+    // Company isolation check
+    if (companyId && (requisition as any).Project?.companyId !== companyId) {
       throw new CustomError('Requisition not found', 404);
     }
 
@@ -4591,18 +4614,26 @@ export interface DealDraft {
  * Get requisitions available for negotiation
  * Returns requisitions that have vendors attached via contracts
  */
-export const getRequisitionsForNegotiationService = async (): Promise<{
+export const getRequisitionsForNegotiationService = async (companyId?: number | null): Promise<{
   requisitions: RequisitionForNegotiation[];
   total: number;
 }> => {
   try {
+    // Build where clause for company isolation
+    const whereClause: any = {};
+    if (companyId) {
+      whereClause['$Project.companyId$'] = companyId;
+    }
+
     // Find requisitions that have contracts (vendors attached)
     const requisitionsWithContracts = await models.Requisition.findAll({
+      where: whereClause,
+      subQuery: false,
       include: [
         {
           model: models.Project,
           as: 'Project',
-          attributes: ['id', 'projectName'],
+          attributes: ['id', 'projectName', 'companyId'],
         },
         {
           model: models.Contract,

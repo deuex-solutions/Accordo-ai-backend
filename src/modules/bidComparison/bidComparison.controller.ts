@@ -11,7 +11,24 @@ import { triggerDeadlineCheck } from './scheduler/deadlineChecker.js';
 import type { SelectionMethod } from './bidComparison.types.js';
 import { getParam, getNumericParam } from '../../types/index.js';
 
-const { Requisition, VendorBid, BidComparison, VendorSelection, VendorNotification, User } = models;
+const { Requisition, VendorBid, BidComparison, VendorSelection, VendorNotification, User, Project } = models;
+
+/**
+ * Validate that a requisition belongs to the user's company.
+ * Returns the requisition if valid, throws 404 if not found or not owned.
+ */
+async function validateRequisitionOwnership(requisitionId: number, companyId: number | null | undefined): Promise<any> {
+  const requisition = await Requisition.findByPk(requisitionId, {
+    include: [{ model: Project, as: 'Project', attributes: ['id', 'companyId'] }],
+  });
+  if (!requisition) {
+    throw new CustomError('Requisition not found', 404);
+  }
+  if (companyId && (requisition as any).Project?.companyId !== companyId) {
+    throw new CustomError('Requisition not found', 404);
+  }
+  return requisition;
+}
 
 /**
  * Get comparison status for a requisition
@@ -29,10 +46,8 @@ export async function getComparisonStatus(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
-    const requisition = await Requisition.findByPk(reqId);
-    if (!requisition) {
-      throw new CustomError('Requisition not found', 404);
-    }
+    const companyId = req.context?.companyId || null;
+    await validateRequisitionOwnership(reqId, companyId);
 
     // Get completion status
     const status = await checkCompletionStatus(reqId);
@@ -88,6 +103,9 @@ export async function listBids(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
+    const companyId = req.context?.companyId || null;
+    await validateRequisitionOwnership(reqId, companyId);
+
     const bids = await VendorBid.findAll({
       where: { requisitionId: reqId },
       include: [{ model: User, as: 'Vendor', attributes: ['id', 'name', 'email'] }],
@@ -138,6 +156,9 @@ export async function getTop(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
+    const companyId = req.context?.companyId || null;
+    await validateRequisitionOwnership(reqId, companyId);
+
     const result = await getTopBids(reqId, limit);
 
     res.json({
@@ -164,6 +185,9 @@ export async function downloadPDF(
     if (isNaN(reqId)) {
       throw new CustomError('Invalid requisition ID', 400);
     }
+
+    const companyId = req.context?.companyId || null;
+    await validateRequisitionOwnership(reqId, companyId);
 
     const comparison = await BidComparison.findOne({
       where: { requisitionId: reqId },
@@ -284,6 +308,9 @@ export async function getSelectionDetails(
     if (isNaN(reqId)) {
       throw new CustomError('Invalid requisition ID', 400);
     }
+
+    const companyId = req.context?.companyId || null;
+    await validateRequisitionOwnership(reqId, companyId);
 
     const selection = await VendorSelection.findOne({
       where: { requisitionId: reqId },

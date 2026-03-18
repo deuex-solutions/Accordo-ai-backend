@@ -310,6 +310,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
   let payload: JWTPayload = {
     userId: user.id,
     userType: user.userType ?? 'customer',
+    companyId: user.companyId,
   };
 
   if (user.roleId) {
@@ -317,6 +318,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
     payload = {
       userId: user.id,
       userType: user.userType ?? 'customer',
+      companyId: user.companyId,
       roleData: role,
     };
   }
@@ -397,6 +399,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
   let payload: JWTPayload = {
     userId: user.id,
     userType: user.userType ?? 'customer',
+    companyId: user.companyId,
   };
 
   if (user.roleId) {
@@ -404,6 +407,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
     payload = {
       userId: user.id,
       userType: user.userType ?? 'customer',
+      companyId: user.companyId,
       roleData: role,
     };
   }

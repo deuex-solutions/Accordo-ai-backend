@@ -120,7 +120,7 @@ export default function companyModel(sequelize: Sequelize): typeof Company {
       },
       companyName: DataTypes.STRING,
       companyLogo: DataTypes.STRING,
-      apiKey: DataTypes.STRING(150),
+      apiKey: DataTypes.TEXT,
       apiSecret: DataTypes.STRING(150),
       establishmentDate: DataTypes.DATE,
       nature: DataTypes.ENUM(...natureEnum),

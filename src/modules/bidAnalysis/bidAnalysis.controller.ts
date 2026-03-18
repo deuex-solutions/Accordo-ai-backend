@@ -76,7 +76,8 @@ export async function getRequisitionDetail(
       throw new CustomError('Authentication required', 401);
     }
 
-    const result = await getRequisitionBidDetail(value.requisitionId);
+    const companyId = req.context?.companyId || null;
+    const result = await getRequisitionBidDetail(value.requisitionId, companyId);
 
     // Log view action
     await logViewAction(value.requisitionId, userId);
@@ -105,7 +106,8 @@ export async function getHistory(
       throw new CustomError(error.details[0].message, 400);
     }
 
-    const result = await getActionHistory(value.requisitionId);
+    const companyId = req.context?.companyId || null;
+    const result = await getActionHistory(value.requisitionId, companyId);
 
     res.json({
       message: 'History retrieved successfully',

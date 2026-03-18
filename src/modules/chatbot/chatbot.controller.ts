@@ -199,6 +199,7 @@ export const listDeals = async (
     if (deleted !== undefined) filters.deleted = deleted === 'true';
     if (userId) filters.userId = parseInt(userId as string, 10);
     if (vendorId) filters.vendorId = parseInt(vendorId as string, 10);
+    filters.companyId = req.context?.companyId || null;
 
     const result = await chatbotService.listDealsService(
       filters,
@@ -637,6 +638,7 @@ export const getRequisitionsWithDeals = async (
     if (dateTo) filters.dateTo = dateTo as string;
     if (sortBy) filters.sortBy = sortBy as any;
     if (archived) filters.archived = archived as 'active' | 'archived' | 'all';
+    filters.companyId = req.context?.companyId || null;
 
     const result = await chatbotService.getRequisitionsWithDealsService(
       filters,
@@ -674,6 +676,7 @@ export const getRequisitionDeals = async (
     const rfqIdParam = req.params.rfqId || req.params.requisitionId;
     const { status, sortBy, sortOrder, archived } = req.query;
 
+    const companyId = req.context?.companyId || null;
     const result = await chatbotService.getRequisitionDealsService(
       getNumericParam(rfqIdParam),
       {
@@ -681,7 +684,8 @@ export const getRequisitionDeals = async (
         sortBy: sortBy as string,
         sortOrder: sortOrder as 'asc' | 'desc',
         archived: archived as 'active' | 'archived' | 'all',
-      }
+      },
+      companyId
     );
 
     res.status(200).json({
@@ -865,7 +869,8 @@ export const getRequisitionsForNegotiation = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await chatbotService.getRequisitionsForNegotiationService();
+    const companyId = req.context?.companyId || null;
+    const result = await chatbotService.getRequisitionsForNegotiationService(companyId);
 
     res.status(200).json({
       message: 'Requisitions for negotiation retrieved successfully',
