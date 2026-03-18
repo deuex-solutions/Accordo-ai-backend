@@ -51,6 +51,7 @@ import { validateLlmOutput, ValidationError } from '../../../llm/validateLlmOutp
 import { getFallbackResponse } from '../../../llm/fallbackTemplates.js';
 import { simulateTypingDelay } from '../../../delivery/simulateTypingDelay.js';
 import { logNegotiationStep } from '../../../metrics/logNegotiationStep.js';
+import { transition, actionToEvent, type DealState } from '../engine/negotiationStateMachine.js';
 
 /**
  * Start a new conversation
@@ -265,7 +266,7 @@ export async function processConversationMessage(
         try {
           const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
           const resolvedConfig = resolveNegotiationConfig(wizardConfig, {
-            total_price: config.parameters.total_price,
+            total_price: config.parameters?.total_price ?? (config.parameters as any)?.unit_price,
             accept_threshold: config.accept_threshold,
             escalate_threshold: config.escalate_threshold,
             walkaway_threshold: config.walkaway_threshold,
@@ -460,13 +461,11 @@ export async function processConversationMessage(
     deal.convoStateJson = newConversationState as any;
     deal.lastMessageAt = new Date();
 
-    // Update status if terminal
-    if (decision.action === 'ACCEPT') {
-      deal.status = 'ACCEPTED';
-    } else if (decision.action === 'WALK_AWAY') {
-      deal.status = 'WALKED_AWAY';
-    } else if (decision.action === 'ESCALATE') {
-      deal.status = 'ESCALATED';
+    // Update status via state machine
+    const event = actionToEvent(decision.action);
+    const stateTransition = transition(deal.status as DealState, event);
+    if (stateTransition.valid) {
+      deal.status = stateTransition.newState;
     }
 
     await deal.save();

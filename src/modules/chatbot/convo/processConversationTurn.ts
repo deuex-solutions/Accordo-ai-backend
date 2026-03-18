@@ -33,6 +33,9 @@ import {
   type RefusalType,
 } from './enhancedConvoRouter.js';
 import { ChatbotMessage } from '../../../models/chatbotMessage.js';
+import { checkScopeGuard } from '../engine/scopeGuard.js';
+import { classifyError, getErrorFallbackResponse } from '../engine/errorRecovery.js';
+import { sanitizeNegotiationHistory } from '../engine/historySanitizer.js';
 
 /**
  * Input for processing a conversation turn
@@ -74,6 +77,24 @@ export async function processConversationTurn(
   try {
     // Step 1: Load deal and current state
     const { deal, template, convoState } = await loadDealContext(dealId);
+
+    // Step 1.5: Scope Guard — reject off-topic messages before any processing
+    const scopeCheck = checkScopeGuard(vendorMessage, deal.title);
+    if (scopeCheck.isOffTopic) {
+      logger.info('[ProcessConversationTurn] Off-topic message blocked by scope guard', {
+        dealId,
+        category: scopeCheck.category,
+        confidence: scopeCheck.confidence,
+      });
+
+      return {
+        accordoMessage: scopeCheck.response!,
+        accordoIntent: 'REDIRECT' as ConvoIntent,
+        updatedState: convoState,
+        vendorIntent: 'SMALL_TALK' as VendorIntent,
+        refusalType: undefined,
+      };
+    }
 
     // Step 2: Load conversation history for context
     const conversationHistory = await loadConversationHistory(dealId);
@@ -175,20 +196,28 @@ export async function processConversationTurn(
       refusalType,
     };
   } catch (error) {
-    logger.error('[ProcessConversationTurn] Turn processing failed', {
+    // Error Recovery: return human-readable fallback instead of crashing
+    const errorCategory = classifyError(error);
+    logger.error('[ProcessConversationTurn] Turn processing failed — using error recovery', {
       dealId,
-      error,
+      errorCategory,
+      errorMessage: error instanceof Error ? error.message : String(error),
     });
 
-    if (error instanceof CustomError) {
+    // For not-found errors, still throw (controller needs to return 404)
+    if (error instanceof CustomError && error.statusCode === 404) {
       throw error;
     }
 
-    throw new CustomError(
-      'Failed to process conversation turn',
-      500,
-      { originalError: error }
-    );
+    // Return a graceful fallback response instead of crashing
+    const fallbackResponse = getErrorFallbackResponse(errorCategory);
+    return {
+      accordoMessage: fallbackResponse,
+      accordoIntent: 'ERROR_RECOVERY' as ConvoIntent,
+      updatedState: initializeConvoState(),
+      vendorIntent: 'UNKNOWN' as VendorIntent,
+      refusalType: undefined,
+    };
   }
 }
 
@@ -249,10 +278,18 @@ async function loadConversationHistory(
     limit: 10, // Last 10 messages for context
   });
 
-  return messages.map((msg) => ({
+  const rawHistory = messages.map((msg) => ({
     role: msg.role,
     content: msg.content,
   }));
+
+  // Sanitize stale negotiation context before passing to LLM
+  const { messages: sanitizedHistory, sanitizedCount } = sanitizeNegotiationHistory(rawHistory);
+  if (sanitizedCount > 0) {
+    logger.info(`[ProcessConversationTurn] Sanitized ${sanitizedCount} stale messages for deal ${dealId}`);
+  }
+
+  return sanitizedHistory;
 }
 
 /**

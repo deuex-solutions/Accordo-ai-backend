@@ -251,16 +251,22 @@ export async function getRequisitionsForBidAnalysis(
  * Get detailed bid analysis for a specific requisition
  */
 export async function getRequisitionBidDetail(
-  requisitionId: number
+  requisitionId: number,
+  companyId?: number | null
 ): Promise<RequisitionBidDetail> {
   // Get requisition with project
   const requisition = await Requisition.findByPk(requisitionId, {
     include: [
-      { model: Project, as: 'Project', attributes: ['id', 'projectName'] },
+      { model: Project, as: 'Project', attributes: ['id', 'projectName', 'companyId'] },
     ],
   });
 
   if (!requisition) {
+    throw new CustomError('Requisition not found', 404);
+  }
+
+  // Company isolation check
+  if (companyId && (requisition as any).Project?.companyId !== companyId) {
     throw new CustomError('Requisition not found', 404);
   }
 
@@ -420,8 +426,19 @@ export async function getRequisitionBidDetail(
  * Get action history for a requisition
  */
 export async function getActionHistory(
-  requisitionId: number
+  requisitionId: number,
+  companyId?: number | null
 ): Promise<BidActionHistoryEntry[]> {
+  // Company isolation check
+  if (companyId) {
+    const requisition = await Requisition.findByPk(requisitionId, {
+      include: [{ model: Project, as: 'Project', attributes: ['id', 'companyId'] }],
+    });
+    if (!requisition || (requisition as any).Project?.companyId !== companyId) {
+      throw new CustomError('Requisition not found', 404);
+    }
+  }
+
   const history = await BidActionHistory.findAll({
     where: { requisitionId },
     include: [

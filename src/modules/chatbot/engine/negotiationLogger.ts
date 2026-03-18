@@ -164,13 +164,13 @@ export function logConfigThresholds(config: NegotiationConfig, priority: string)
     `  ${colorize('WALK_AWAY:', colors.brightRed)}  < ${formatPercent(walkawayThreshold)}`,
     '',
     `${colorize('Price Parameters:', colors.bold)}`,
-    `  Target:         ${formatCurrency(config.parameters.total_price.target)}`,
-    `  Max Acceptable: ${formatCurrency(config.parameters.total_price.max_acceptable)}`,
-    `  Anchor:         ${formatCurrency(config.parameters.total_price.anchor)}`,
+    `  Target:         ${formatCurrency((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.target ?? 0)}`,
+    `  Max Acceptable: ${formatCurrency((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.max_acceptable ?? 0)}`,
+    `  Anchor:         ${formatCurrency((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.anchor ?? 0)}`,
     '',
     `${colorize('Weights:', colors.bold)}`,
-    `  Price:  ${formatPercent(config.parameters.total_price.weight)}`,
-    `  Terms:  ${formatPercent(config.parameters.payment_terms.weight)}`,
+    `  Price:  ${formatPercent((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.weight ?? 0.6)}`,
+    `  Terms:  ${formatPercent(config.parameters?.payment_terms?.weight ?? 0.4)}`,
   ];
 
   console.log(createBox('NEGOTIATION CONFIG', content));
@@ -185,8 +185,8 @@ export function logUtilityCalculation(
   totalUtility: number,
   config: NegotiationConfig
 ): void {
-  const priceWeight = config.parameters.total_price.weight;
-  const termsWeight = config.parameters.payment_terms.weight;
+  const priceWeight = (config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.weight ?? 0.6;
+  const termsWeight = config.parameters?.payment_terms?.weight ?? 0.4;
 
   const weightedPrice = priceUtility * priceWeight;
   const weightedTerms = termsUtility * termsWeight;
