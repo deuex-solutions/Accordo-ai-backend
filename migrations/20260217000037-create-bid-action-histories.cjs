@@ -69,12 +69,36 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('bid_action_histories', ['requisition_id']);
-    await queryInterface.addIndex('bid_action_histories', ['bid_id']);
-    await queryInterface.addIndex('bid_action_histories', ['deal_id']);
-    await queryInterface.addIndex('bid_action_histories', ['user_id']);
-    await queryInterface.addIndex('bid_action_histories', ['action']);
-    await queryInterface.addIndex('bid_action_histories', ['created_at']);
+    try {
+      await queryInterface.addIndex('bid_action_histories', ['requisition_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_action_histories', ['bid_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_action_histories', ['deal_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_action_histories', ['user_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_action_histories', ['action']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_action_histories', ['created_at']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('bid_action_histories');

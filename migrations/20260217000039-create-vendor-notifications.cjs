@@ -67,10 +67,26 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_notifications', ['selection_id']);
-    await queryInterface.addIndex('vendor_notifications', ['vendor_id']);
-    await queryInterface.addIndex('vendor_notifications', ['notification_type']);
-    await queryInterface.addIndex('vendor_notifications', ['email_status']);
+    try {
+      await queryInterface.addIndex('vendor_notifications', ['selection_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_notifications', ['vendor_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_notifications', ['notification_type']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_notifications', ['email_status']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('vendor_notifications');

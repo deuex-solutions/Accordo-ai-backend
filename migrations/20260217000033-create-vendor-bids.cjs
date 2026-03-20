@@ -104,12 +104,36 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_bids', ['requisition_id']);
-    await queryInterface.addIndex('vendor_bids', ['vendor_id']);
-    await queryInterface.addIndex('vendor_bids', ['bid_status']);
-    await queryInterface.addIndex('vendor_bids', ['final_price']);
-    await queryInterface.addIndex('vendor_bids', ['deal_id']);
-    await queryInterface.addIndex('vendor_bids', ['contract_id']);
+    try {
+      await queryInterface.addIndex('vendor_bids', ['requisition_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_bids', ['vendor_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_bids', ['bid_status']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_bids', ['final_price']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_bids', ['deal_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_bids', ['contract_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('vendor_bids');

@@ -136,26 +136,46 @@ module.exports = {
     });
 
     // Indexes
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['vendor_id'], {
-      name: 'idx_vendor_negotiation_profiles_vendor_id',
-      unique: true,
-    });
+    try {
+      await queryInterface.addIndex('vendor_negotiation_profiles', ['vendor_id'], {
+        name: 'idx_vendor_negotiation_profiles_vendor_id',
+        unique: true,
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['negotiation_style'], {
-      name: 'idx_vendor_negotiation_profiles_style',
-    });
+    try {
+      await queryInterface.addIndex('vendor_negotiation_profiles', ['negotiation_style'], {
+        name: 'idx_vendor_negotiation_profiles_style',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['success_rate'], {
-      name: 'idx_vendor_negotiation_profiles_success_rate',
-    });
+    try {
+      await queryInterface.addIndex('vendor_negotiation_profiles', ['success_rate'], {
+        name: 'idx_vendor_negotiation_profiles_success_rate',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['total_deals'], {
-      name: 'idx_vendor_negotiation_profiles_total_deals',
-    });
+    try {
+      await queryInterface.addIndex('vendor_negotiation_profiles', ['total_deals'], {
+        name: 'idx_vendor_negotiation_profiles_total_deals',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['last_deal_at'], {
-      name: 'idx_vendor_negotiation_profiles_last_deal',
-    });
+    try {
+      await queryInterface.addIndex('vendor_negotiation_profiles', ['last_deal_at'], {
+        name: 'idx_vendor_negotiation_profiles_last_deal',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
     console.log('✅ Created vendor_negotiation_profiles table with indexes');
   },

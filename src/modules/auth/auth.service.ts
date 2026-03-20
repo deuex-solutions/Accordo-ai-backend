@@ -21,6 +21,7 @@ import companyRepo from "../company/company.repo.js";
 import otpRepo from "./otp.repo.js";
 import { generateJWT, verifyJWT } from "../../middlewares/jwt.service.js";
 import { getRoleService } from "../role/role.service.js";
+import { Role, RolePermission } from "../../models/index.js";
 import CustomError from "../../utils/custom-error.js";
 import env from "../../config/env.js";
 import { sequelize } from "../../config/database.js";
@@ -226,14 +227,69 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
     const username = `${userData.email}`;
     const hashedPassword = await hash(userData.password, 10);
     const company = await companyRepo.createCompany({}, transaction) as { id: number };
-    const userDataWithCompany = { ...userData, companyId: company.id };
+
+    // Seed default roles for the new company
+    const defaultRoleNames = [
+      'Super Admin', 'Admin', 'CEO', 'CFO', 'HOD',
+      'Procurement Manager', 'Procurement Manager Approver',
+    ];
+    const createdRoles = await Role.bulkCreate(
+      defaultRoleNames.map((name) => ({ name, companyId: company.id, isArchived: false })),
+      { transaction, returning: true }
+    );
+
+    // Build a name->id map for the new roles
+    const roleMap: Record<string, number> = {};
+    for (const role of createdRoles) {
+      roleMap[(role as any).name] = (role as any).id;
+    }
+
+    // Seed role permissions for each role (permission levels: 1=Read, 3=R/W, 7=R/W/U, 15=Full)
+    const permissionTemplates: Record<string, { moduleId: number; permission: number }[]> = {
+      'Super Admin': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      'Admin': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      'CEO': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      'CFO': [
+        { moduleId: 1, permission: 15 }, { moduleId: 2, permission: 7 },
+        { moduleId: 3, permission: 15 }, { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 15 }, { moduleId: 6, permission: 15 },
+      ],
+      'HOD': [
+        { moduleId: 1, permission: 7 }, { moduleId: 2, permission: 3 },
+        { moduleId: 3, permission: 15 }, { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 7 }, { moduleId: 6, permission: 7 },
+      ],
+      'Procurement Manager': [
+        { moduleId: 1, permission: 1 }, { moduleId: 3, permission: 15 },
+        { moduleId: 4, permission: 15 }, { moduleId: 5, permission: 7 },
+      ],
+      'Procurement Manager Approver': [
+        { moduleId: 1, permission: 1 }, { moduleId: 4, permission: 3 },
+        { moduleId: 6, permission: 7 },
+      ],
+    };
+
+    const allPermissions: { roleId: number; moduleId: number; permission: number }[] = [];
+    for (const [roleName, perms] of Object.entries(permissionTemplates)) {
+      const roleId = roleMap[roleName];
+      if (roleId) {
+        for (const p of perms) {
+          allPermissions.push({ roleId, moduleId: p.moduleId, permission: p.permission });
+        }
+      }
+    }
+    await RolePermission.bulkCreate(allPermissions, { transaction });
+
+    // Assign the Admin role to the registering user
+    const adminRoleId = roleMap['Admin'];
+    const userDataWithCompany = { ...userData, companyId: company.id, roleId: adminRoleId };
 
     const newUser = await repo.createUser(
       {
         ...userDataWithCompany,
         username,
         password: hashedPassword,
-        userType: 'admin',
+        userType: (userData.userType || 'admin') as 'super_admin' | 'admin' | 'procurement' | 'vendor',
         status: 'active',
       },
       transaction
@@ -242,7 +298,7 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
     const apiSecret = crypto.randomBytes(32).toString("hex");
     const payload: JWTPayload = {
       userId: newUser.id,
-      userType: 'admin',
+      userType: (userData.userType || 'admin') as string,
       companyId: userDataWithCompany.companyId,
     };
     const apiKey = await generateJWT(payload, apiSecret);

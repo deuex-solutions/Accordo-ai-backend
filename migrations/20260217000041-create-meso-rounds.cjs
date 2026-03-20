@@ -85,26 +85,46 @@ module.exports = {
     });
 
     // Indexes
-    await queryInterface.addIndex('meso_rounds', ['deal_id'], {
-      name: 'idx_meso_rounds_deal_id',
-    });
+    try {
+      await queryInterface.addIndex('meso_rounds', ['deal_id'], {
+        name: 'idx_meso_rounds_deal_id',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('meso_rounds', ['round'], {
-      name: 'idx_meso_rounds_round',
-    });
+    try {
+      await queryInterface.addIndex('meso_rounds', ['round'], {
+        name: 'idx_meso_rounds_round',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('meso_rounds', ['deal_id', 'round'], {
-      name: 'idx_meso_rounds_deal_round',
-      unique: true,
-    });
+    try {
+      await queryInterface.addIndex('meso_rounds', ['deal_id', 'round'], {
+        name: 'idx_meso_rounds_deal_round',
+        unique: true,
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('meso_rounds', ['selected_option_id'], {
-      name: 'idx_meso_rounds_selected_option',
-    });
+    try {
+      await queryInterface.addIndex('meso_rounds', ['selected_option_id'], {
+        name: 'idx_meso_rounds_selected_option',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
-    await queryInterface.addIndex('meso_rounds', ['created_at'], {
-      name: 'idx_meso_rounds_created_at',
-    });
+    try {
+      await queryInterface.addIndex('meso_rounds', ['created_at'], {
+        name: 'idx_meso_rounds_created_at',
+      });
+    } catch (e) {
+      // Index already exists, skip
+    }
 
     console.log('✅ Created meso_rounds table with indexes');
   },

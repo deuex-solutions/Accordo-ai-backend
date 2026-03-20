@@ -272,7 +272,12 @@ export function buildNegotiationIntent(input: BuildIntentInput): NegotiationInte
 
   // Only COUNTER gets pricing fields and weakest parameter signal
   if (finalAction === 'COUNTER' && counterPrice != null) {
-    intent.allowedPrice = resolveAllowedPrice(counterPrice, targetPrice, maxAcceptablePrice);
+    let resolved = resolveAllowedPrice(counterPrice, targetPrice, maxAcceptablePrice);
+    // Guard: never allow $0 counter-offer — fall back to target price
+    if (resolved != null && resolved <= 0 && targetPrice && targetPrice > 0) {
+      resolved = targetPrice;
+    }
+    intent.allowedPrice = resolved;
     if (counterPaymentTerms) {
       intent.allowedPaymentTerms = counterPaymentTerms;
     }

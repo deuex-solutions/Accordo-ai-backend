@@ -21,6 +21,7 @@ export interface SignUpData {
   companyId?: number;
   password: string;
   roleId?: number;
+  userType?: string;
 }
 
 /**
@@ -78,6 +79,8 @@ export const validateSignUp = (userData: SignUpData): Joi.ValidationResult => {
     }),
     username: Joi.string().optional(),
     companyId: Joi.number().integer().optional(),
+    roleId: Joi.number().integer().optional(),
+    userType: Joi.string().valid('admin', 'procurement', 'vendor').optional(),
     password: Joi.string()
       .min(8)
       .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^a-zA-Z\\d]).+$"))

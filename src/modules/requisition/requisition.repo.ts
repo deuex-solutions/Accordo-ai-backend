@@ -118,15 +118,22 @@ const repo = {
 
     if (userId) {
       const user = await models.User.findByPk(userId);
-      // Super Admin users see all requisitions, other users only see their company's
-      const isAdmin = user?.userType === 'super_admin';
-      if (!isAdmin && user?.companyId) {
-        (options.where as any).companyId = user.companyId;
+
+      // Vendor users cannot view requisitions
+      if (user?.userType === 'vendor') {
+        return { rows: [], count: 0 };
+      }
+
+      // Super Admin sees all; others see only their company's (via Project.companyId)
+      const isSuperAdmin = user?.userType === 'super_admin';
+      if (!isSuperAdmin && user?.companyId) {
+        (options as any).projectCompanyId = user.companyId;
       }
     }
 
     // Two-phase query for performance
     // First: Get count with contract aggregation
+    const projectCompanyId = (options as any).projectCompanyId;
     const baseOptions: RequisitionQueryOptions = {
       attributes: [
         'id',
@@ -142,6 +149,13 @@ const repo = {
           attributes: [],
           required: false,
         },
+        ...(projectCompanyId ? [{
+          model: models.Project,
+          as: 'Project',
+          attributes: [],
+          where: { companyId: projectCompanyId },
+          required: true,
+        }] : []),
       ],
       group: ['Requisition.id'],
       having: literal('COUNT("Contract"."id") > 0'),
@@ -187,6 +201,7 @@ const repo = {
         {
           model: models.Project,
           as: 'Project',
+          ...(projectCompanyId ? { where: { companyId: projectCompanyId }, required: true } : {}),
         },
       ],
     };

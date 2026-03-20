@@ -91,10 +91,26 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_selections', ['requisition_id']);
-    await queryInterface.addIndex('vendor_selections', ['selected_vendor_id']);
-    await queryInterface.addIndex('vendor_selections', ['selected_by_user_id']);
-    await queryInterface.addIndex('vendor_selections', ['selected_at']);
+    try {
+      await queryInterface.addIndex('vendor_selections', ['requisition_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_selections', ['selected_vendor_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_selections', ['selected_by_user_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vendor_selections', ['selected_at']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('vendor_selections');

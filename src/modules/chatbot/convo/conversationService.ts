@@ -315,6 +315,32 @@ export async function processConversationMessage(
       };
     }
 
+    // 7b. MESO handling: CONVERSATION mode doesn't support MESO UI,
+    //     so convert MESO to COUNTER with a valid price from the config
+    if (decision.action === 'MESO' || (decision.action as string) === 'MESO') {
+      const priceParams = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
+      const target = priceParams?.target ?? 0;
+      const maxAcceptable = priceParams?.max_acceptable ?? 0;
+
+      // Calculate a reasonable counter price (midpoint biased toward target)
+      const counterPrice = target > 0
+        ? Math.round((target + (maxAcceptable - target) * 0.4) * 100) / 100
+        : maxAcceptable;
+
+      decision = {
+        action: 'COUNTER',
+        utilityScore: decision.utilityScore,
+        counterOffer: {
+          total_price: counterPrice,
+          payment_terms: vendorOffer.payment_terms ?? 'Net 30',
+          payment_terms_days: vendorOffer.payment_terms_days ?? 30,
+          delivery_date: null,
+          delivery_days: null,
+        },
+        reasons: [...decision.reasons, 'Converted from MESO to COUNTER (conversation mode)'],
+      };
+    }
+
     // 8. Detect vendor preference
     const allMessages = deal.Messages || [];
     const detectedPreference = detectVendorPreference(allMessages);

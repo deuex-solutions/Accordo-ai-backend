@@ -219,6 +219,12 @@ export function validateLlmOutput(
   }
 
   // Step 4: Price validation for COUNTER action
+  if (intent.action === 'COUNTER' && intent.allowedPrice != null && intent.allowedPrice <= 0) {
+    throw new ValidationError(
+      'COUNTER has zero or negative allowedPrice — falling back to template',
+      'zero_price'
+    );
+  }
   if (intent.action === 'COUNTER' && intent.allowedPrice != null) {
     const detectedPrices = extractPrices(sanitized);
 

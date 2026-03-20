@@ -200,6 +200,11 @@ function calculateCounterPrice(
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, max_acceptable);
 
+  // Guard: counter price must never be 0 or negative — fall back to target
+  if (counterPrice <= 0 && target > 0) {
+    counterPrice = target;
+  }
+
   // Round to 2 decimal places
   return Math.round(counterPrice * 100) / 100;
 }
@@ -325,6 +330,11 @@ export function calculateDynamicCounter(
 
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, max_acceptable);
+
+  // Guard: counter price must never be 0 or negative — fall back to target
+  if (counterPrice <= 0 && target > 0) {
+    counterPrice = target;
+  }
 
   // Round to 2 decimal places
   counterPrice = Math.round(counterPrice * 100) / 100;

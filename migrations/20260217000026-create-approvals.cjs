@@ -104,12 +104,36 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('Approvals', ['requisitionId'], { name: 'idx_approvals_requisition_id' });
-    await queryInterface.addIndex('Approvals', ['assignedToUserId'], { name: 'idx_approvals_assigned_to_user_id' });
-    await queryInterface.addIndex('Approvals', ['status'], { name: 'idx_approvals_status' });
-    await queryInterface.addIndex('Approvals', ['approvalLevel'], { name: 'idx_approvals_approval_level' });
-    await queryInterface.addIndex('Approvals', ['dueDate'], { name: 'idx_approvals_due_date' });
-    await queryInterface.addIndex('Approvals', ['requisitionId', 'approvalLevel'], { name: 'idx_approvals_requisition_level' });
+    try {
+      await queryInterface.addIndex('Approvals', ['requisitionId'], { name: 'idx_approvals_requisition_id' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('Approvals', ['assignedToUserId'], { name: 'idx_approvals_assigned_to_user_id' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('Approvals', ['status'], { name: 'idx_approvals_status' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('Approvals', ['approvalLevel'], { name: 'idx_approvals_approval_level' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('Approvals', ['dueDate'], { name: 'idx_approvals_due_date' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('Approvals', ['requisitionId', 'approvalLevel'], { name: 'idx_approvals_requisition_level' });
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('Approvals');
