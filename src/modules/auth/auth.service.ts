@@ -346,6 +346,50 @@ export const logoutService = async (userId: number | undefined): Promise<{ messa
 };
 
 /**
+ * Validate access token and return user context (for service-to-service use)
+ * Used by other backend services to verify tokens issued by this auth API
+ * @param token - Access token (Bearer token or raw JWT)
+ * @returns Decoded context with userId, userType, companyId, email
+ * @throws CustomError if token invalid or expired
+ */
+export const validateTokenService = async (token: string): Promise<{
+  userId: number;
+  userType: string;
+  companyId?: number;
+  email?: string;
+}> => {
+  if (!token || typeof token !== 'string') {
+    throw new CustomError('Token is required', 400);
+  }
+  try {
+    const decoded = await verifyJWT(token, jwt.accessSecret);
+    // console.log(decoded);
+    if (decoded.userId) {
+      const user = await repo.findUser(decoded.userId) as User | null;
+      if (!user) {
+        throw new CustomError('User not found', 404);
+      }
+      return {
+        userId: user.id,
+        userType: user.userType ?? 'customer',
+        companyId: user.companyId,
+        email: user.email,
+      };
+    }
+    throw new CustomError('Invalid token', 401);
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err.message === 'jwt expired') {
+      throw new CustomError('Token expired. Please refresh your token', 401);
+    }
+    if (err.message === 'invalid signature' || err.message === 'jwt malformed') {
+      throw new CustomError('Invalid token', 401);
+    }
+    throw new CustomError(err.message || 'Authentication failed', 401);
+  }
+};
+
+/**
  * Change user password with current password verification
  * @param userData - Change password data including current and new password
  * @returns Update result

@@ -9,6 +9,7 @@ import {
   resetPasswordAutoService,
   refreshTokenService,
   logoutService,
+  validateTokenService,
 } from "./auth.service.js";
 import { getParam } from '../../types/index.js';
 
@@ -157,6 +158,28 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     res.status(200).json({
       message: "Token refreshed successfully",
       data: response,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Validate token - for use by other backend services to verify JWTs
+ * Accepts token via Authorization header or body.token
+ * Optional: set AUTH_SERVICE_SECRET to require X-Service-Secret header
+ * @param req - Express request with token
+ * @param res - Express response
+ * @param next - Express next function
+ */
+export const validateToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authHeader = req.header('Authorization') || req.header('authorization');
+    const token = authHeader?.replace(/^Bearer\s+/i, '') || req.body?.token;
+    const context = await validateTokenService(token || '');
+    res.status(200).json({
+      message: 'Token valid',
+      data: { valid: true, context },
     });
   } catch (error) {
     next(error);
