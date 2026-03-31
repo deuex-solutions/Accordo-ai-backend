@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import env from '../config/env.js';
 import authRoutes from '../modules/auth/auth.routes.js';
+import { createAuthProxyRouter } from './auth-proxy.routes.js';
 import companyRoutes from '../modules/company/company.routes.js';
 import requisitionRoutes from '../modules/requisition/requisition.routes.js';
 import contractRoutes from '../modules/contract/contract.routes.js';
@@ -30,7 +32,9 @@ router.use('/health', healthRoutes);
 // Public vendor chat routes (no authMiddleware)
 router.use('/vendor-chat', vendorChatRoutes);
 
-router.use('/auth', authRoutes);
+// const authStack = env.authServiceUrl ? createAuthProxyRouter(env.authServiceUrl) : authRoutes;
+const authStack = createAuthProxyRouter(env.authServiceUrl);
+router.use('/auth', authStack);
 router.use('/company', companyRoutes);
 router.use('/requisition', requisitionRoutes);
 router.use('/contract', contractRoutes);
