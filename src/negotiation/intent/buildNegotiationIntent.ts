@@ -14,8 +14,24 @@
  * - ESCALATE:  No pricing fields exposed.
  * - MESO:      offerVariants passed through unchanged from engine.
  *
- * Zero external dependencies.
+ * Zero external dependencies (except a small currency-symbol map).
  */
+
+// ─────────────────────────────────────────────
+// Currency symbol lookup (no external deps)
+// ─────────────────────────────────────────────
+
+const CURRENCY_SYMBOL_MAP: Record<string, string> = {
+  USD: '$',
+  INR: '₹',
+  EUR: '€',
+  GBP: '£',
+  AUD: 'A$',
+};
+
+export function getCurrencySymbol(code?: string): string {
+  return CURRENCY_SYMBOL_MAP[(code || 'USD').toUpperCase()] || '$';
+}
 
 // ─────────────────────────────────────────────
 // Types
@@ -91,6 +107,9 @@ export interface NegotiationIntent {
 
   /** Detected vendor tone — drives phrasing style in the LLM response */
   vendorTone: VendorTone;
+
+  /** Currency symbol for price display (e.g. "$", "₹", "€"). Defaults to "$" if not set. */
+  currencySymbol: string;
 }
 
 // ─────────────────────────────────────────────
@@ -232,6 +251,8 @@ export interface BuildIntentInput {
    * Computed in conversationService from parameterUtilities before calling buildNegotiationIntent.
    */
   weakestPrimaryParameter?: 'price' | 'terms' | 'delivery';
+  /** Currency code from the negotiation config (e.g. "USD", "INR"). Defaults to "USD". */
+  currencyCode?: string;
 }
 
 /**
@@ -253,6 +274,7 @@ export function buildNegotiationIntent(input: BuildIntentInput): NegotiationInte
     targetPrice,
     maxAcceptablePrice,
     weakestPrimaryParameter,
+    currencyCode,
   } = input;
 
   // Determine if this is a MESO action (overrides base action when variants present)
@@ -268,6 +290,7 @@ export function buildNegotiationIntent(input: BuildIntentInput): NegotiationInte
     commercialPosition,
     acknowledgeConcerns: concerns,
     vendorTone: tone,
+    currencySymbol: getCurrencySymbol(currencyCode),
   };
 
   // Only COUNTER gets pricing fields and weakest parameter signal

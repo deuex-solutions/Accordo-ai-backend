@@ -7,8 +7,10 @@ import models from '../../models/index.js';
 import sequelize from '../../config/database.js';
 import { parseOfferRegex, parseOfferWithDelivery } from './engine/parseOffer.js';
 import { generateHumanLikeResponse, generateQuickFallback } from './engine/responseGenerator.js';
-import { decideNextMove } from './engine/decide.js';
+import { decideNextMove, extractVendorMaxTermsDays, capTermsToVendorMax } from './engine/decide.js';
 import { computeExplainability, totalUtility, type NegotiationConfig } from './engine/utility.js';
+import { formatCurrency, type SupportedCurrency } from '../../services/currency.service.js';
+import { getCurrencySymbol } from '../../negotiation/intent/buildNegotiationIntent.js';
 import type { Offer, Decision, Explainability, WeightedUtilityResult, ParsedVendorOffer, AccumulatedOffer, NegotiationState, BehavioralSignals, AdaptiveStrategyResult, AdaptiveFeaturesConfig, MesoCycleState, FinalOfferState, NegotiationPhase, ExtendedOffer } from './engine/types.js';
 import { createEmptyNegotiationState, createEmptyMesoCycleState, createEmptyFinalOfferState } from './engine/types.js';
 import { analyzeBehavior, computeAdaptiveStrategy } from './engine/behavioralAnalyzer.js';
@@ -375,7 +377,8 @@ export const buildConfigFromRequisition = async (
   const maxAcceptable = totalTarget * 1.25; // PM's max: 25% above target
   const concessionStep = (maxAcceptable - totalTarget) / 6; // ~4% steps toward max
 
-  logger.info(`Built config from requisition ${requisitionId}: target=$${totalTarget}, max=$${maxAcceptable}`);
+  const currencyCode = (requisition.typeOfCurrency as string) || 'USD';
+  logger.info(`Built config from requisition ${requisitionId}: target=${currencyCode} ${totalTarget}, max=${currencyCode} ${maxAcceptable}`);
 
   return {
     parameters: {
@@ -399,8 +402,9 @@ export const buildConfigFromRequisition = async (
     },
     accept_threshold: 0.70,
     escalate_threshold: 0.50,
-    walkaway_threshold: 0.30, // Lowered from 0.45 to prevent premature walk-away
+    walkaway_threshold: 0.30,
     max_rounds: 6,
+    currency: currencyCode,
   };
 };
 
@@ -1356,6 +1360,7 @@ export const processVendorMessageService = async (
           walkaway_threshold: storedConfig.walkaway_threshold,
           max_rounds: storedConfig.max_rounds,
           priority: storedConfig.priority,
+          currency: storedConfig.currency,
         };
         logger.debug(`Using stored negotiation config for deal ${input.dealId} (priority: ${config.priority})`);
       }
@@ -1778,6 +1783,7 @@ export const generatePMResponseAsyncService = async (
           walkaway_threshold: storedConfig.walkaway_threshold,
           max_rounds: storedConfig.max_rounds,
           priority: storedConfig.priority,
+          currency: storedConfig.currency,
         };
       }
     } else if (deal.requisitionId) {
@@ -1787,6 +1793,16 @@ export const generatePMResponseAsyncService = async (
     } else {
       const { negotiationConfig } = await import('./engine/config.js');
       config = negotiationConfig;
+    }
+
+    // Backfill currency from requisition for legacy deals that don't have it in stored config
+    if (!config.currency && deal.requisitionId) {
+      try {
+        const reqForCurrency = await models.Requisition.findByPk(deal.requisitionId, { attributes: ['typeOfCurrency'] });
+        if (reqForCurrency?.typeOfCurrency) {
+          config.currency = reqForCurrency.typeOfCurrency as string;
+        }
+      } catch { /* non-critical */ }
     }
 
     // Get vendor offer from the message (may be an AccumulatedOffer)
@@ -1919,16 +1935,50 @@ export const generatePMResponseAsyncService = async (
       }
     }
 
+    // Rejection detection: vendor expressing disagreement (e.g., "not possible", "too low margin")
+    // If detected, never accept — even if utility is high enough
+    const REJECTION_PATTERN = /\b(not\s+possible|not\s+acceptable|not\s+feasible|cannot\s+accept|can'?t\s+accept|too\s+low|too\s+high|too\s+much|not\s+workable|not\s+viable|impossible|unacceptable|won'?t\s+work|doesn'?t\s+work|low\s+margin|no\s+margin|thin\s+margin|reject|decline)\b/i;
+    const isVendorRejecting = REJECTION_PATTERN.test(rawContent);
+
     // Make decision using the engine with negotiation state for dynamic counters
     // If vendor sent an affirmative, force ACCEPT — don't run utility scoring
-    const decision = isVendorAffirmative
+    let decision = isVendorAffirmative
       ? {
           action: 'ACCEPT' as const,
           utilityScore: 1.0,
-          counterOffer: null,
-          reasons: [`Vendor accepted PM's counter offer of $${extractedOffer.total_price} with ${extractedOffer.payment_terms}.`],
+          counterOffer: null as Offer | null,
+          reasons: [`Vendor accepted PM's counter offer of ${getCurrencySymbol(config.currency)}${extractedOffer.total_price} with ${extractedOffer.payment_terms}.`],
         }
       : decideNextMove(config, extractedOffer, deal.round, negotiationState, previousPmOffer, behavioralSignals, adaptiveStrategy);
+
+    // Guard: override ACCEPT → COUNTER if vendor is expressing rejection
+    if (isVendorRejecting && decision.action === 'ACCEPT') {
+      logger.info(`[Phase2] Overriding ACCEPT → COUNTER due to vendor rejection language in message`, {
+        dealId: input.dealId,
+        message: rawContent.substring(0, 100),
+      });
+      decision = decideNextMove(config, extractedOffer, deal.round, negotiationState, previousPmOffer, behavioralSignals, adaptiveStrategy);
+      // If the engine still returns ACCEPT (utility very high), force a COUNTER
+      if (decision.action === 'ACCEPT') {
+        const priceConfig = config.parameters?.total_price ?? (config.parameters as Record<string, unknown>)?.unit_price as typeof config.parameters.total_price;
+        let counterPrice = priceConfig
+          ? Math.round((priceConfig.target + (priceConfig.max_acceptable - priceConfig.target) * 0.5) * 100) / 100
+          : (extractedOffer.total_price ?? 0) * 0.9;
+        // Never counter above vendor's offer
+        if (extractedOffer.total_price != null && counterPrice > extractedOffer.total_price) {
+          counterPrice = extractedOffer.total_price;
+        }
+        decision = {
+          action: 'COUNTER',
+          utilityScore: decision.utilityScore,
+          counterOffer: {
+            total_price: counterPrice,
+            payment_terms: extractedOffer.payment_terms,
+          },
+          reasons: [...decision.reasons, 'Overridden: vendor expressed rejection — cannot accept'],
+        };
+      }
+    }
 
     // Compute explainability
     const explainability = computeExplainability(config, extractedOffer, decision);
@@ -1947,6 +1997,28 @@ export const generatePMResponseAsyncService = async (
         shouldExtendRounds: adaptiveStrategy.shouldExtendRounds,
         latestSentiment: behavioralSignals.latestSentiment,
       };
+    }
+
+    // Cap counter-offer payment terms to vendor's stated maximum (if any)
+    // e.g., if vendor said "max I can do is net 60", don't counter with net 90
+    if (decision.counterOffer?.payment_terms) {
+      const vendorMaxDays = extractVendorMaxTermsDays(vendorMessage.content);
+      if (vendorMaxDays !== null) {
+        const cappedTerms = capTermsToVendorMax(decision.counterOffer.payment_terms, vendorMaxDays);
+        if (cappedTerms !== decision.counterOffer.payment_terms) {
+          logger.info(`[Phase2] Capped counter payment terms from ${decision.counterOffer.payment_terms} to ${cappedTerms} (vendor max: Net ${vendorMaxDays})`, { dealId: input.dealId });
+          decision.counterOffer.payment_terms = cappedTerms;
+        }
+      }
+    }
+
+    // Guard: PM counter price must NEVER exceed vendor's current offer price
+    // This is a fundamental procurement principle — buyer always negotiates DOWN
+    if (decision.counterOffer?.total_price != null && extractedOffer.total_price != null) {
+      if (decision.counterOffer.total_price > extractedOffer.total_price) {
+        logger.info(`[Phase2] Capping counter price from ${decision.counterOffer.total_price} to vendor's offer ${extractedOffer.total_price}`, { dealId: input.dealId });
+        decision.counterOffer.total_price = extractedOffer.total_price;
+      }
     }
 
     // Update negotiation state with PM's counter-offer (if any)
@@ -2449,6 +2521,7 @@ export const generatePMFallbackResponseService = async (
           walkaway_threshold: storedConfig.walkaway_threshold,
           max_rounds: storedConfig.max_rounds,
           priority: storedConfig.priority,
+          currency: storedConfig.currency,
         };
       }
     } else if (deal.requisitionId) {
@@ -5731,8 +5804,9 @@ export const processMesoSelectionService = async (
     });
 
     // Create confirmation message
+    const mesoCurrencySymbol = getCurrencySymbol((deal.negotiationConfigJson as any)?.currency);
     const messageContent = `Thank you for your selection! Your deal has been accepted at:\n\n` +
-      `• Price: $${selectedOption.offer.total_price?.toLocaleString()}\n` +
+      `• Price: ${mesoCurrencySymbol}${selectedOption.offer.total_price?.toLocaleString()}\n` +
       `• Payment Terms: ${selectedOption.offer.payment_terms}\n` +
       (selectedOption.offer.delivery_days ? `• Delivery: ${selectedOption.offer.delivery_days} days\n` : '') +
       (selectedOption.offer.warranty_months ? `• Warranty: ${selectedOption.offer.warranty_months} months\n` : '') +
@@ -5851,7 +5925,8 @@ export const processOthersSelectionService = async (
     };
 
     // Create vendor message
-    const vendorMessageContent = `I'd like to propose $${input.totalPrice.toLocaleString()} with Net ${input.paymentTermsDays} payment terms.`;
+    const othersCsym = getCurrencySymbol((deal.negotiationConfigJson as any)?.currency);
+    const vendorMessageContent = `I'd like to propose ${othersCsym}${input.totalPrice.toLocaleString()} with Net ${input.paymentTermsDays} payment terms.`;
     const vendorMessageId = uuidv4();
     const currentRound = deal.round + 1;
 
@@ -6036,10 +6111,11 @@ export const processFinalOfferConfirmationService = async (
     }
 
     // Create system message introducing final MESO
+    const finalCsym = getCurrencySymbol((deal.negotiationConfigJson as any)?.currency);
     const priceAdjusted = stalledPrice > resolvedConfig.maxAcceptablePrice;
     const messageContent = priceAdjusted
-      ? `Thank you for confirming. Your price of $${stalledPrice.toLocaleString()} exceeds our maximum budget. We've prepared adjusted offers within our acceptable range. Please select one of the final offers below to close this deal.`
-      : `Thank you for confirming your final offer of $${stalledPrice.toLocaleString()}. We've prepared final offers based on your price. Please select one to close this deal.`;
+      ? `Thank you for confirming. Your price of ${finalCsym}${stalledPrice.toLocaleString()} exceeds our maximum budget. We've prepared adjusted offers within our acceptable range. Please select one of the final offers below to close this deal.`
+      : `Thank you for confirming your final offer of ${finalCsym}${stalledPrice.toLocaleString()}. We've prepared final offers based on your price. Please select one to close this deal.`;
 
     const messageId = uuidv4();
     const systemMessage = await models.ChatbotMessage.create({

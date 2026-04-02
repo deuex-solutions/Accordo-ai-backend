@@ -119,6 +119,12 @@ export function classifyRefusal(content: string): RefusalType {
     return 'CONFUSED';
   }
 
+  // Check for rejection of proposed terms (vendor disagrees but may include a price)
+  // e.g., "329,650 is not possible", "too low margin", "can't accept this price"
+  if (/\b(not\s+possible|not\s+acceptable|not\s+feasible|cannot\s+accept|can'?t\s+accept|too\s+low|too\s+high|too\s+much|not\s+workable|not\s+viable|impossible|unacceptable|won'?t\s+work|doesn'?t\s+work|doesn'?t\s+meet|not\s+enough|low\s+margin|no\s+margin|thin\s+margin|reject|decline)\b/i.test(lower)) {
+    return 'REJECT_TERMS';
+  }
+
   // Not a refusal
   return null;
 }
@@ -157,7 +163,9 @@ export function determineIntent(
   round: number
 ): ConversationIntent {
   // Handle refusals first
-  if (refusalType !== null) {
+  // REJECT_TERMS is special: vendor disagrees but may include a price (e.g., "329,650 is not possible")
+  // We still parse the offer but never accept — always counter
+  if (refusalType !== null && refusalType !== 'REJECT_TERMS') {
     return 'HANDLE_REFUSAL';
   }
 

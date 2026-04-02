@@ -16,6 +16,7 @@ import {
   DEFAULT_WEIGHTS,
 } from './types.js';
 import { totalUtility, priceUtility, termsUtility, NegotiationConfig } from './utility.js';
+import { getCurrencySymbol } from '../../../negotiation/intent/buildNegotiationIntent.js';
 import {
   calculateWeightedUtility,
   resolveNegotiationConfig,
@@ -32,6 +33,62 @@ import {
   getUtilityTrend,
 } from './preferenceDetector.js';
 import * as negotiationLogger from './negotiationLogger.js';
+
+/**
+ * Extract the vendor's stated maximum payment terms from their message.
+ * Handles patterns like:
+ *   "max I can do is net 60"
+ *   "maximum we can offer is net 45"
+ *   "can only do net 30"
+ *   "net 90 not possible, max net 60"
+ *
+ * Returns the max days the vendor is willing to offer, or null if not stated.
+ */
+export function extractVendorMaxTermsDays(vendorMessage?: string | null): number | null {
+  if (!vendorMessage) return null;
+  const lower = vendorMessage.toLowerCase();
+
+  // Pattern 1: "max/maximum [I/we] can [do/offer/accept] is net X"
+  const maxPattern = /\b(?:max(?:imum)?|most)\s+(?:i|we)\s+can\s+(?:do|offer|accept|go|provide)\s+is\s+net\s*(\d+)/i;
+  const maxMatch = lower.match(maxPattern);
+  if (maxMatch) return parseInt(maxMatch[1], 10);
+
+  // Pattern 2: "can only [do/offer] net X"
+  const onlyPattern = /\bcan\s+only\s+(?:do|offer|accept|go|provide)\s+net\s*(\d+)/i;
+  const onlyMatch = lower.match(onlyPattern);
+  if (onlyMatch) return parseInt(onlyMatch[1], 10);
+
+  // Pattern 3: "net X not possible" + "max net Y" or "net Y max"
+  const notPossibleWithMax = /net\s*(\d+)\s+(?:is\s+)?not\s+possible.*?(?:max(?:imum)?\s+(?:is\s+)?net\s*(\d+)|net\s*(\d+)\s+(?:is\s+)?(?:the\s+)?max)/i;
+  const notPossMatch = lower.match(notPossibleWithMax);
+  if (notPossMatch) return parseInt(notPossMatch[2] || notPossMatch[3], 10);
+
+  // Pattern 4: "max [is] net X" / "maximum net X"
+  const simpleMax = /\b(?:max(?:imum)?)\s+(?:is\s+)?net\s*(\d+)/i;
+  const simpleMaxMatch = lower.match(simpleMax);
+  if (simpleMaxMatch) return parseInt(simpleMaxMatch[1], 10);
+
+  // Pattern 5: "net X is [the/our] max/maximum/limit"
+  const termsIsMax = /net\s*(\d+)\s+(?:is\s+)?(?:the\s+|our\s+)?(?:max(?:imum)?|limit|best\s+(?:i|we)\s+can\s+(?:do|offer))/i;
+  const termsIsMaxMatch = lower.match(termsIsMax);
+  if (termsIsMaxMatch) return parseInt(termsIsMaxMatch[1], 10);
+
+  return null;
+}
+
+/**
+ * Cap the chosen payment terms to not exceed the vendor's stated maximum.
+ * If vendor said "max net 60", ensure we don't counter with net 90.
+ */
+export function capTermsToVendorMax(chosenTerms: string, vendorMaxDays: number): string {
+  const chosenDays = extractPaymentDays(chosenTerms);
+  if (chosenDays === null) return chosenTerms;
+
+  if (chosenDays > vendorMaxDays) {
+    return `Net ${vendorMaxDays}`;
+  }
+  return chosenTerms;
+}
 
 /**
  * Decision Engine with Weighted Utility Thresholds
@@ -402,6 +459,7 @@ export function decideNextMove(
 ): Decision {
   const reasons: string[] = [];
   const priority = config.priority || 'MEDIUM';
+  const cs = getCurrencySymbol(config.currency);
 
   // Get thresholds with defaults (70%, 50%, 30%)
   const acceptThreshold = config.accept_threshold ?? 0.70;
@@ -511,7 +569,7 @@ export function decideNextMove(
         action: 'COUNTER',
         utilityScore: 0,
         counterOffer: counter,
-        reasons: [`Price $${vendorOffer.total_price} exceeds our budget of $${max}. I can offer $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`],
+        reasons: [`Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${max}. I can offer ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`],
       };
     }
 
@@ -522,6 +580,36 @@ export function decideNextMove(
       counterOffer: null,
       reasons: [`Price ${vendorOffer.total_price} > max acceptable ${max} after ${round} rounds of negotiation`],
     };
+  }
+
+  // Auto-accept: if vendor's offer meets or beats PM's last counter, accept immediately
+  // e.g., PM countered at $309,000 Net 60 and vendor offers $305,800 Net 60 → accept
+  if (previousPmOffer && vendorOffer.total_price !== null) {
+    const pmCounterPrice = (previousPmOffer as PmCounterRecord).price
+      ?? (previousPmOffer as Offer).total_price
+      ?? null;
+    const pmCounterTerms = (previousPmOffer as PmCounterRecord).terms
+      ?? (previousPmOffer as Offer).payment_terms
+      ?? null;
+
+    if (pmCounterPrice !== null && vendorOffer.total_price <= pmCounterPrice) {
+      // Vendor price is at or below PM's last counter — check terms too
+      const vendorDays = vendorOffer.payment_terms ? extractPaymentDays(vendorOffer.payment_terms) : null;
+      const pmDays = pmCounterTerms ? extractPaymentDays(pmCounterTerms) : null;
+
+      // Terms are acceptable if: vendor terms match or are shorter (better for buyer = shorter payment)
+      // OR if PM didn't specify terms
+      const termsAcceptable = pmDays === null || vendorDays === null || vendorDays <= pmDays;
+
+      if (termsAcceptable) {
+        return {
+          action: 'ACCEPT',
+          utilityScore: totalUtility(config, vendorOffer),
+          counterOffer: null,
+          reasons: [`Vendor offer (${cs}${vendorOffer.total_price}, ${vendorOffer.payment_terms}) meets or beats PM's last counter (${cs}${pmCounterPrice}, ${pmCounterTerms}) — auto-accept`],
+        };
+      }
+    }
   }
 
   const u = totalUtility(config, vendorOffer);
@@ -586,7 +674,7 @@ export function decideNextMove(
     } else {
       reason += ` - vendor still showing flexibility, continuing negotiation`;
     }
-    reason += `. Counter at $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`;
+    reason += `. Counter at ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`;
 
     return {
       action: 'COUNTER',
@@ -622,7 +710,7 @@ export function decideNextMove(
         action: 'ESCALATE',
         utilityScore: u,
         counterOffer: counter,
-        reasons: [`Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - needs human review.`],
+        reasons: [`Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - needs human review.`],
       };
     }
 
@@ -636,7 +724,7 @@ export function decideNextMove(
       const trend = getUtilityTrend(negotiationState ?? null, 5);
       reason += ` - negotiation ${trend}, continuing`;
     }
-    reason += `. Counter at $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`;
+    reason += `. Counter at ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`;
 
     if (counterMatchesVendorOffer(counter, vendorOffer)) {
       return {
@@ -668,7 +756,7 @@ export function decideNextMove(
     delivery_days: delivery.delivery_days,
   };
 
-  reasons.push(`${dynamicCounter.strategy}: Counter at $${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`);
+  reasons.push(`${dynamicCounter.strategy}: Counter at ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`);
 
   if (counterMatchesVendorOffer(counter, vendorOffer)) {
     return {
@@ -732,6 +820,7 @@ export function decideWithWeightedUtility(
   adaptiveStrategy?: AdaptiveStrategyResult | null
 ): WeightedDecision {
   const reasons: string[] = [];
+  const cs = getCurrencySymbol(legacyConfig?.currency);
 
   // ============================================
   // Resolve configuration with user/default priority
@@ -910,7 +999,7 @@ export function decideWithWeightedUtility(
         action: 'COUNTER',
         utilityScore: 0,
         counterOffer,
-        reasons: [`Price $${vendorOffer.total_price} exceeds our budget of $${resolvedConfig.maxAcceptablePrice}. Proposing $${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`],
+        reasons: [`Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
           totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -929,6 +1018,39 @@ export function decideWithWeightedUtility(
       reasons: [`Price ${vendorOffer.total_price} > max acceptable ${resolvedConfig.maxAcceptablePrice} after ${round} rounds`],
       resolvedConfig,
     };
+  }
+
+  // Auto-accept: if vendor's offer meets or beats PM's last counter, accept immediately
+  if (previousPmOffer && vendorOffer.total_price != null) {
+    const pmCounterPrice = (previousPmOffer as PmCounterRecord).price
+      ?? (previousPmOffer as Offer).total_price
+      ?? null;
+    const pmCounterTerms = (previousPmOffer as PmCounterRecord).terms
+      ?? (previousPmOffer as Offer).payment_terms
+      ?? null;
+
+    if (pmCounterPrice !== null && vendorOffer.total_price <= pmCounterPrice) {
+      const vendorDays = vendorOffer.payment_terms ? extractPaymentDays(vendorOffer.payment_terms) : null;
+      const pmDays = pmCounterTerms ? extractPaymentDays(pmCounterTerms) : null;
+      const termsAcceptable = pmDays === null || vendorDays === null || vendorDays <= pmDays;
+
+      if (termsAcceptable) {
+        return {
+          action: 'ACCEPT',
+          utilityScore: u,
+          counterOffer: null,
+          reasons: [`Vendor offer (${cs}${vendorOffer.total_price}, ${vendorOffer.payment_terms}) meets or beats PM's last counter (${cs}${pmCounterPrice}, ${pmCounterTerms}) — auto-accept`],
+          utilityBreakdown: {
+            totalUtility: utilityResult.totalUtility,
+            totalUtilityPercent: utilityResult.totalUtilityPercent,
+            parameterUtilities: utilityResult.parameterUtilities,
+            recommendation: utilityResult.recommendation,
+            recommendationReason: utilityResult.recommendationReason,
+          },
+          resolvedConfig,
+        };
+      }
+    }
   }
 
   // Accept Zone: utility >= accept threshold
@@ -986,7 +1108,7 @@ export function decideWithWeightedUtility(
     } else {
       reason += ` - vendor still showing flexibility, continuing`;
     }
-    reason += `. Counter at $${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`;
+    reason += `. Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`;
 
     return {
       action: 'COUNTER',
@@ -1017,7 +1139,7 @@ export function decideWithWeightedUtility(
         action: 'ESCALATE',
         utilityScore: u,
         counterOffer,
-        reasons: [`Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing $${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms} - needs human review.`],
+        reasons: [`Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms} - needs human review.`],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
           totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -1039,7 +1161,7 @@ export function decideWithWeightedUtility(
       const trend = getUtilityTrend(negotiationState ?? null, 5);
       reason += ` - negotiation ${trend}, continuing`;
     }
-    reason += `. Counter at $${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`;
+    reason += `. Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`;
 
     return {
       action: 'COUNTER',
@@ -1059,7 +1181,7 @@ export function decideWithWeightedUtility(
 
   // Counter Zone: escalate <= utility < accept
   const counterOffer = generateCounterOffer(resolvedConfig, vendorOffer, round, negotiationState, adaptiveStrategy);
-  reasons.push(`Weighted utility ${(u * 100).toFixed(0)}%: Counter at $${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`);
+  reasons.push(`Weighted utility ${(u * 100).toFixed(0)}%: Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`);
 
   return {
     action: 'COUNTER',

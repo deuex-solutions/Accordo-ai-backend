@@ -81,7 +81,7 @@ function buildInstruction(intent: NegotiationIntent, vendorMessage: string): str
       if (intent.allowedPrice != null) {
         const termsText = intent.allowedPaymentTerms ? `, payment terms: ${intent.allowedPaymentTerms}` : '';
         const deliveryText = intent.allowedDelivery ? `, delivery: ${intent.allowedDelivery}` : '';
-        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price $${intent.allowedPrice.toLocaleString()}${termsText}${deliveryText}. You MUST include this exact price. Provide a brief, natural business reason (budget constraints, project requirements, or similar). Keep it conversational.`;
+        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${intent.allowedPrice.toLocaleString()}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Provide a brief, natural business reason (budget constraints, project requirements, or similar). Keep it conversational.`;
       } else {
         actionInstruction = 'Indicate that the current offer needs improvement and ask the vendor to reconsider their terms. Be polite but clear.';
       }
@@ -98,7 +98,7 @@ function buildInstruction(intent: NegotiationIntent, vendorMessage: string): str
     case 'MESO':
       if (intent.offerVariants && intent.offerVariants.length > 0) {
         const options = intent.offerVariants
-          .map((v, i) => `Option ${i + 1} — ${v.label}: $${v.price.toLocaleString()}, ${v.paymentTerms}. ${v.description}`)
+          .map((v, i) => `Option ${i + 1} — ${v.label}: ${intent.currencySymbol}${v.price.toLocaleString()}, ${v.paymentTerms}. ${v.description}`)
           .join('\n');
         actionInstruction = `Present these options to the vendor. You MUST present all options with EXACT prices as given:\n${options}\nAsk the vendor which works best for them. Present them as fair alternatives.`;
       } else {
