@@ -57,6 +57,7 @@ npm run type-check       # Type-check without emitting
 # Database
 npm run migrate          # Run Sequelize migrations
 npm run migrate:undo     # Undo last migration
+npm run db:reset         # Drop DB, recreate, run migrations + seed (fresh start)
 npm run seed             # Run seed data
 
 # Testing (Vitest)
@@ -370,6 +371,42 @@ Key models for negotiation:
 | `MesoRound` | MESO round data with options and selection |
 | `Contract` | Contract linked to deal |
 | `Requisition` | RFQ with products and vendors |
+
+## Database Migration (Important)
+
+Migrations have been consolidated from 46 individual files into **8 domain-grouped files**. These are clean, from-scratch migrations — they cannot run on a database that has tables from the old migration set.
+
+**If you see errors like** `constraint "fk_roles_created_by_user" already exists`:
+
+```bash
+# Reset the database (drop + recreate + migrate + seed)
+npm run db:reset
+```
+
+Or manually:
+
+```bash
+# Connect to PostgreSQL and drop/recreate
+psql -U postgres -c 'DROP DATABASE IF EXISTS accordo;'
+psql -U postgres -c 'CREATE DATABASE accordo;'
+
+# Run migrations and seed
+npm run migrate
+npm run seed
+```
+
+### Migration Files
+
+| # | File | Tables |
+|---|------|--------|
+| 1 | `foundation.cjs` | Companies, Modules, Roles, User, authTokens, Otps, RolePermissions, UserActions, Addresses |
+| 2 | `projects-products.cjs` | Products, Projects, ProjectPocs |
+| 3 | `requisitions.cjs` | Requisitions, RequisitionProducts, Attachments, Approvals |
+| 4 | `vendors-contracts.cjs` | VendorCompanies, Contracts, Pos, EmailLogs |
+| 5 | `chatbot-core.cjs` | chatbot_templates, Preferences, template_parameters, chatbot_deals, chatbot_messages, meso_rounds, vendor_profiles |
+| 6 | `bid-analysis.cjs` | vendor_bids, bid_comparisons, bid_action_histories, vendor_selections, vendor_notifications |
+| 7 | `vectors-ml.cjs` | negotiation_patterns, vector_migration_status, ApiUsageLogs, Negotiations, NegotiationRounds, ChatSessions, training_data, deal_embeddings, message_embeddings |
+| 8 | `indexes-and-constraints.cjs` | Deferred FK constraints |
 
 ## Troubleshooting
 
