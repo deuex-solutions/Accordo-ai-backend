@@ -136,20 +136,25 @@ export const connectDatabase = async (): Promise<void> => {
   logger.info('Database authenticated');
 
   // Run pending migrations via sequelize-cli.
-  // The CLI reads its own config from sequelize.config.cjs which also
-  // supports DATABASE_URL for managed providers.
-  try {
-    logger.info('Running database migrations...');
-    const configPath = path.join(projectRoot, 'sequelize.config.cjs');
-    const migrationsPath = path.join(projectRoot, 'migrations');
-    execSync(
-      `npx sequelize-cli db:migrate --config "${configPath}" --migrations-path "${migrationsPath}"`,
-      { stdio: 'inherit', cwd: projectRoot }
-    );
-    logger.info('Migrations complete');
-  } catch (error) {
-    logger.error('Migration failed', error);
-    throw error;
+  // PRODUCTION SAFETY: Auto-migration is disabled in production to prevent
+  // untested schema changes from running on startup. Run migrations manually
+  // before deploying: npm run migrate
+  if (env.nodeEnv === 'production' && process.env.AUTO_MIGRATE !== 'true') {
+    logger.info('Skipping auto-migration in production (run "npm run migrate" manually before deploying)');
+  } else {
+    try {
+      logger.info('Running database migrations...');
+      const configPath = path.join(projectRoot, 'sequelize.config.cjs');
+      const migrationsPath = path.join(projectRoot, 'migrations');
+      execSync(
+        `npx sequelize-cli db:migrate --config "${configPath}" --migrations-path "${migrationsPath}"`,
+        { stdio: 'inherit', cwd: projectRoot }
+      );
+      logger.info('Migrations complete');
+    } catch (error) {
+      logger.error('Migration failed', error);
+      throw error;
+    }
   }
 
   // Sync models to create any tables not covered by migrations

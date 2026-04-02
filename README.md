@@ -395,6 +395,22 @@ npm run migrate
 npm run seed
 ```
 
+### Production Deployment (Existing Database)
+
+If your production database was set up with the old 46-migration files, run this **once before deploying** the new code:
+
+```bash
+# Dry run first — see what will change (no modifications)
+DATABASE_URL=your-render-url node scripts/mark-migrations-run.cjs --dry-run
+
+# Apply — replaces old migration entries with the 8 consolidated ones
+DATABASE_URL=your-render-url node scripts/mark-migrations-run.cjs
+```
+
+This tells Sequelize CLI that the consolidated migrations have already been applied (since the tables already exist). Safe to run multiple times (idempotent).
+
+**Note:** Auto-migration is disabled in production (`NODE_ENV=production`). Run `npm run migrate` manually before each deployment to apply new migrations.
+
 ### Migration Files
 
 | # | File | Tables |

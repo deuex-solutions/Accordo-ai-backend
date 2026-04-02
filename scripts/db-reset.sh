@@ -22,6 +22,13 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
   set +a
 fi
 
+# SAFETY: Block execution in production
+if [ "${NODE_ENV:-}" = "production" ] || [ -n "${DATABASE_URL:-}" ]; then
+  echo "❌  BLOCKED: db-reset cannot run in production (NODE_ENV=production or DATABASE_URL is set)."
+  echo "    This script drops the entire database. Use 'npm run migrate' for production."
+  exit 1
+fi
+
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-accordo}"

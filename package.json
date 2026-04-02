@@ -16,6 +16,7 @@
     "migrate:undo": "npx sequelize-cli db:migrate:undo",
     "migrate:undo:all": "npx sequelize-cli db:migrate:undo:all",
     "db:reset": "bash scripts/db-reset.sh",
+    "db:mark-migrations": "node scripts/mark-migrations-run.cjs",
     "seed": "npx tsx ./scripts/seed.ts",
     "seed:comprehensive": "npx tsx src/seeders/comprehensiveSeed.ts",
     "create:vendor": "npx tsx src/scripts/create-vendor.ts",
