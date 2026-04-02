@@ -16,7 +16,7 @@ export interface FindAndCountResult {
 const repo = {
   getCustomers: async (companyId: number): Promise<User[]> => {
     return models.User.findAll({
-      where: { companyId, userType: 'customer' },
+      where: { companyId, userType: 'procurement' },
     });
   },
 
@@ -27,7 +27,7 @@ const repo = {
       ...queryOptions,
       where: {
         ...(queryOptions.where || {}),
-        userType: 'customer',
+        userType: 'procurement',
       },
     };
 

@@ -21,6 +21,7 @@ import companyRepo from "../company/company.repo.js";
 import otpRepo from "./otp.repo.js";
 import { generateJWT, verifyJWT } from "../../middlewares/jwt.service.js";
 import { getRoleService } from "../role/role.service.js";
+import { Role, RolePermission } from "../../models/index.js";
 import CustomError from "../../utils/custom-error.js";
 import env from "../../config/env.js";
 import { sequelize } from "../../config/database.js";
@@ -226,14 +227,69 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
     const username = `${userData.email}`;
     const hashedPassword = await hash(userData.password, 10);
     const company = await companyRepo.createCompany({}, transaction) as { id: number };
-    const userDataWithCompany = { ...userData, companyId: company.id };
+
+    // Seed default roles for the new company
+    const defaultRoleNames = [
+      'Super Admin', 'Admin', 'CEO', 'CFO', 'HOD',
+      'Procurement Manager', 'Procurement Manager Approver',
+    ];
+    const createdRoles = await Role.bulkCreate(
+      defaultRoleNames.map((name) => ({ name, companyId: company.id, isArchived: false })),
+      { transaction, returning: true }
+    );
+
+    // Build a name->id map for the new roles
+    const roleMap: Record<string, number> = {};
+    for (const role of createdRoles) {
+      roleMap[(role as any).name] = (role as any).id;
+    }
+
+    // Seed role permissions for each role (permission levels: 1=Read, 3=R/W, 7=R/W/U, 15=Full)
+    const permissionTemplates: Record<string, { moduleId: number; permission: number }[]> = {
+      'Super Admin': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      'Admin': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      'CEO': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      'CFO': [
+        { moduleId: 1, permission: 15 }, { moduleId: 2, permission: 7 },
+        { moduleId: 3, permission: 15 }, { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 15 }, { moduleId: 6, permission: 15 },
+      ],
+      'HOD': [
+        { moduleId: 1, permission: 7 }, { moduleId: 2, permission: 3 },
+        { moduleId: 3, permission: 15 }, { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 7 }, { moduleId: 6, permission: 7 },
+      ],
+      'Procurement Manager': [
+        { moduleId: 1, permission: 1 }, { moduleId: 3, permission: 15 },
+        { moduleId: 4, permission: 15 }, { moduleId: 5, permission: 7 },
+      ],
+      'Procurement Manager Approver': [
+        { moduleId: 1, permission: 1 }, { moduleId: 4, permission: 3 },
+        { moduleId: 6, permission: 7 },
+      ],
+    };
+
+    const allPermissions: { roleId: number; moduleId: number; permission: number }[] = [];
+    for (const [roleName, perms] of Object.entries(permissionTemplates)) {
+      const roleId = roleMap[roleName];
+      if (roleId) {
+        for (const p of perms) {
+          allPermissions.push({ roleId, moduleId: p.moduleId, permission: p.permission });
+        }
+      }
+    }
+    await RolePermission.bulkCreate(allPermissions, { transaction });
+
+    // Assign the Admin role to the registering user
+    const adminRoleId = roleMap['Admin'];
+    const userDataWithCompany = { ...userData, companyId: company.id, roleId: adminRoleId };
 
     const newUser = await repo.createUser(
       {
         ...userDataWithCompany,
         username,
         password: hashedPassword,
-        userType: 'customer',
+        userType: (userData.userType || 'admin') as 'super_admin' | 'admin' | 'procurement' | 'vendor',
         status: 'active',
       },
       transaction
@@ -242,7 +298,7 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
     const apiSecret = crypto.randomBytes(32).toString("hex");
     const payload: JWTPayload = {
       userId: newUser.id,
-      userType: 'customer',
+      userType: (userData.userType || 'admin') as string,
       companyId: userDataWithCompany.companyId,
     };
     const apiKey = await generateJWT(payload, apiSecret);
@@ -309,7 +365,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
   // Generate new access token
   let payload: JWTPayload = {
     userId: user.id,
-    userType: user.userType ?? 'customer',
+    userType: user.userType ?? 'procurement',
     companyId: user.companyId,
   };
 
@@ -317,7 +373,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
     const role = await getRoleService(user.roleId);
     payload = {
       userId: user.id,
-      userType: user.userType ?? 'customer',
+      userType: user.userType ?? 'procurement',
       companyId: user.companyId,
       roleData: role,
     };
@@ -343,6 +399,50 @@ export const logoutService = async (userId: number | undefined): Promise<{ messa
   // Delete all refresh tokens for the user
   await repo.deleteAllUserRefreshTokens(userId);
   return { message: "Logged out successfully" };
+};
+
+/**
+ * Validate access token and return user context (for service-to-service use)
+ * Used by other backend services to verify tokens issued by this auth API
+ * @param token - Access token (Bearer token or raw JWT)
+ * @returns Decoded context with userId, userType, companyId, email
+ * @throws CustomError if token invalid or expired
+ */
+export const validateTokenService = async (token: string): Promise<{
+  userId: number;
+  userType: string;
+  companyId?: number;
+  email?: string;
+}> => {
+  if (!token || typeof token !== 'string') {
+    throw new CustomError('Token is required', 400);
+  }
+  try {
+    const decoded = await verifyJWT(token, jwt.accessSecret);
+    // console.log(decoded);
+    if (decoded.userId) {
+      const user = await repo.findUser(decoded.userId) as User | null;
+      if (!user) {
+        throw new CustomError('User not found', 404);
+      }
+      return {
+        userId: user.id,
+        userType: user.userType ?? 'customer',
+        companyId: user.companyId,
+        email: user.email,
+      };
+    }
+    throw new CustomError('Invalid token', 401);
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err.message === 'jwt expired') {
+      throw new CustomError('Token expired. Please refresh your token', 401);
+    }
+    if (err.message === 'invalid signature' || err.message === 'jwt malformed') {
+      throw new CustomError('Invalid token', 401);
+    }
+    throw new CustomError(err.message || 'Authentication failed', 401);
+  }
 };
 
 /**
@@ -398,7 +498,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
 
   let payload: JWTPayload = {
     userId: user.id,
-    userType: user.userType ?? 'customer',
+    userType: user.userType ?? 'procurement',
     companyId: user.companyId,
   };
 
@@ -406,7 +506,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
     const role = await getRoleService(user.roleId);
     payload = {
       userId: user.id,
-      userType: user.userType ?? 'customer',
+      userType: user.userType ?? 'procurement',
       companyId: user.companyId,
       roleData: role,
     };

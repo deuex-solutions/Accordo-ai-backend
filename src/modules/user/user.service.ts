@@ -21,7 +21,8 @@ interface UserData {
   profilePic?: string;
   companyId?: number;
   roleId?: number;
-  userType?: 'admin' | 'customer' | 'vendor';
+  userType?: 'super_admin' | 'admin' | 'procurement' | 'vendor';
+  approvalLevel?: 'NONE' | 'L1' | 'L2' | 'L3';
   status?: string;
   [key: string]: unknown;
 }
@@ -34,6 +35,8 @@ interface UpdateUserData {
   email?: string;
   profilePic?: string;
   roleId?: number;
+  userType?: 'super_admin' | 'admin' | 'procurement' | 'vendor';
+  approvalLevel?: 'NONE' | 'L1' | 'L2' | 'L3';
   [key: string]: unknown;
 }
 
@@ -205,7 +208,7 @@ export const createUserService = async (
     const userCreateData = {
       ...userData,
       name: userData.name || userData.email.split('@')[0],
-      userType: (userData.userType || 'customer') as 'admin' | 'customer' | 'vendor',
+      userType: (userData.userType || 'procurement') as 'super_admin' | 'admin' | 'procurement' | 'vendor',
       status: userData.status || 'active'
     };
 

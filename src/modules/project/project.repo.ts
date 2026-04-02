@@ -65,7 +65,7 @@ const repo = {
 
   /**
    * Get all projects with filtering and pagination
-   * Admin users (userType === 'admin') see all projects across companies
+   * Super Admin users (userType === 'super_admin') see all projects across companies
    */
   getProjects: async (
     queryOptions: QueryOptions = {},
@@ -74,8 +74,8 @@ const repo = {
   ): Promise<FindAndCountResult> => {
     const user = await userRepo.getUserProfile(userId);
 
-    // Admin users see all projects, non-admin users only see their company's projects
-    const isAdmin = user?.userType === 'admin';
+    // Super Admin users see all projects, other users only see their company's projects
+    const isAdmin = user?.userType === 'super_admin';
     const companyFilter = (!isAdmin && user?.companyId) ? { companyId: user.companyId } : {};
 
     // Build include with optional POC name search

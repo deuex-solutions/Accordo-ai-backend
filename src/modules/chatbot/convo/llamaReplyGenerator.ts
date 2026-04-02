@@ -86,6 +86,9 @@ Keep response under 50 words.`,
       CONFUSED: `You are Accordo, an AI negotiation assistant.
 The vendor seems confused. Clarify your question politely and simply.
 Keep response under 60 words.`,
+      REJECT_TERMS: `You are Accordo, an AI negotiation assistant.
+The vendor has rejected the proposed terms. Acknowledge their position respectfully and propose a revised counter-offer.
+Keep response under 60 words.`,
     };
     return (data.refusalType && responses[data.refusalType]) || responses.NO;
   },

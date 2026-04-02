@@ -10,6 +10,8 @@ import {
   resetPasswordAuto,
   refreshToken,
   logout,
+  getRoles,
+  validateToken,
 } from "./auth.controller.js";
 import { authMiddleware, checkPermission } from "../../middlewares/auth.middleware.js";
 
@@ -22,10 +24,12 @@ const moduleId = 2;
 authRouter.post("/register", registerUser);
 authRouter.post("/login", signInUser);
 authRouter.post("/refresh-token", refreshToken);
+authRouter.post("/validate-token", validateToken);
 authRouter.post("/forgot-password", forgotPassword);
 authRouter.post("/verify-otp", verifyOtp);
 authRouter.put("/reset-password/:userid", resetPassword);
 authRouter.put("/reset-password-auto/:userid", resetPasswordAuto);
+authRouter.get("/roles", getRoles);
 
 /**
  * Protected routes

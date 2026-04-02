@@ -12,7 +12,7 @@ import {
 import type { Company } from './company.js';
 import type { Role } from './role.js';
 
-const userTypeEnum = ['admin', 'customer', 'vendor'] as const;
+const userTypeEnum = ['super_admin', 'admin', 'procurement', 'vendor'] as const;
 export type UserType = (typeof userTypeEnum)[number];
 
 const approvalLevelEnum = ['NONE', 'L1', 'L2', 'L3'] as const;
@@ -92,7 +92,7 @@ export default function userModel(sequelize: Sequelize): typeof User {
       password: DataTypes.STRING,
       userType: {
         type: DataTypes.ENUM(...userTypeEnum),
-        defaultValue: 'customer',
+        defaultValue: 'procurement',
       },
       companyId: DataTypes.INTEGER,
       roleId: DataTypes.INTEGER,

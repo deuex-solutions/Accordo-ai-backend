@@ -21,6 +21,7 @@ import { extractVendorConcerns, getAcknowledgmentSentence, type VendorConcern, t
 import { formatDeliveryDate, formatDeliveryShort, type DeliveryConfig } from './deliveryUtility.js';
 import type { Offer, Decision, AccumulatedOffer, OfferComponent } from './types.js';
 import type { NegotiationConfig } from './utility.js';
+import { getCurrencySymbol } from '../../../negotiation/intent/buildNegotiationIntent.js';
 import { getProvidedComponents, getMissingComponents } from './offerAccumulator.js';
 import { detectMilestone, getPersonalityEnrichment, applyPersonality, type MilestoneDetectionInput } from './personalityLayer.js';
 import { getToneAwareTemplate, type TemplateContext } from './toneTemplates.js';
@@ -121,8 +122,9 @@ function buildAskClarifyPrompt(input: ResponseGeneratorInput, tone: VendorTone):
     : 'All required information received';
 
   // Format accumulated state
+  const clarifyCs = getCurrencySymbol(input.config?.currency);
   const accumulatedText = accumulatedOffer
-    ? `Current accumulated offer: ${accumulatedOffer.total_price ? `$${accumulatedOffer.total_price.toLocaleString()}` : 'no price'}, ${accumulatedOffer.payment_terms || 'no terms'}`
+    ? `Current accumulated offer: ${accumulatedOffer.total_price ? `${clarifyCs}${accumulatedOffer.total_price.toLocaleString()}` : 'no price'}, ${accumulatedOffer.payment_terms || 'no terms'}`
     : '';
 
   return `
@@ -164,8 +166,9 @@ function buildPrompt(
   tone: VendorTone,
   concerns: VendorConcern[]
 ): string {
-  const { decision, vendorOffer, counterOffer, deliveryConfig, round, maxRounds } = input;
+  const { decision, config, vendorOffer, counterOffer, deliveryConfig, round, maxRounds } = input;
   const { action } = decision;
+  const cs = getCurrencySymbol(config?.currency);
 
   const toneDescription = getToneDescription(tone);
   const concernsText = concerns.length > 0
@@ -183,7 +186,7 @@ function buildPrompt(
 You are Accordo, a Procurement Manager. Generate a ${toneDescription} acceptance response.
 
 VENDOR'S OFFER:
-- Total Price: $${vendorOffer.total_price?.toFixed(2) || 'not specified'} (for entire order)
+- Total Price: ${cs}${vendorOffer.total_price?.toFixed(2) || 'not specified'} (for entire order)
 - Payment: ${vendorOffer.payment_terms || 'not specified'}
 - Delivery: ${vendorDelivery}
 
@@ -199,6 +202,7 @@ REQUIREMENTS:
 5. DO NOT mention: utility, algorithm, score, threshold, calculation, analysis
 6. Sound human and warm, not robotic
 7. IMPORTANT: Always refer to the price as "total" or "total price" - NOT per unit
+8. IMPORTANT: Use the ${cs} currency symbol for all prices — do NOT use any other currency symbol
 
 Generate response:`,
 
@@ -206,12 +210,12 @@ Generate response:`,
 You are Accordo, a Procurement Manager. Generate a ${toneDescription} counter-offer response.
 
 VENDOR'S OFFER:
-- Total Price: $${vendorOffer.total_price?.toFixed(2) || 'not specified'} (for entire order)
+- Total Price: ${cs}${vendorOffer.total_price?.toFixed(2) || 'not specified'} (for entire order)
 - Payment: ${vendorOffer.payment_terms || 'not specified'}
 - Delivery: ${vendorDelivery}
 
 OUR COUNTER:
-- Total Price: $${counterOffer?.total_price?.toFixed(2) || 'flexible'} (for entire order)
+- Total Price: ${cs}${counterOffer?.total_price?.toFixed(2) || 'flexible'} (for entire order)
 - Payment: ${counterOffer?.payment_terms || 'flexible'}
 - Delivery: ${counterDelivery}
 
@@ -242,7 +246,7 @@ Generate response:`,
 You are Accordo, a Procurement Manager. Generate a professional, regretful response declining to continue.
 
 FINAL SITUATION:
-- Vendor's offer: $${vendorOffer.total_price?.toFixed(2) || 'N/A'}, ${vendorOffer.payment_terms || 'N/A'}, ${vendorDelivery}
+- Vendor's offer: ${cs}${vendorOffer.total_price?.toFixed(2) || 'N/A'}, ${vendorOffer.payment_terms || 'N/A'}, ${vendorDelivery}
 - Round: ${round || 'final'} of ${maxRounds || 6}
 - Gap: Too far from our requirements
 
@@ -353,7 +357,8 @@ async function generateLLMResponse(prompt: string, timeoutMs: number = 4000): Pr
  * Build template context from response generator input
  */
 function buildTemplateContext(input: ResponseGeneratorInput, concerns: VendorConcern[]): TemplateContext {
-  const { vendorOffer, counterOffer, deliveryConfig } = input;
+  const { vendorOffer, counterOffer, deliveryConfig, config } = input;
+  const cs = getCurrencySymbol(config?.currency);
   const vendorDelivery = formatDeliveryFromOffer(vendorOffer) || formatDeliveryFromConfig(deliveryConfig);
   const counterDelivery = counterOffer
     ? formatDeliveryFromOffer(counterOffer)
@@ -361,10 +366,10 @@ function buildTemplateContext(input: ResponseGeneratorInput, concerns: VendorCon
   const concernAck = concerns.length > 0 ? getAcknowledgmentSentence(concerns) : '';
 
   return {
-    vendorPrice: `$${vendorOffer.total_price?.toFixed(2) || '0.00'}`,
+    vendorPrice: `${cs}${vendorOffer.total_price?.toFixed(2) || '0.00'}`,
     vendorTerms: vendorOffer.payment_terms || 'not specified',
     vendorDelivery,
-    counterPrice: `$${counterOffer?.total_price?.toFixed(2) || '0.00'}`,
+    counterPrice: `${cs}${counterOffer?.total_price?.toFixed(2) || '0.00'}`,
     counterTerms: counterOffer?.payment_terms || 'flexible',
     counterDelivery,
     concernAck: concernAck ? concernAck + ' ' : '',

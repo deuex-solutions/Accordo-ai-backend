@@ -219,6 +219,12 @@ export function validateLlmOutput(
   }
 
   // Step 4: Price validation for COUNTER action
+  if (intent.action === 'COUNTER' && intent.allowedPrice != null && intent.allowedPrice <= 0) {
+    throw new ValidationError(
+      'COUNTER has zero or negative allowedPrice — falling back to template',
+      'zero_price'
+    );
+  }
   if (intent.action === 'COUNTER' && intent.allowedPrice != null) {
     const detectedPrices = extractPrices(sanitized);
 
@@ -258,7 +264,19 @@ export function validateLlmOutput(
     }
   }
 
-  // Step 5: For MESO action, verify MESO prices are present and no rogue prices
+  // Step 5: For ACCEPT action, reject if LLM hallucinated a price
+  // The ACCEPT instruction explicitly says "Do NOT include any prices"
+  if (intent.action === 'ACCEPT') {
+    const detectedPrices = extractPrices(sanitized);
+    if (detectedPrices.length > 0) {
+      throw new ValidationError(
+        `ACCEPT response contains hallucinated price(s): ${detectedPrices.join(', ')}. ACCEPT should not mention specific prices.`,
+        'accept_has_price'
+      );
+    }
+  }
+
+  // Step 6: For MESO action, verify MESO prices are present and no rogue prices
   if (intent.action === 'MESO' && intent.offerVariants && intent.offerVariants.length > 0) {
     const detectedPrices = extractPrices(sanitized);
     const mesoAllowedPrices = intent.offerVariants.map(v => v.price);

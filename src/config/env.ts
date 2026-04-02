@@ -96,6 +96,8 @@ export interface EnvironmentConfig {
   chatbotFrontendUrl: string;
   chatbotApiUrl: string;
   backendUrl: string;
+  /** When set, /api/auth/* is forwarded to this auth service (same paths and contracts). */
+  authServiceUrl: string;
 }
 
 export const env: EnvironmentConfig = {
@@ -169,6 +171,7 @@ export const env: EnvironmentConfig = {
   chatbotFrontendUrl: process.env.CHATBOT_FRONTEND_URL || 'http://localhost:5001',
   chatbotApiUrl: process.env.CHATBOT_API_URL || 'http://localhost:5002/api',
   backendUrl: process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5002}`,
+  authServiceUrl: process.env.AUTH_SERVICE_URL?.replace(/\/$/, '') || 'http://localhost:5003',
 };
 
 export default env;

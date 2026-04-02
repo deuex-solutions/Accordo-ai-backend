@@ -39,7 +39,7 @@ export const createCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const customerData = { ...req.body, userType: 'customer' };
+    const customerData = { ...req.body, userType: 'procurement' };
     const data = await createUserService(customerData, req.context.userId);
     res.status(201).json({ message: 'Customer created successfully', data });
   } catch (error) {

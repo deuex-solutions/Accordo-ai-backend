@@ -154,7 +154,11 @@ export const connectDatabase = async (): Promise<void> => {
 
   // Sync models to create any tables not covered by migrations
   // alter: false ensures no destructive changes; it only creates missing tables
-  await sequelize.sync({ alter: false });
+  try {
+    await sequelize.sync({ alter: false });
+  } catch (syncError) {
+    logger.warn('Model sync encountered an issue (non-fatal, tables may already exist):', syncError);
+  }
 
   // Seed data only in development (or when explicitly forced)
   if (env.nodeEnv === 'development' || process.env.FORCE_SEED === 'true') {

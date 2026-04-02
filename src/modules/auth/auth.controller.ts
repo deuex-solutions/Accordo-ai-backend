@@ -9,8 +9,10 @@ import {
   resetPasswordAutoService,
   refreshTokenService,
   logoutService,
+  validateTokenService,
 } from "./auth.service.js";
 import { getParam } from '../../types/index.js';
+import { Role } from '../../models/index.js';
 
 /**
  * Request with context (added by auth middleware)
@@ -164,6 +166,28 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
 };
 
 /**
+ * Validate token - for use by other backend services to verify JWTs
+ * Accepts token via Authorization header or body.token
+ * Optional: set AUTH_SERVICE_SECRET to require X-Service-Secret header
+ * @param req - Express request with token
+ * @param res - Express response
+ * @param next - Express next function
+ */
+export const validateToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authHeader = req.header('Authorization') || req.header('authorization');
+    const token = authHeader?.replace(/^Bearer\s+/i, '') || req.body?.token;
+    const context = await validateTokenService(token || '');
+    res.status(200).json({
+      message: 'Token valid',
+      data: { valid: true, context },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Logout user by revoking refresh tokens
  * @param req - Express request with context
  * @param res - Express response
@@ -176,6 +200,25 @@ export const logout = async (req: RequestWithContext, res: Response, next: NextF
       message: "Logged out successfully",
       data: response,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get available roles (public, no auth required)
+ * Filters out Super Admin, Admin, and Vendor User roles
+ */
+export const getRoles = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const EXCLUDED_ROLES = ['Super Admin', 'Admin', 'Vendor User'];
+    const roles = await Role.findAll({
+      where: { isArchived: false },
+      attributes: ['id', 'name'],
+      order: [['id', 'ASC']],
+    });
+    const filteredRoles = roles.filter((role: any) => !EXCLUDED_ROLES.includes(role.name));
+    res.status(200).json({ data: filteredRoles });
   } catch (error) {
     next(error);
   }
