@@ -495,6 +495,80 @@
  *         description: Invalid refresh token
  */
 
+/**
+ * @swagger
+ * /api/auth/validate-token:
+ *   post:
+ *     summary: Validate access token (service-to-service)
+ *     description: |
+ *       Validates a JWT access token and returns the user context. Intended for use by other
+ *       backend services that need to verify tokens issued by this auth API (login/signup).
+ *
+ *       **Token can be provided via:**
+ *       - `Authorization: Bearer <token>` header
+ *       - `{ "token": "<token>" }` in request body
+ *
+ *       **Optional:** When `AUTH_SERVICE_SECRET` is set, requires `X-Service-Secret` header to match.
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: header
+ *         name: Authorization
+ *         schema:
+ *           type: string
+ *           example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *         description: Bearer token to validate
+ *       - in: header
+ *         name: X-Service-Secret
+ *         schema:
+ *           type: string
+ *         description: Required when AUTH_SERVICE_SECRET env is set; shared secret for backend services
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Alternative to Authorization header
+ *     responses:
+ *       200:
+ *         description: Token valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Token valid
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     valid:
+ *                       type: boolean
+ *                       example: true
+ *                     context:
+ *                       type: object
+ *                       properties:
+ *                         userId:
+ *                           type: integer
+ *                           example: 1
+ *                         userType:
+ *                           type: string
+ *                           example: customer
+ *                         companyId:
+ *                           type: integer
+ *                           example: 5
+ *                         email:
+ *                           type: string
+ *                           example: user@example.com
+ *       400:
+ *         description: Token is required
+ *       401:
+ *         description: Invalid token, expired, or service authentication required
+ */
+
 // ==================== CHATBOT ====================
 
 /**
