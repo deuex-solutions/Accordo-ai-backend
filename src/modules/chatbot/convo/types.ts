@@ -31,7 +31,7 @@ export type VendorPreference = 'PRICE' | 'TERMS' | 'NEITHER';
 /**
  * Types of vendor refusals to share information
  */
-export type RefusalType = 'NO' | 'LATER' | 'ALREADY_SHARED' | 'CONFUSED' | null;
+export type RefusalType = 'NO' | 'LATER' | 'ALREADY_SHARED' | 'CONFUSED' | 'REJECT_TERMS' | null;
 
 /**
  * Conversation Intent Classification

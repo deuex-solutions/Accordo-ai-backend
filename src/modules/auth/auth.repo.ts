@@ -29,7 +29,7 @@ interface UserData {
   password: string;
   companyId?: number;
   roleId?: number;
-  userType: 'admin' | 'customer' | 'vendor';
+  userType: 'super_admin' | 'admin' | 'procurement' | 'vendor';
   status: string;
   approvalLevel?: 'NONE' | 'L1' | 'L2' | 'L3';
   approvalLimit?: number | null;

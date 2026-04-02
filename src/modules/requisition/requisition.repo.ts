@@ -89,13 +89,13 @@ const repo = {
 
   /**
    * Get all requisitions
-   * Admin users (userType === 'admin') see all requisitions across companies
+   * Super Admin users (userType === 'super_admin') see all requisitions across companies
    */
   getAllRequisitions: async (userId?: number): Promise<Requisition[]> => {
     if (userId) {
       const user = await models.User.findByPk(userId);
-      // Admin users see all requisitions, non-admin users only see their company's
-      const isAdmin = user?.userType === 'admin';
+      // Super Admin users see all requisitions, other users only see their company's
+      const isAdmin = user?.userType === 'super_admin';
       if (!isAdmin && user?.companyId) {
         return models.Requisition.findAll({
           where: { companyId: user.companyId } as any,
@@ -107,7 +107,7 @@ const repo = {
 
   /**
    * Get requisitions with filtering and pagination
-   * Admin users (userType === 'admin') see all requisitions across companies
+   * Super Admin users (userType === 'super_admin') see all requisitions across companies
    */
   getRequisitions: async (
     queryOptions: RequisitionQueryOptions = {},
@@ -118,15 +118,22 @@ const repo = {
 
     if (userId) {
       const user = await models.User.findByPk(userId);
-      // Admin users see all requisitions, non-admin users only see their company's
-      const isAdmin = user?.userType === 'admin';
-      if (!isAdmin && user?.companyId) {
-        (options.where as any).companyId = user.companyId;
+
+      // Vendor users cannot view requisitions
+      if (user?.userType === 'vendor') {
+        return { rows: [], count: 0 };
+      }
+
+      // Super Admin sees all; others see only their company's (via Project.companyId)
+      const isSuperAdmin = user?.userType === 'super_admin';
+      if (!isSuperAdmin && user?.companyId) {
+        (options as any).projectCompanyId = user.companyId;
       }
     }
 
     // Two-phase query for performance
     // First: Get count with contract aggregation
+    const projectCompanyId = (options as any).projectCompanyId;
     const baseOptions: RequisitionQueryOptions = {
       attributes: [
         'id',
@@ -142,6 +149,13 @@ const repo = {
           attributes: [],
           required: false,
         },
+        ...(projectCompanyId ? [{
+          model: models.Project,
+          as: 'Project',
+          attributes: [],
+          where: { companyId: projectCompanyId },
+          required: true,
+        }] : []),
       ],
       group: ['Requisition.id'],
       having: literal('COUNT("Contract"."id") > 0'),
@@ -187,6 +201,7 @@ const repo = {
         {
           model: models.Project,
           as: 'Project',
+          ...(projectCompanyId ? { where: { companyId: projectCompanyId }, required: true } : {}),
         },
       ],
     };
@@ -310,7 +325,7 @@ const repo = {
   /**
    * Get requisitions available for negotiation with summary data
    * Returns requisitions that have vendors attached (via Contracts)
-   * Admin users see all requisitions, non-admin see only their company's
+   * Super Admin users see all requisitions, others see only their company's
    */
   getRequisitionsForNegotiation: async (userId: number): Promise<{
     id: number;
@@ -323,7 +338,7 @@ const repo = {
     negotiationClosureDate?: string;
   }[]> => {
     const user = await models.User.findByPk(userId);
-    const isAdmin = user?.userType === 'admin';
+    const isAdmin = user?.userType === 'super_admin';
 
     // Build WHERE clause based on user type
     const companyFilter = (!isAdmin && user?.companyId) ? `AND r."companyId" = ${user.companyId}` : '';

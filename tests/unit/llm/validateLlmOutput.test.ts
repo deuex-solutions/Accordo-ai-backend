@@ -24,6 +24,7 @@ function makeIntent(overrides: Partial<NegotiationIntent> = {}): NegotiationInte
     allowedPaymentTerms: 'Net 30',
     acknowledgeConcerns: [],
     vendorTone: 'formal',
+    currencySymbol: '$',
     ...overrides,
   };
 }

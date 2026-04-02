@@ -101,12 +101,26 @@ export const updateRequisition = async (
       return;
     }
 
-    // Permission: Admin can edit any; PM can only edit own
+    // Permission check for editing requisitions
+    // Can edit: super_admin userType, creator, or users with privileged roles (Admin, CEO, CFO, HOD)
     const userType = req.context.userType;
     const userId = req.context.userId;
-    if (userType !== 'admin' && existingRequisition.createdBy !== userId) {
-      res.status(403).json({ message: 'You can only edit requisitions you created' });
-      return;
+    const isCreator = existingRequisition.createdBy === userId;
+    const isSuperAdmin = userType === 'super_admin';
+
+    if (!isSuperAdmin && !isCreator) {
+      // Check if user has a privileged role that allows editing any company requisition
+      const { Role } = await import('../../models/index.js');
+      const { User } = await import('../../models/index.js');
+      const user = await User.findByPk(userId, {
+        include: [{ model: Role, as: 'Role', attributes: ['name'] }],
+      });
+      const roleName = (user as any)?.Role?.name;
+      const privilegedRoles = ['Admin', 'CEO', 'CFO', 'HOD'];
+      if (!roleName || !privilegedRoles.includes(roleName)) {
+        res.status(403).json({ message: 'You can only edit requisitions you created' });
+        return;
+      }
     }
 
     const attachmentFiles = req.files as Express.Multer.File[];

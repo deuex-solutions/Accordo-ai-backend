@@ -12,6 +12,7 @@ import {
   validateTokenService,
 } from "./auth.service.js";
 import { getParam } from '../../types/index.js';
+import { Role } from '../../models/index.js';
 
 /**
  * Request with context (added by auth middleware)
@@ -199,6 +200,25 @@ export const logout = async (req: RequestWithContext, res: Response, next: NextF
       message: "Logged out successfully",
       data: response,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get available roles (public, no auth required)
+ * Filters out Super Admin, Admin, and Vendor User roles
+ */
+export const getRoles = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const EXCLUDED_ROLES = ['Super Admin', 'Admin', 'Vendor User'];
+    const roles = await Role.findAll({
+      where: { isArchived: false },
+      attributes: ['id', 'name'],
+      order: [['id', 'ASC']],
+    });
+    const filteredRoles = roles.filter((role: any) => !EXCLUDED_ROLES.includes(role.name));
+    res.status(200).json({ data: filteredRoles });
   } catch (error) {
     next(error);
   }

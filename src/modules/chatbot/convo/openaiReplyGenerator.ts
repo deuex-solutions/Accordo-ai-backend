@@ -131,6 +131,7 @@ function buildIntentContext(
         LATER: 'The vendor wants to provide information later. Accept this graciously and suggest continuing with current terms while awaiting their update.',
         ALREADY_SHARED: 'The vendor believes they have already shared the requested information. Politely acknowledge and review what was previously discussed.',
         CONFUSED: 'The vendor seems unsure about your request. Clarify your question in simpler terms with a warm, helpful tone.',
+        REJECT_TERMS: 'The vendor has rejected the proposed terms. Acknowledge their position respectfully and propose a revised counter-offer that addresses their concerns.',
       };
       return data?.refusalType ? refusalResponses[data.refusalType] : refusalResponses.NO;
 

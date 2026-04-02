@@ -119,12 +119,36 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('deal_embeddings', ['deal_id'], { name: 'idx_deal_embeddings_deal_id' });
-    await queryInterface.addIndex('deal_embeddings', ['embedding_type'], { name: 'idx_deal_embeddings_type' });
-    await queryInterface.addIndex('deal_embeddings', ['final_status'], { name: 'idx_deal_embeddings_status' });
-    await queryInterface.addIndex('deal_embeddings', ['final_utility'], { name: 'idx_deal_embeddings_utility' });
-    await queryInterface.addIndex('deal_embeddings', ['product_category'], { name: 'idx_deal_embeddings_category' });
-    await queryInterface.addIndex('deal_embeddings', ['created_at'], { name: 'idx_deal_embeddings_created_at' });
+    try {
+      await queryInterface.addIndex('deal_embeddings', ['deal_id'], { name: 'idx_deal_embeddings_deal_id' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('deal_embeddings', ['embedding_type'], { name: 'idx_deal_embeddings_type' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('deal_embeddings', ['final_status'], { name: 'idx_deal_embeddings_status' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('deal_embeddings', ['final_utility'], { name: 'idx_deal_embeddings_utility' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('deal_embeddings', ['product_category'], { name: 'idx_deal_embeddings_category' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('deal_embeddings', ['created_at'], { name: 'idx_deal_embeddings_created_at' });
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('deal_embeddings');

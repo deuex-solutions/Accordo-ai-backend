@@ -74,12 +74,36 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('EmailLogs', ['recipientEmail']);
-    await queryInterface.addIndex('EmailLogs', ['status']);
-    await queryInterface.addIndex('EmailLogs', ['emailType']);
-    await queryInterface.addIndex('EmailLogs', ['contractId']);
-    await queryInterface.addIndex('EmailLogs', ['requisitionId']);
-    await queryInterface.addIndex('EmailLogs', ['createdAt']);
+    try {
+      await queryInterface.addIndex('EmailLogs', ['recipientEmail']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('EmailLogs', ['status']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('EmailLogs', ['emailType']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('EmailLogs', ['contractId']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('EmailLogs', ['requisitionId']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('EmailLogs', ['createdAt']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('EmailLogs');

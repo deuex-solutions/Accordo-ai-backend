@@ -21,7 +21,7 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
-export type UserType = 'admin' | 'customer' | 'vendor';
+export type UserType = 'super_admin' | 'admin' | 'procurement' | 'vendor';
 
 export type ContractStatus =
   | 'Created'

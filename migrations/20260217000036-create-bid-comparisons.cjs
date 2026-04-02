@@ -88,10 +88,26 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('bid_comparisons', ['requisition_id']);
-    await queryInterface.addIndex('bid_comparisons', ['triggered_by']);
-    await queryInterface.addIndex('bid_comparisons', ['generated_at']);
-    await queryInterface.addIndex('bid_comparisons', ['email_status']);
+    try {
+      await queryInterface.addIndex('bid_comparisons', ['requisition_id']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_comparisons', ['triggered_by']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_comparisons', ['generated_at']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('bid_comparisons', ['email_status']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('bid_comparisons');

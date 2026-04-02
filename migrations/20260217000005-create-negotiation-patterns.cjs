@@ -94,11 +94,20 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('negotiation_patterns', ['pattern_type'], { name: 'idx_negotiation_patterns_type' });
-    await queryInterface.addIndex('negotiation_patterns', ['scenario'], { name: 'idx_negotiation_patterns_scenario' });
-    await queryInterface.addIndex('negotiation_patterns', ['success_rate'], { name: 'idx_negotiation_patterns_success_rate' });
-    await queryInterface.addIndex('negotiation_patterns', ['is_active'], { name: 'idx_negotiation_patterns_active' });
-    await queryInterface.addIndex('negotiation_patterns', ['created_at'], { name: 'idx_negotiation_patterns_created_at' });
+    const indexes = [
+      { fields: ['pattern_type'], name: 'idx_negotiation_patterns_type' },
+      { fields: ['scenario'], name: 'idx_negotiation_patterns_scenario' },
+      { fields: ['success_rate'], name: 'idx_negotiation_patterns_success_rate' },
+      { fields: ['is_active'], name: 'idx_negotiation_patterns_active' },
+      { fields: ['created_at'], name: 'idx_negotiation_patterns_created_at' },
+    ];
+    for (const idx of indexes) {
+      try {
+        await queryInterface.addIndex('negotiation_patterns', idx.fields, { name: idx.name });
+      } catch (e) {
+        // Index already exists, skip
+      }
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('negotiation_patterns');

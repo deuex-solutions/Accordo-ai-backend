@@ -56,8 +56,16 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('Addresses', ['companyId']);
-    await queryInterface.addIndex('Addresses', ['companyId', 'isDefault']);
+    try {
+      await queryInterface.addIndex('Addresses', ['companyId']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('Addresses', ['companyId', 'isDefault']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('Addresses');

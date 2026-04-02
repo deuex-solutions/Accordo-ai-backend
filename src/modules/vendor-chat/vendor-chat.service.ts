@@ -14,6 +14,7 @@ import {
 import type { Contract } from '../../models/contract.js';
 import type { ChatbotDeal } from '../../models/chatbotDeal.js';
 import type { ChatbotMessage } from '../../models/chatbotMessage.js';
+import { formatCurrency, type SupportedCurrency } from '../../services/currency.service.js';
 
 /**
  * Vendor Chat Service
@@ -453,6 +454,9 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
     throw new CustomError('No quote found - please submit a quote first', 400);
   }
 
+  // Resolve currency from the requisition (source of truth)
+  const requisitionCurrency = ((contract.Requisition as any)?.typeOfCurrency as SupportedCurrency) || 'USD';
+
   // Build opening message content from quote
   let grandTotal = 0;
   const productLines = vendorQuote.products.map((p) => {
@@ -460,7 +464,7 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
     const quantity = p.quantity || 0;
     const totalPrice = unitPrice * quantity;
     grandTotal += totalPrice;
-    return `- ${p.productName}: $${totalPrice.toFixed(2)} (${quantity} units)`;
+    return `- ${p.productName}: ${formatCurrency(totalPrice, requisitionCurrency)} (${quantity} units)`;
   }).join('\n');
 
   const terms = vendorQuote.additionalTerms;
@@ -469,7 +473,7 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
     termsText += `\nPayment Terms: ${terms.paymentTerms === 'net_payment' ? `Net ${terms.netPaymentDay || 30} days` : 'Advance/Post payment'}`;
   }
 
-  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\n${productLines}\n\nTotal: $${grandTotal.toFixed(2)}${termsText}\n\nI look forward to discussing the details.`;
+  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\n${productLines}\n\nTotal: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}\n\nI look forward to discussing the details.`;
 
   // Build payment terms string for extracted offer
   const paymentTermsStr = terms?.paymentTerms === 'net_payment'
@@ -975,8 +979,9 @@ export const submitOthersService = async (
   }
 
   // Create vendor message with the Others offer
+  const othersCurrency = ((contract.Requisition as any)?.typeOfCurrency as SupportedCurrency) || 'USD';
   const paymentTermsStr = `Net ${paymentTermsDays}`;
-  const offerContent = `I would like to propose a different offer: $${totalPrice.toLocaleString()} total with ${paymentTermsStr} payment terms.`;
+  const offerContent = `I would like to propose a different offer: ${formatCurrency(totalPrice, othersCurrency)} total with ${paymentTermsStr} payment terms.`;
 
   const extractedOffer = {
     total_price: totalPrice,

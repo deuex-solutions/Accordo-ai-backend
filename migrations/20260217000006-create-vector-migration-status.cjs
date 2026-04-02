@@ -90,9 +90,21 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vector_migration_status', ['migration_type'], { name: 'idx_vector_migration_type' });
-    await queryInterface.addIndex('vector_migration_status', ['status'], { name: 'idx_vector_migration_status' });
-    await queryInterface.addIndex('vector_migration_status', ['created_at'], { name: 'idx_vector_migration_created_at' });
+    try {
+      await queryInterface.addIndex('vector_migration_status', ['migration_type'], { name: 'idx_vector_migration_type' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vector_migration_status', ['status'], { name: 'idx_vector_migration_status' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('vector_migration_status', ['created_at'], { name: 'idx_vector_migration_created_at' });
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('vector_migration_status');

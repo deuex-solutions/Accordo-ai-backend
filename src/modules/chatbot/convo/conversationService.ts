@@ -21,7 +21,7 @@ import { CustomError } from '../../../utils/custom-error.js';
 import logger from '../../../config/logger.js';
 import models from '../../../models/index.js';
 import { parseOfferRegex } from '../engine/parseOffer.js';
-import { decideNextMove } from '../engine/decide.js';
+import { decideNextMove, extractVendorMaxTermsDays, capTermsToVendorMax } from '../engine/decide.js';
 import { computeExplainability } from '../engine/utility.js';
 import { resolveNegotiationConfig, calculateWeightedUtilityFromResolved } from '../engine/weightedUtility.js';
 import { buildConfigFromRequisition } from '../chatbot.service.js';
@@ -231,6 +231,7 @@ export async function processConversationMessage(
         walkaway_threshold: storedConfig.walkaway_threshold,
         max_rounds: storedConfig.max_rounds,
         priority: storedConfig.priority,
+        currency: storedConfig.currency,
       };
     } else if (deal.requisitionId) {
       // Fallback to building from requisition (for legacy deals without stored config)
@@ -239,12 +240,17 @@ export async function processConversationMessage(
       throw new CustomError('Deal must be linked to a requisition for negotiation config', 400);
     }
 
+    // Backfill currency from requisition for legacy deals that don't have it in stored config
+    const requisition = (deal as any).Requisition;
+    if (!config.currency && requisition?.typeOfCurrency) {
+      config.currency = requisition.typeOfCurrency as string;
+    }
+
     // 4. Check for refusal
     const refusalType = classifyRefusal(vendorMessage);
 
     // 5. Parse vendor offer (with currency conversion if requisition has different currency)
     // Get requisition currency for proper conversion (February 2026)
-    const requisition = (deal as any).Requisition;
     const requisitionCurrency = requisition?.typeOfCurrency as 'USD' | 'INR' | 'EUR' | 'GBP' | 'AUD' | undefined;
     const parsedOffer = parseOfferRegex(vendorMessage, requisitionCurrency);
 
@@ -259,6 +265,36 @@ export async function processConversationMessage(
     if (vendorOffer.total_price !== null && vendorOffer.payment_terms !== null) {
       decision = decideNextMove(config, vendorOffer, deal.round + 1);
       explainability = computeExplainability(config, vendorOffer, decision);
+
+      // REJECT_TERMS guard: if vendor is rejecting terms (e.g., "329,650 is not possible")
+      // the engine may return ACCEPT because it scored the mentioned price favorably.
+      // Override to COUNTER — never accept on a rejection message.
+      if (refusalType === 'REJECT_TERMS' && decision.action === 'ACCEPT') {
+        logger.info('[ConversationService] Overriding ACCEPT → COUNTER due to REJECT_TERMS refusal', {
+          dealId,
+          originalAction: decision.action,
+          vendorMessage: vendorMessage.substring(0, 100),
+        });
+        // Generate a counter-offer instead of accepting
+        const priceConfig = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
+        let counterPrice = priceConfig
+          ? Math.round((priceConfig.target + (priceConfig.max_acceptable - priceConfig.target) * 0.5) * 100) / 100
+          : vendorOffer.total_price * 0.9;
+        // Never counter above vendor's offer
+        if (vendorOffer.total_price != null && counterPrice > vendorOffer.total_price) {
+          counterPrice = vendorOffer.total_price;
+        }
+        decision = {
+          action: 'COUNTER',
+          utilityScore: decision.utilityScore,
+          counterOffer: {
+            total_price: counterPrice,
+            payment_terms: vendorOffer.payment_terms,
+          },
+          reasons: [...decision.reasons, 'Overridden: vendor expressed rejection — cannot accept'],
+        };
+        explainability = computeExplainability(config, vendorOffer, decision);
+      }
 
       // Compute weakestPrimaryParameter using 5-param weighted utility
       // Only computed for COUNTER decisions — no need for terminal actions
@@ -315,6 +351,52 @@ export async function processConversationMessage(
       };
     }
 
+    // 7b. MESO handling: CONVERSATION mode doesn't support MESO UI,
+    //     so convert MESO to COUNTER with a valid price from the config
+    if (decision.action === 'MESO' || (decision.action as string) === 'MESO') {
+      const priceParams = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
+      const target = priceParams?.target ?? 0;
+      const maxAcceptable = priceParams?.max_acceptable ?? 0;
+
+      // Calculate a reasonable counter price (midpoint biased toward target)
+      const counterPrice = target > 0
+        ? Math.round((target + (maxAcceptable - target) * 0.4) * 100) / 100
+        : maxAcceptable;
+
+      decision = {
+        action: 'COUNTER',
+        utilityScore: decision.utilityScore,
+        counterOffer: {
+          total_price: counterPrice,
+          payment_terms: vendorOffer.payment_terms ?? 'Net 30',
+          payment_terms_days: vendorOffer.payment_terms_days ?? 30,
+          delivery_date: null,
+          delivery_days: null,
+        },
+        reasons: [...decision.reasons, 'Converted from MESO to COUNTER (conversation mode)'],
+      };
+    }
+
+    // 7c. Cap counter-offer payment terms to vendor's stated maximum (if any)
+    if (decision.counterOffer?.payment_terms) {
+      const vendorMaxDays = extractVendorMaxTermsDays(vendorMessage);
+      if (vendorMaxDays !== null) {
+        const cappedTerms = capTermsToVendorMax(decision.counterOffer.payment_terms, vendorMaxDays);
+        if (cappedTerms !== decision.counterOffer.payment_terms) {
+          logger.info(`[ConversationService] Capped counter payment terms from ${decision.counterOffer.payment_terms} to ${cappedTerms} (vendor max: Net ${vendorMaxDays})`, { dealId });
+          decision.counterOffer.payment_terms = cappedTerms;
+        }
+      }
+    }
+
+    // 7d. Guard: PM counter price must NEVER exceed vendor's current offer price
+    if (decision.counterOffer?.total_price != null && vendorOffer.total_price != null) {
+      if (decision.counterOffer.total_price > vendorOffer.total_price) {
+        logger.info(`[ConversationService] Capping counter price from ${decision.counterOffer.total_price} to vendor's offer ${vendorOffer.total_price}`, { dealId });
+        decision.counterOffer.total_price = vendorOffer.total_price;
+      }
+    }
+
     // 8. Detect vendor preference
     const allMessages = deal.Messages || [];
     const detectedPreference = detectVendorPreference(allMessages);
@@ -367,6 +449,7 @@ export async function processConversationMessage(
       targetPrice,
       maxAcceptablePrice,
       weakestPrimaryParameter,
+      currencyCode: storedConfig?.currency || 'USD',
     });
 
     // 13. Get non-commercial context for persona (safe to pass to LLM)

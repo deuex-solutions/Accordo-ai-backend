@@ -916,7 +916,7 @@ export const sendMessage = async (
   try {
     const dealId = getParam(req.params.dealId);
     const { content, role = 'VENDOR' } = req.body;
-    const { mode = 'INSIGHTS' } = req.query;
+    const { mode = 'CONVERSATION' } = req.query;
 
     if (!content) {
       throw new CustomError('Message content is required', 400);

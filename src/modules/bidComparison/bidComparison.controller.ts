@@ -380,8 +380,8 @@ export async function checkDeadlines(
   next: NextFunction
 ): Promise<void> {
   try {
-    // Admin check
-    if (req.context?.userType !== 'admin') {
+    // Super Admin check
+    if (req.context?.userType !== 'super_admin') {
       throw new CustomError('Admin access required', 403);
     }
 

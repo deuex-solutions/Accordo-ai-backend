@@ -45,10 +45,26 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('ApiUsageLogs', ['provider']);
-    await queryInterface.addIndex('ApiUsageLogs', ['createdAt']);
-    await queryInterface.addIndex('ApiUsageLogs', ['dealId']);
-    await queryInterface.addIndex('ApiUsageLogs', ['userId']);
+    try {
+      await queryInterface.addIndex('ApiUsageLogs', ['provider']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('ApiUsageLogs', ['createdAt']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('ApiUsageLogs', ['dealId']);
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('ApiUsageLogs', ['userId']);
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('ApiUsageLogs');

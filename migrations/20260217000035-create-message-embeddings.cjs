@@ -110,12 +110,36 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('message_embeddings', ['deal_id'], { name: 'idx_message_embeddings_deal_id' });
-    await queryInterface.addIndex('message_embeddings', ['message_id'], { name: 'idx_message_embeddings_message_id' });
-    await queryInterface.addIndex('message_embeddings', ['role'], { name: 'idx_message_embeddings_role' });
-    await queryInterface.addIndex('message_embeddings', ['outcome'], { name: 'idx_message_embeddings_outcome' });
-    await queryInterface.addIndex('message_embeddings', ['content_type'], { name: 'idx_message_embeddings_content_type' });
-    await queryInterface.addIndex('message_embeddings', ['created_at'], { name: 'idx_message_embeddings_created_at' });
+    try {
+      await queryInterface.addIndex('message_embeddings', ['deal_id'], { name: 'idx_message_embeddings_deal_id' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('message_embeddings', ['message_id'], { name: 'idx_message_embeddings_message_id' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('message_embeddings', ['role'], { name: 'idx_message_embeddings_role' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('message_embeddings', ['outcome'], { name: 'idx_message_embeddings_outcome' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('message_embeddings', ['content_type'], { name: 'idx_message_embeddings_content_type' });
+    } catch (e) {
+      // Index already exists, skip
+    }
+    try {
+      await queryInterface.addIndex('message_embeddings', ['created_at'], { name: 'idx_message_embeddings_created_at' });
+    } catch (e) {
+      // Index already exists, skip
+    }
   },
   async down(queryInterface) {
     await queryInterface.dropTable('message_embeddings');
