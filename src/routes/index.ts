@@ -32,8 +32,7 @@ router.use('/health', healthRoutes);
 // Public vendor chat routes (no authMiddleware)
 router.use('/vendor-chat', vendorChatRoutes);
 
-// const authStack = env.authServiceUrl ? createAuthProxyRouter(env.authServiceUrl) : authRoutes;
-const authStack = createAuthProxyRouter(env.authServiceUrl);
+const authStack = process.env.AUTH_SERVICE_URL ? createAuthProxyRouter(env.authServiceUrl) : authRoutes;
 router.use('/auth', authStack);
 router.use('/company', companyRoutes);
 router.use('/requisition', requisitionRoutes);
