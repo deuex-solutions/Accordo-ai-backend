@@ -164,7 +164,7 @@ export interface ProcessConversationMessageResult {
  * Using snake_case to match engine types
  */
 export interface Decision {
-  action: 'ACCEPT' | 'COUNTER' | 'WALK_AWAY' | 'ESCALATE' | 'ASK_CLARIFY';
+  action: 'ACCEPT' | 'COUNTER' | 'WALK_AWAY' | 'ESCALATE' | 'ASK_CLARIFY' | 'MESO';
   utilityScore: number;
   counterOffer: Offer | null;
   reasons: string[];

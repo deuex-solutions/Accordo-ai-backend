@@ -318,7 +318,7 @@ export function formatPaymentTerms(days: number): string {
 }
 
 export const DecisionSchema = z.object({
-  action: z.enum(["ACCEPT", "COUNTER", "WALK_AWAY", "ESCALATE", "ASK_CLARIFY"]),
+  action: z.enum(["ACCEPT", "COUNTER", "WALK_AWAY", "ESCALATE", "ASK_CLARIFY", "MESO"]),
   utilityScore: z.number(),
   counterOffer: OfferSchema.nullable(),
   reasons: z.array(z.string()),
