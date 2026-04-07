@@ -1,8 +1,36 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddIndex(queryInterface, table, fields, options) {
+  try {
+    await queryInterface.addIndex(table, fields, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddConstraint(queryInterface, table, options) {
+  try {
+    await queryInterface.addConstraint(table, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── Companies ──
-    await queryInterface.createTable('Companies', {
+    await safeCreateTable(queryInterface,'Companies', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -194,7 +222,7 @@ module.exports = {
     });
 
     // ── Modules ──
-    await queryInterface.createTable('Modules', {
+    await safeCreateTable(queryInterface,'Modules', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -215,7 +243,7 @@ module.exports = {
     });
 
     // ── Roles ── (createdBy/updatedBy FKs added after User table)
-    await queryInterface.createTable('Roles', {
+    await safeCreateTable(queryInterface,'Roles', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -252,7 +280,7 @@ module.exports = {
     });
 
     // ── User ──
-    await queryInterface.createTable('User', {
+    await safeCreateTable(queryInterface,'User', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -335,7 +363,7 @@ module.exports = {
     });
 
     // ── Deferred FKs: Roles.createdBy / updatedBy → User.id ──
-    await queryInterface.addConstraint('Roles', {
+    await safeAddConstraint(queryInterface,'Roles', {
       fields: ['createdBy'],
       type: 'foreign key',
       name: 'fk_roles_created_by_user',
@@ -347,7 +375,7 @@ module.exports = {
       onDelete: 'SET NULL',
     });
 
-    await queryInterface.addConstraint('Roles', {
+    await safeAddConstraint(queryInterface,'Roles', {
       fields: ['updatedBy'],
       type: 'foreign key',
       name: 'fk_roles_updated_by_user',
@@ -360,7 +388,7 @@ module.exports = {
     });
 
     // ── authTokens ──
-    await queryInterface.createTable('authTokens', {
+    await safeCreateTable(queryInterface,'authTokens', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -395,7 +423,7 @@ module.exports = {
     });
 
     // ── Otps ──
-    await queryInterface.createTable('Otps', {
+    await safeCreateTable(queryInterface,'Otps', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -426,7 +454,7 @@ module.exports = {
     });
 
     // ── RolePermissions ──
-    await queryInterface.createTable('RolePermissions', {
+    await safeCreateTable(queryInterface,'RolePermissions', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -463,7 +491,7 @@ module.exports = {
     });
 
     // ── UserActions ──
-    await queryInterface.createTable('UserActions', {
+    await safeCreateTable(queryInterface,'UserActions', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -494,7 +522,7 @@ module.exports = {
     });
 
     // ── Addresses ──
-    await queryInterface.createTable('Addresses', {
+    await safeCreateTable(queryInterface,'Addresses', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -549,8 +577,8 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('Addresses', ['companyId']);
-    await queryInterface.addIndex('Addresses', ['companyId', 'isDefault']);
+    await safeAddIndex(queryInterface, 'Addresses', ['companyId']);
+    await safeAddIndex(queryInterface, 'Addresses', ['companyId', 'isDefault']);
   },
 
   async down(queryInterface) {

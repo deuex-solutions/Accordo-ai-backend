@@ -1,8 +1,27 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddIndex(queryInterface, table, fields, options) {
+  try {
+    await queryInterface.addIndex(table, fields, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── negotiation_patterns ──
-    await queryInterface.createTable('negotiation_patterns', {
+    await safeCreateTable(queryInterface,'negotiation_patterns', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -95,14 +114,14 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('negotiation_patterns', ['pattern_type'], { name: 'idx_negotiation_patterns_type' });
-    await queryInterface.addIndex('negotiation_patterns', ['scenario'], { name: 'idx_negotiation_patterns_scenario' });
-    await queryInterface.addIndex('negotiation_patterns', ['success_rate'], { name: 'idx_negotiation_patterns_success_rate' });
-    await queryInterface.addIndex('negotiation_patterns', ['is_active'], { name: 'idx_negotiation_patterns_active' });
-    await queryInterface.addIndex('negotiation_patterns', ['created_at'], { name: 'idx_negotiation_patterns_created_at' });
+    await safeAddIndex(queryInterface,'negotiation_patterns', ['pattern_type'], { name: 'idx_negotiation_patterns_type' });
+    await safeAddIndex(queryInterface,'negotiation_patterns', ['scenario'], { name: 'idx_negotiation_patterns_scenario' });
+    await safeAddIndex(queryInterface,'negotiation_patterns', ['success_rate'], { name: 'idx_negotiation_patterns_success_rate' });
+    await safeAddIndex(queryInterface,'negotiation_patterns', ['is_active'], { name: 'idx_negotiation_patterns_active' });
+    await safeAddIndex(queryInterface,'negotiation_patterns', ['created_at'], { name: 'idx_negotiation_patterns_created_at' });
 
     // ── vector_migration_status ──
-    await queryInterface.createTable('vector_migration_status', {
+    await safeCreateTable(queryInterface,'vector_migration_status', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -191,12 +210,12 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vector_migration_status', ['migration_type'], { name: 'idx_vector_migration_type' });
-    await queryInterface.addIndex('vector_migration_status', ['status'], { name: 'idx_vector_migration_status' });
-    await queryInterface.addIndex('vector_migration_status', ['created_at'], { name: 'idx_vector_migration_created_at' });
+    await safeAddIndex(queryInterface,'vector_migration_status', ['migration_type'], { name: 'idx_vector_migration_type' });
+    await safeAddIndex(queryInterface,'vector_migration_status', ['status'], { name: 'idx_vector_migration_status' });
+    await safeAddIndex(queryInterface,'vector_migration_status', ['created_at'], { name: 'idx_vector_migration_created_at' });
 
     // ── ApiUsageLogs ──
-    await queryInterface.createTable('ApiUsageLogs', {
+    await safeCreateTable(queryInterface,'ApiUsageLogs', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -240,13 +259,13 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('ApiUsageLogs', ['provider']);
-    await queryInterface.addIndex('ApiUsageLogs', ['createdAt']);
-    await queryInterface.addIndex('ApiUsageLogs', ['dealId']);
-    await queryInterface.addIndex('ApiUsageLogs', ['userId']);
+    await safeAddIndex(queryInterface,'ApiUsageLogs', ['provider']);
+    await safeAddIndex(queryInterface,'ApiUsageLogs', ['createdAt']);
+    await safeAddIndex(queryInterface,'ApiUsageLogs', ['dealId']);
+    await safeAddIndex(queryInterface,'ApiUsageLogs', ['userId']);
 
     // ── Negotiations ──
-    await queryInterface.createTable('Negotiations', {
+    await safeCreateTable(queryInterface,'Negotiations', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -299,7 +318,7 @@ module.exports = {
     });
 
     // ── NegotiationRounds ──
-    await queryInterface.createTable('NegotiationRounds', {
+    await safeCreateTable(queryInterface,'NegotiationRounds', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -339,7 +358,7 @@ module.exports = {
     });
 
     // ── ChatSessions ──
-    await queryInterface.createTable('ChatSessions', {
+    await safeCreateTable(queryInterface,'ChatSessions', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -387,7 +406,7 @@ module.exports = {
     });
 
     // ── negotiation_training_data ──
-    await queryInterface.createTable('negotiation_training_data', {
+    await safeCreateTable(queryInterface,'negotiation_training_data', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -458,7 +477,7 @@ module.exports = {
     });
 
     // ── deal_embeddings ──
-    await queryInterface.createTable('deal_embeddings', {
+    await safeCreateTable(queryInterface,'deal_embeddings', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -576,15 +595,15 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('deal_embeddings', ['deal_id'], { name: 'idx_deal_embeddings_deal_id' });
-    await queryInterface.addIndex('deal_embeddings', ['embedding_type'], { name: 'idx_deal_embeddings_type' });
-    await queryInterface.addIndex('deal_embeddings', ['final_status'], { name: 'idx_deal_embeddings_status' });
-    await queryInterface.addIndex('deal_embeddings', ['final_utility'], { name: 'idx_deal_embeddings_utility' });
-    await queryInterface.addIndex('deal_embeddings', ['product_category'], { name: 'idx_deal_embeddings_category' });
-    await queryInterface.addIndex('deal_embeddings', ['created_at'], { name: 'idx_deal_embeddings_created_at' });
+    await safeAddIndex(queryInterface,'deal_embeddings', ['deal_id'], { name: 'idx_deal_embeddings_deal_id' });
+    await safeAddIndex(queryInterface,'deal_embeddings', ['embedding_type'], { name: 'idx_deal_embeddings_type' });
+    await safeAddIndex(queryInterface,'deal_embeddings', ['final_status'], { name: 'idx_deal_embeddings_status' });
+    await safeAddIndex(queryInterface,'deal_embeddings', ['final_utility'], { name: 'idx_deal_embeddings_utility' });
+    await safeAddIndex(queryInterface,'deal_embeddings', ['product_category'], { name: 'idx_deal_embeddings_category' });
+    await safeAddIndex(queryInterface,'deal_embeddings', ['created_at'], { name: 'idx_deal_embeddings_created_at' });
 
     // ── message_embeddings ──
-    await queryInterface.createTable('message_embeddings', {
+    await safeCreateTable(queryInterface,'message_embeddings', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -693,12 +712,12 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('message_embeddings', ['deal_id'], { name: 'idx_message_embeddings_deal_id' });
-    await queryInterface.addIndex('message_embeddings', ['message_id'], { name: 'idx_message_embeddings_message_id' });
-    await queryInterface.addIndex('message_embeddings', ['role'], { name: 'idx_message_embeddings_role' });
-    await queryInterface.addIndex('message_embeddings', ['outcome'], { name: 'idx_message_embeddings_outcome' });
-    await queryInterface.addIndex('message_embeddings', ['content_type'], { name: 'idx_message_embeddings_content_type' });
-    await queryInterface.addIndex('message_embeddings', ['created_at'], { name: 'idx_message_embeddings_created_at' });
+    await safeAddIndex(queryInterface,'message_embeddings', ['deal_id'], { name: 'idx_message_embeddings_deal_id' });
+    await safeAddIndex(queryInterface,'message_embeddings', ['message_id'], { name: 'idx_message_embeddings_message_id' });
+    await safeAddIndex(queryInterface,'message_embeddings', ['role'], { name: 'idx_message_embeddings_role' });
+    await safeAddIndex(queryInterface,'message_embeddings', ['outcome'], { name: 'idx_message_embeddings_outcome' });
+    await safeAddIndex(queryInterface,'message_embeddings', ['content_type'], { name: 'idx_message_embeddings_content_type' });
+    await safeAddIndex(queryInterface,'message_embeddings', ['created_at'], { name: 'idx_message_embeddings_created_at' });
   },
 
   async down(queryInterface) {

@@ -1,8 +1,27 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddIndex(queryInterface, table, fields, options) {
+  try {
+    await queryInterface.addIndex(table, fields, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── chatbot_templates ──
-    await queryInterface.createTable('chatbot_templates', {
+    await safeCreateTable(queryInterface,'chatbot_templates', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -37,7 +56,7 @@ module.exports = {
     });
 
     // ── Preferences ──
-    await queryInterface.createTable('Preferences', {
+    await safeCreateTable(queryInterface,'Preferences', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -76,7 +95,7 @@ module.exports = {
     });
 
     // ── chatbot_template_parameters ──
-    await queryInterface.createTable('chatbot_template_parameters', {
+    await safeCreateTable(queryInterface,'chatbot_template_parameters', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -129,7 +148,7 @@ module.exports = {
     });
 
     // ── chatbot_deals ──
-    await queryInterface.createTable('chatbot_deals', {
+    await safeCreateTable(queryInterface,'chatbot_deals', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -266,7 +285,7 @@ module.exports = {
     });
 
     // ── chatbot_messages ──
-    await queryInterface.createTable('chatbot_messages', {
+    await safeCreateTable(queryInterface,'chatbot_messages', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -327,7 +346,7 @@ module.exports = {
     });
 
     // ── meso_rounds ──
-    await queryInterface.createTable('meso_rounds', {
+    await safeCreateTable(queryInterface,'meso_rounds', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -401,25 +420,25 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('meso_rounds', ['deal_id'], {
+    await safeAddIndex(queryInterface,'meso_rounds', ['deal_id'], {
       name: 'idx_meso_rounds_deal_id',
     });
-    await queryInterface.addIndex('meso_rounds', ['round'], {
+    await safeAddIndex(queryInterface,'meso_rounds', ['round'], {
       name: 'idx_meso_rounds_round',
     });
-    await queryInterface.addIndex('meso_rounds', ['deal_id', 'round'], {
+    await safeAddIndex(queryInterface,'meso_rounds', ['deal_id', 'round'], {
       name: 'idx_meso_rounds_deal_round',
       unique: true,
     });
-    await queryInterface.addIndex('meso_rounds', ['selected_option_id'], {
+    await safeAddIndex(queryInterface,'meso_rounds', ['selected_option_id'], {
       name: 'idx_meso_rounds_selected_option',
     });
-    await queryInterface.addIndex('meso_rounds', ['created_at'], {
+    await safeAddIndex(queryInterface,'meso_rounds', ['created_at'], {
       name: 'idx_meso_rounds_created_at',
     });
 
     // ── vendor_negotiation_profiles ──
-    await queryInterface.createTable('vendor_negotiation_profiles', {
+    await safeCreateTable(queryInterface,'vendor_negotiation_profiles', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -544,20 +563,20 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['vendor_id'], {
+    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['vendor_id'], {
       name: 'idx_vendor_negotiation_profiles_vendor_id',
       unique: true,
     });
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['negotiation_style'], {
+    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['negotiation_style'], {
       name: 'idx_vendor_negotiation_profiles_style',
     });
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['success_rate'], {
+    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['success_rate'], {
       name: 'idx_vendor_negotiation_profiles_success_rate',
     });
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['total_deals'], {
+    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['total_deals'], {
       name: 'idx_vendor_negotiation_profiles_total_deals',
     });
-    await queryInterface.addIndex('vendor_negotiation_profiles', ['last_deal_at'], {
+    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['last_deal_at'], {
       name: 'idx_vendor_negotiation_profiles_last_deal',
     });
   },

@@ -1,8 +1,27 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddIndex(queryInterface, table, fields, options) {
+  try {
+    await queryInterface.addIndex(table, fields, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── vendor_bids ──
-    await queryInterface.createTable('vendor_bids', {
+    await safeCreateTable(queryInterface,'vendor_bids', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -105,15 +124,15 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_bids', ['requisition_id']);
-    await queryInterface.addIndex('vendor_bids', ['vendor_id']);
-    await queryInterface.addIndex('vendor_bids', ['bid_status']);
-    await queryInterface.addIndex('vendor_bids', ['final_price']);
-    await queryInterface.addIndex('vendor_bids', ['deal_id']);
-    await queryInterface.addIndex('vendor_bids', ['contract_id']);
+    await safeAddIndex(queryInterface,'vendor_bids', ['requisition_id']);
+    await safeAddIndex(queryInterface,'vendor_bids', ['vendor_id']);
+    await safeAddIndex(queryInterface,'vendor_bids', ['bid_status']);
+    await safeAddIndex(queryInterface,'vendor_bids', ['final_price']);
+    await safeAddIndex(queryInterface,'vendor_bids', ['deal_id']);
+    await safeAddIndex(queryInterface,'vendor_bids', ['contract_id']);
 
     // ── bid_comparisons ──
-    await queryInterface.createTable('bid_comparisons', {
+    await safeCreateTable(queryInterface,'bid_comparisons', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -200,13 +219,13 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('bid_comparisons', ['requisition_id']);
-    await queryInterface.addIndex('bid_comparisons', ['triggered_by']);
-    await queryInterface.addIndex('bid_comparisons', ['generated_at']);
-    await queryInterface.addIndex('bid_comparisons', ['email_status']);
+    await safeAddIndex(queryInterface,'bid_comparisons', ['requisition_id']);
+    await safeAddIndex(queryInterface,'bid_comparisons', ['triggered_by']);
+    await safeAddIndex(queryInterface,'bid_comparisons', ['generated_at']);
+    await safeAddIndex(queryInterface,'bid_comparisons', ['email_status']);
 
     // ── bid_action_histories ──
-    await queryInterface.createTable('bid_action_histories', {
+    await safeCreateTable(queryInterface,'bid_action_histories', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -274,15 +293,15 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('bid_action_histories', ['requisition_id']);
-    await queryInterface.addIndex('bid_action_histories', ['bid_id']);
-    await queryInterface.addIndex('bid_action_histories', ['deal_id']);
-    await queryInterface.addIndex('bid_action_histories', ['user_id']);
-    await queryInterface.addIndex('bid_action_histories', ['action']);
-    await queryInterface.addIndex('bid_action_histories', ['created_at']);
+    await safeAddIndex(queryInterface,'bid_action_histories', ['requisition_id']);
+    await safeAddIndex(queryInterface,'bid_action_histories', ['bid_id']);
+    await safeAddIndex(queryInterface,'bid_action_histories', ['deal_id']);
+    await safeAddIndex(queryInterface,'bid_action_histories', ['user_id']);
+    await safeAddIndex(queryInterface,'bid_action_histories', ['action']);
+    await safeAddIndex(queryInterface,'bid_action_histories', ['created_at']);
 
     // ── vendor_selections ──
-    await queryInterface.createTable('vendor_selections', {
+    await safeCreateTable(queryInterface,'vendor_selections', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -372,13 +391,13 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_selections', ['requisition_id']);
-    await queryInterface.addIndex('vendor_selections', ['selected_vendor_id']);
-    await queryInterface.addIndex('vendor_selections', ['selected_by_user_id']);
-    await queryInterface.addIndex('vendor_selections', ['selected_at']);
+    await safeAddIndex(queryInterface,'vendor_selections', ['requisition_id']);
+    await safeAddIndex(queryInterface,'vendor_selections', ['selected_vendor_id']);
+    await safeAddIndex(queryInterface,'vendor_selections', ['selected_by_user_id']);
+    await safeAddIndex(queryInterface,'vendor_selections', ['selected_at']);
 
     // ── vendor_notifications ──
-    await queryInterface.createTable('vendor_notifications', {
+    await safeCreateTable(queryInterface,'vendor_notifications', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -444,10 +463,10 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('vendor_notifications', ['selection_id']);
-    await queryInterface.addIndex('vendor_notifications', ['vendor_id']);
-    await queryInterface.addIndex('vendor_notifications', ['notification_type']);
-    await queryInterface.addIndex('vendor_notifications', ['email_status']);
+    await safeAddIndex(queryInterface,'vendor_notifications', ['selection_id']);
+    await safeAddIndex(queryInterface,'vendor_notifications', ['vendor_id']);
+    await safeAddIndex(queryInterface,'vendor_notifications', ['notification_type']);
+    await safeAddIndex(queryInterface,'vendor_notifications', ['email_status']);
   },
 
   async down(queryInterface) {

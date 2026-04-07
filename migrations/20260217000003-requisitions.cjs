@@ -1,8 +1,27 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddIndex(queryInterface, table, fields, options) {
+  try {
+    await queryInterface.addIndex(table, fields, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── Requisitions ──
-    await queryInterface.createTable('Requisitions', {
+    await safeCreateTable(queryInterface,'Requisitions', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -165,7 +184,7 @@ module.exports = {
     });
 
     // ── RequisitionProducts ──
-    await queryInterface.createTable('RequisitionProducts', {
+    await safeCreateTable(queryInterface,'RequisitionProducts', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -214,7 +233,7 @@ module.exports = {
     });
 
     // ── RequisitionAttachments ──
-    await queryInterface.createTable('RequisitionAttachments', {
+    await safeCreateTable(queryInterface,'RequisitionAttachments', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -252,7 +271,7 @@ module.exports = {
 
     // ── Approvals ──
     // NOTE: emailLogId FK to EmailLogs is added in the indexes-and-constraints migration
-    await queryInterface.createTable('Approvals', {
+    await safeCreateTable(queryInterface,'Approvals', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -349,12 +368,12 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('Approvals', ['requisitionId'], { name: 'idx_approvals_requisition_id' });
-    await queryInterface.addIndex('Approvals', ['assignedToUserId'], { name: 'idx_approvals_assigned_to_user_id' });
-    await queryInterface.addIndex('Approvals', ['status'], { name: 'idx_approvals_status' });
-    await queryInterface.addIndex('Approvals', ['approvalLevel'], { name: 'idx_approvals_approval_level' });
-    await queryInterface.addIndex('Approvals', ['dueDate'], { name: 'idx_approvals_due_date' });
-    await queryInterface.addIndex('Approvals', ['requisitionId', 'approvalLevel'], { name: 'idx_approvals_requisition_level' });
+    await safeAddIndex(queryInterface,'Approvals', ['requisitionId'], { name: 'idx_approvals_requisition_id' });
+    await safeAddIndex(queryInterface,'Approvals', ['assignedToUserId'], { name: 'idx_approvals_assigned_to_user_id' });
+    await safeAddIndex(queryInterface,'Approvals', ['status'], { name: 'idx_approvals_status' });
+    await safeAddIndex(queryInterface,'Approvals', ['approvalLevel'], { name: 'idx_approvals_approval_level' });
+    await safeAddIndex(queryInterface,'Approvals', ['dueDate'], { name: 'idx_approvals_due_date' });
+    await safeAddIndex(queryInterface,'Approvals', ['requisitionId', 'approvalLevel'], { name: 'idx_approvals_requisition_level' });
   },
 
   async down(queryInterface) {

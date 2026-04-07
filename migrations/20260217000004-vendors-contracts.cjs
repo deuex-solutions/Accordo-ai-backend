@@ -1,8 +1,27 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
+async function safeAddIndex(queryInterface, table, fields, options) {
+  try {
+    await queryInterface.addIndex(table, fields, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── VendorCompanies ──
-    await queryInterface.createTable('VendorCompanies', {
+    await safeCreateTable(queryInterface,'VendorCompanies', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -35,7 +54,7 @@ module.exports = {
     });
 
     // ── Contracts ──
-    await queryInterface.createTable('Contracts', {
+    await safeCreateTable(queryInterface,'Contracts', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -147,7 +166,7 @@ module.exports = {
     });
 
     // ── Pos ──
-    await queryInterface.createTable('Pos', {
+    await safeCreateTable(queryInterface,'Pos', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -246,7 +265,7 @@ module.exports = {
     });
 
     // ── EmailLogs ──
-    await queryInterface.createTable('EmailLogs', {
+    await safeCreateTable(queryInterface,'EmailLogs', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -319,12 +338,12 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('EmailLogs', ['recipientEmail']);
-    await queryInterface.addIndex('EmailLogs', ['status']);
-    await queryInterface.addIndex('EmailLogs', ['emailType']);
-    await queryInterface.addIndex('EmailLogs', ['contractId']);
-    await queryInterface.addIndex('EmailLogs', ['requisitionId']);
-    await queryInterface.addIndex('EmailLogs', ['createdAt']);
+    await safeAddIndex(queryInterface,'EmailLogs', ['recipientEmail']);
+    await safeAddIndex(queryInterface,'EmailLogs', ['status']);
+    await safeAddIndex(queryInterface,'EmailLogs', ['emailType']);
+    await safeAddIndex(queryInterface,'EmailLogs', ['contractId']);
+    await safeAddIndex(queryInterface,'EmailLogs', ['requisitionId']);
+    await safeAddIndex(queryInterface,'EmailLogs', ['createdAt']);
   },
 
   async down(queryInterface) {
