@@ -25,6 +25,27 @@ import type {
   NegotiationPhase,
 } from './types.js';
 import { calculateWeightedUtilityFromResolved } from './weightedUtility.js';
+import { formatCurrency, type SupportedCurrency } from '../../../services/currency.service.js';
+
+// ============================================
+// Currency helpers
+// ============================================
+
+/** Default currency used when a deal does not specify one. */
+const DEFAULT_CURRENCY: SupportedCurrency = 'USD';
+
+/**
+ * Format a price for inclusion in a MESO option description or tradeoff.
+ * Uses the deal's currency (from NegotiationConfig.currency) so every
+ * MESO card stays consistent with the requisition and chat.
+ */
+function formatMesoPrice(
+  amount: number | null | undefined,
+  currency: SupportedCurrency
+): string {
+  if (amount == null) return 'N/A';
+  return formatCurrency(amount, currency);
+}
 
 // ============================================
 // VENDOR PREFERENCE PROFILE (Learning-Based MESO)
@@ -157,6 +178,12 @@ export interface MesoResult {
   success: boolean;
   /** Reason for failure if not successful */
   reason?: string;
+  /**
+   * Currency for all options (from the deal's NegotiationConfig).
+   * The frontend uses this to format the numeric Price field on every card,
+   * and the backend uses it to build `description` and `tradeoffs` strings.
+   */
+  currency: SupportedCurrency;
 
   // Flow control flags (February 2026 - MESO + Others flow)
   /** Whether to show "Others" button (false for final MESO) */
@@ -227,7 +254,8 @@ export function generateMesoOptions(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  targetUtility: number = 0.65
+  targetUtility: number = 0.65,
+  currency: SupportedCurrency = DEFAULT_CURRENCY
 ): MesoResult {
   const options: MesoOption[] = [];
   const variance_target = 0.02; // 2% variance
@@ -246,7 +274,7 @@ export function generateMesoOptions(
       offer: offer1,
       utility: offer1Utility.totalUtility,
       label: 'Offer 1',
-      description: `Best price ($${offer1.total_price?.toLocaleString()}) with fast ${offer1.delivery_days}-day delivery`,
+      description: `Best price (${formatMesoPrice(offer1.total_price, currency)}) with fast ${offer1.delivery_days}-day delivery`,
       emphasis: ['price', 'delivery'],
       tradeoffs: [`${offer1.warranty_months || 0} months warranty`, `Net ${offer1.payment_terms_days} payment`],
     });
@@ -266,7 +294,7 @@ export function generateMesoOptions(
       label: 'Offer 2',
       description: `Extended Net ${offer2.payment_terms_days} payment terms with ${offer2.warranty_months} months warranty`,
       emphasis: ['payment_terms'],
-      tradeoffs: [`$${offer2.total_price?.toLocaleString()} price`, `${offer2.delivery_days}-day delivery`],
+      tradeoffs: [`${formatMesoPrice(offer2.total_price, currency)} price`, `${offer2.delivery_days}-day delivery`],
     });
 
     // ============================================
@@ -284,7 +312,7 @@ export function generateMesoOptions(
       label: 'Offer 3',
       description: `Fast ${offer3.delivery_days}-day delivery with extended ${offer3.warranty_months} months warranty`,
       emphasis: ['delivery', 'warranty'],
-      tradeoffs: [`$${offer3.total_price?.toLocaleString()} price`, `Net ${offer3.payment_terms_days} payment`],
+      tradeoffs: [`${formatMesoPrice(offer3.total_price, currency)} price`, `Net ${offer3.payment_terms_days} payment`],
     });
 
     // ============================================
@@ -311,6 +339,7 @@ export function generateMesoOptions(
       targetUtility: finalAvg,
       variance: finalVariance,
       success: true,
+      currency,
       // Flow control flags for phased negotiation
       showOthers: true,
       isFinal: false,
@@ -325,6 +354,7 @@ export function generateMesoOptions(
       variance: 0,
       success: false,
       reason: error instanceof Error ? error.message : 'Unknown error generating MESO options',
+      currency,
       // Default flow control flags for failed generation
       showOthers: false,
       isFinal: false,
@@ -777,7 +807,8 @@ export function generateDynamicMesoOptions(
   round: number,
   negotiationState: NegotiationState | null,
   previousMeso: PreviousMesoRound | null = null,
-  targetUtility: number = 0.65
+  targetUtility: number = 0.65,
+  currency: SupportedCurrency = DEFAULT_CURRENCY
 ): MesoResult {
   const options: MesoOption[] = [];
   const variance_target = 0.03; // 3% variance for dynamic MESO
@@ -892,6 +923,7 @@ export function generateDynamicMesoOptions(
       targetUtility: finalAvg,
       variance: finalVariance,
       success: true,
+      currency,
       // Flow control flags for phased negotiation
       showOthers: true,
       isFinal: false,
@@ -906,6 +938,7 @@ export function generateDynamicMesoOptions(
       variance: 0,
       success: false,
       reason: error instanceof Error ? error.message : 'Unknown error generating dynamic MESO options',
+      currency,
       // Default flow control flags for failed generation
       showOthers: false,
       isFinal: false,
@@ -1120,7 +1153,8 @@ export function generateFinalMesoOptions(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  currentUtility: number
+  currentUtility: number,
+  currency: SupportedCurrency = DEFAULT_CURRENCY
 ): MesoResult {
   const options: MesoOption[] = [];
 
@@ -1158,7 +1192,7 @@ export function generateFinalMesoOptions(
       offer: finalOffer1,
       utility: finalUtility1.totalUtility,
       label: 'Offer 1',
-      description: `Best price ($${finalOffer1.total_price?.toLocaleString()}) with ${bestDelivery}-day delivery`,
+      description: `Best price (${formatMesoPrice(finalOffer1.total_price, currency)}) with ${bestDelivery}-day delivery`,
       emphasis: ['price', 'delivery'],
       tradeoffs: [`${minWarranty} months warranty`, `Net ${mediumTerms} payment`],
     });
@@ -1189,7 +1223,7 @@ export function generateFinalMesoOptions(
       label: 'Offer 2',
       description: `Extended Net ${bestTerms} payment terms with ${standardWarranty} months warranty`,
       emphasis: ['payment_terms'],
-      tradeoffs: [`$${finalOffer2.total_price?.toLocaleString()} price`, `${mediumDelivery}-day delivery`],
+      tradeoffs: [`${formatMesoPrice(finalOffer2.total_price, currency)} price`, `${mediumDelivery}-day delivery`],
     });
 
     // ============================================
@@ -1216,7 +1250,7 @@ export function generateFinalMesoOptions(
       label: 'Offer 3',
       description: `Fast ${bestDelivery}-day delivery with extended ${extendedWarranty} months warranty`,
       emphasis: ['delivery', 'warranty'],
-      tradeoffs: [`$${finalOffer3.total_price?.toLocaleString()} price`, `Net ${mediumTerms} payment`],
+      tradeoffs: [`${formatMesoPrice(finalOffer3.total_price, currency)} price`, `Net ${mediumTerms} payment`],
     });
 
     // Calculate final variance
@@ -1229,6 +1263,7 @@ export function generateFinalMesoOptions(
       targetUtility: avgUtility,
       variance: finalVariance,
       success: true,
+      currency,
       // Flow control flags for FINAL MESO (no Others option)
       showOthers: false,
       isFinal: true,
@@ -1243,6 +1278,7 @@ export function generateFinalMesoOptions(
       variance: 0,
       success: false,
       reason: error instanceof Error ? error.message : 'Unknown error generating final MESO options',
+      currency,
       // Default flow control flags for failed generation
       showOthers: false,
       isFinal: false,
@@ -1387,7 +1423,8 @@ export function checkEscalationTriggers(
 export function generateMesoFromVendorPrice(
   config: ResolvedNegotiationConfig,
   vendorPrice: number,
-  round: number
+  round: number,
+  currency: SupportedCurrency = DEFAULT_CURRENCY
 ): MesoResult {
   const { maxAcceptablePrice, targetPrice } = config;
 
@@ -1426,7 +1463,7 @@ export function generateMesoFromVendorPrice(
       },
       utility: 0.8,
       label: 'Offer 1',
-      description: `Best price ($${Math.max(targetPrice, offer1Price).toLocaleString()}) with ${bestDelivery}-day delivery`,
+      description: `Best price (${formatMesoPrice(Math.max(targetPrice, offer1Price), currency)}) with ${bestDelivery}-day delivery`,
       emphasis: ['price', 'delivery'],
       tradeoffs: [`${minWarranty} months warranty`, `Net ${mediumTerms} payment`],
     },
@@ -1443,7 +1480,7 @@ export function generateMesoFromVendorPrice(
       label: 'Offer 2',
       description: `Extended Net ${bestTerms} payment terms with ${standardWarranty} months warranty`,
       emphasis: ['payment_terms'],
-      tradeoffs: [`$${offer2Price.toLocaleString()} price`, `${mediumDelivery}-day delivery`],
+      tradeoffs: [`${formatMesoPrice(offer2Price, currency)} price`, `${mediumDelivery}-day delivery`],
     },
     {
       id: `meso_${round}_vendorprice3`,
@@ -1458,7 +1495,7 @@ export function generateMesoFromVendorPrice(
       label: 'Offer 3',
       description: `Fast ${bestDelivery}-day delivery with extended ${extendedWarranty} months warranty`,
       emphasis: ['delivery', 'warranty'],
-      tradeoffs: [`$${Math.min(offer3Price, maxAcceptablePrice).toLocaleString()} price`, `Net ${mediumTerms} payment`],
+      tradeoffs: [`${formatMesoPrice(Math.min(offer3Price, maxAcceptablePrice), currency)} price`, `Net ${mediumTerms} payment`],
     },
   ];
 
@@ -1467,6 +1504,7 @@ export function generateMesoFromVendorPrice(
     targetUtility: 0.8,
     variance: 0.02,
     success: true,
+    currency,
     showOthers: false, // Final MESO - no Others option
     isFinal: true,
     inputDisabled: true,

@@ -8,6 +8,7 @@ import type { Requisition } from '../models/requisition.js';
 import type { VendorCompany } from '../models/vendorCompany.js';
 import type { Product } from '../models/product.js';
 import type { EmailType, EmailStatus, EmailMetadata } from '../models/emailLog.js';
+import { formatCurrency, type SupportedCurrency } from './currency.service.js';
 
 const { smtp } = env;
 
@@ -2110,21 +2111,39 @@ const generatePMQuoteNotificationEmailHTML = (
   },
   quoteDetails: VendorQuoteDetails,
   portalLink: string,
-  chatLink: string
+  chatLink: string,
+  currency: SupportedCurrency = 'USD'
 ): string => {
+  let totalQuantity = 0;
+  let grandTotal = 0;
   const productsHTML = quoteDetails.products
     .map((p) => {
-      const price = typeof p.quotedPrice === 'number' ? p.quotedPrice : parseFloat(p.quotedPrice as string) || 0;
+      const unitPrice = typeof p.quotedPrice === 'number' ? p.quotedPrice : parseFloat(p.quotedPrice as string) || 0;
+      const quantity = Number(p.quantity) || 0;
+      const lineTotal = unitPrice * quantity;
+      totalQuantity += quantity;
+      grandTotal += lineTotal;
       return `
       <tr>
         <td style="padding: 8px; border: 1px solid #ddd;">${p.productName}</td>
-        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${p.quantity}</td>
-        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${price.toFixed(2)}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${quantity}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${formatCurrency(unitPrice, currency)}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${formatCurrency(lineTotal, currency)}</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${p.deliveryDate || 'Not specified'}</td>
       </tr>
     `;
     })
     .join('');
+
+  const totalsRowHTML = `
+    <tr style="background-color: #f1f5f9; font-weight: bold;">
+      <td style="padding: 8px; border: 1px solid #ddd;">Total</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${totalQuantity}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; color: #6b7280;">—</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${formatCurrency(grandTotal, currency)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #6b7280;">—</td>
+    </tr>
+  `;
 
   const terms = quoteDetails.additionalTerms;
   let paymentTermsText = 'Not specified';
@@ -2160,13 +2179,17 @@ const generatePMQuoteNotificationEmailHTML = (
               <tr style="background-color: #f8f9fa;">
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Product</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Quantity</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Quoted Price</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Quoted Price Per Unit</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Line Total</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Delivery Date</th>
               </tr>
             </thead>
             <tbody>
               ${productsHTML}
             </tbody>
+            <tfoot>
+              ${totalsRowHTML}
+            </tfoot>
           </table>
 
           <h3 style="color: #333; margin-top: 20px;">Payment Terms</h3>
@@ -2201,14 +2224,22 @@ const generatePMQuoteNotificationEmailText = (
   },
   quoteDetails: VendorQuoteDetails,
   portalLink: string,
-  chatLink: string
+  chatLink: string,
+  currency: SupportedCurrency = 'USD'
 ): string => {
+  let totalQuantity = 0;
+  let grandTotal = 0;
   const productsText = quoteDetails.products
     .map((p) => {
-      const price = typeof p.quotedPrice === 'number' ? p.quotedPrice : parseFloat(p.quotedPrice as string) || 0;
-      return `  - ${p.productName}: Qty ${p.quantity}, $${price.toFixed(2)}, Delivery: ${p.deliveryDate || 'Not specified'}`;
+      const unitPrice = typeof p.quotedPrice === 'number' ? p.quotedPrice : parseFloat(p.quotedPrice as string) || 0;
+      const quantity = Number(p.quantity) || 0;
+      const lineTotal = unitPrice * quantity;
+      totalQuantity += quantity;
+      grandTotal += lineTotal;
+      return `  - ${p.productName}: Qty ${quantity}, Unit Price ${formatCurrency(unitPrice, currency)}, Line Total ${formatCurrency(lineTotal, currency)}, Delivery: ${p.deliveryDate || 'Not specified'}`;
     })
     .join('\n');
+  const totalsText = `\n  Total: Qty ${totalQuantity}, Grand Total ${formatCurrency(grandTotal, currency)}`;
 
   const terms = quoteDetails.additionalTerms;
   let paymentTermsText = 'Not specified';
@@ -2232,6 +2263,7 @@ Requisition Details:
 
 Quoted Products:
 ${productsText}
+${totalsText}
 
 Payment Terms: ${paymentTermsText}
 ${terms?.additionalNotes ? `Additional Notes: ${terms.additionalNotes}` : ''}
@@ -2279,6 +2311,9 @@ export const sendPMQuoteNotificationEmail = async (
       projectName: requisition.Project?.name || 'Unknown Project',
     };
 
+    // Resolve currency from the requisition (source of truth for all monetary display)
+    const currency = (requisition.typeOfCurrency as SupportedCurrency) || 'USD';
+
     const portalLink = `${env.vendorPortalUrl}/requisition-management`;
     const chatLink = contract.chatbotDealId && requisition.id && contract.vendorId
       ? `${env.chatbotFrontendUrl}/chatbot/requisitions/${requisition.id}/vendors/${contract.vendorId}/deals/${contract.chatbotDealId}`
@@ -2294,7 +2329,8 @@ export const sendPMQuoteNotificationEmail = async (
         requisitionData,
         quoteDetails,
         portalLink,
-        chatLink
+        chatLink,
+        currency
       ),
       text: generatePMQuoteNotificationEmailText(
         pmName,
@@ -2302,7 +2338,8 @@ export const sendPMQuoteNotificationEmail = async (
         requisitionData,
         quoteDetails,
         portalLink,
-        chatLink
+        chatLink,
+        currency
       ),
     };
 

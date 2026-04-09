@@ -39,7 +39,8 @@ export async function getRequisitions(
     }
 
     const userId = req.context?.userId;
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
 
     if (!userId) {
       throw new CustomError('Authentication required', 401);
@@ -76,7 +77,8 @@ export async function getRequisitionDetail(
       throw new CustomError('Authentication required', 401);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     const result = await getRequisitionBidDetail(value.requisitionId, companyId);
 
     // Log view action
@@ -106,7 +108,8 @@ export async function getHistory(
       throw new CustomError(error.details[0].message, 400);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     const result = await getActionHistory(value.requisitionId, companyId);
 
     res.json({

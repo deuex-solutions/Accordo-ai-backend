@@ -24,7 +24,9 @@ async function validateRequisitionOwnership(requisitionId: number, companyId: nu
   if (!requisition) {
     throw new CustomError('Requisition not found', 404);
   }
-  if (companyId && (requisition as any).Project?.companyId !== companyId) {
+  // Null-tolerant: legacy projects with null companyId remain accessible.
+  const projectCompanyId = (requisition as any).Project?.companyId ?? null;
+  if (companyId && projectCompanyId !== null && projectCompanyId !== companyId) {
     throw new CustomError('Requisition not found', 404);
   }
   return requisition;
@@ -46,7 +48,8 @@ export async function getComparisonStatus(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     await validateRequisitionOwnership(reqId, companyId);
 
     // Get completion status
@@ -103,7 +106,8 @@ export async function listBids(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     await validateRequisitionOwnership(reqId, companyId);
 
     const bids = await VendorBid.findAll({
@@ -156,7 +160,8 @@ export async function getTop(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     await validateRequisitionOwnership(reqId, companyId);
 
     const result = await getTopBids(reqId, limit);
@@ -186,7 +191,8 @@ export async function downloadPDF(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     await validateRequisitionOwnership(reqId, companyId);
 
     const comparison = await BidComparison.findOne({
@@ -309,7 +315,8 @@ export async function getSelectionDetails(
       throw new CustomError('Invalid requisition ID', 400);
     }
 
-    const companyId = req.context?.companyId || null;
+    // Super admin bypasses company isolation (sees all companies).
+    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
     await validateRequisitionOwnership(reqId, companyId);
 
     const selection = await VendorSelection.findOne({

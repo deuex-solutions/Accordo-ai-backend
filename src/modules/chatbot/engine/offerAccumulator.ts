@@ -37,9 +37,26 @@ export function mergeOffers(
 ): AccumulatedOffer {
   const now = new Date();
 
-  // Start with previous accumulated values or empty state
+  // Start with previous accumulated values or empty state.
+  // Defensive: if `accumulated` is a plain Offer (no `accumulation` block)
+  // — e.g. legacy data written by an earlier code path — treat the values
+  // as-is but synthesise a fresh `accumulation` wrapper so downstream reads
+  // don't crash.
   const base: AccumulatedOffer = accumulated
-    ? { ...accumulated }
+    ? {
+        ...accumulated,
+        accumulation: accumulated.accumulation ?? {
+          priceUpdatedAt: accumulated.total_price !== null ? now : null,
+          termsUpdatedAt: accumulated.payment_terms !== null ? now : null,
+          deliveryUpdatedAt:
+            accumulated.delivery_date !== null || accumulated.delivery_days !== null
+              ? now
+              : null,
+          sourceMessageIds: [],
+          isComplete:
+            accumulated.total_price !== null && accumulated.payment_terms !== null,
+        },
+      }
     : {
         total_price: null,
         payment_terms: null,

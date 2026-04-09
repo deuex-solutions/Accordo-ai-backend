@@ -265,9 +265,12 @@ export async function getRequisitionBidDetail(
     throw new CustomError('Requisition not found', 404);
   }
 
-  // Company isolation check
-  if (companyId && (requisition as any).Project?.companyId !== companyId) {
-    throw new CustomError('Requisition not found', 404);
+  // Company isolation check — null-tolerant for legacy projects.
+  {
+    const projectCompanyId = (requisition as any).Project?.companyId ?? null;
+    if (companyId && projectCompanyId !== null && projectCompanyId !== companyId) {
+      throw new CustomError('Requisition not found', 404);
+    }
   }
 
   // Get all deals for this requisition from ChatbotDeal
@@ -429,12 +432,16 @@ export async function getActionHistory(
   requisitionId: number,
   companyId?: number | null
 ): Promise<BidActionHistoryEntry[]> {
-  // Company isolation check
+  // Company isolation check — null-tolerant for legacy projects.
   if (companyId) {
     const requisition = await Requisition.findByPk(requisitionId, {
       include: [{ model: Project, as: 'Project', attributes: ['id', 'companyId'] }],
     });
-    if (!requisition || (requisition as any).Project?.companyId !== companyId) {
+    if (!requisition) {
+      throw new CustomError('Requisition not found', 404);
+    }
+    const projectCompanyId = (requisition as any).Project?.companyId ?? null;
+    if (projectCompanyId !== null && projectCompanyId !== companyId) {
       throw new CustomError('Requisition not found', 404);
     }
   }

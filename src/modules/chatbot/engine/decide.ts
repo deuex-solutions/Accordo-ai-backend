@@ -582,6 +582,55 @@ export function decideNextMove(
     };
   }
 
+  // ============================================================================
+  // Implausible-vendor-drop sanity guard (April 2026)
+  // ============================================================================
+  // If the vendor's price drops suspiciously far (below PM's `target`, or
+  // >60% lower than their previous offer in one round), the engine should
+  // NOT silently accept. Such a drop is almost always a typo (e.g. 32000
+  // instead of 320000) or an edge case that deserves PM review. We return
+  // ASK_CLARIFY so the vendor gets a chance to confirm/correct, instead of
+  // the engine locking in an accidental give-away through either the
+  // auto-accept-vs-last-counter path OR the utility-based accept path.
+  {
+    const targetPrice = priceConfig.target;
+    const belowTarget =
+      typeof targetPrice === 'number' &&
+      vendorOffer.total_price !== null &&
+      vendorOffer.total_price < targetPrice;
+
+    // Big-jump guard — the most recent recorded price concession's
+    // `previousValue` holds the vendor's prior-round price
+    // (updateNegotiationState pushes a new record right before decide runs).
+    const priceConcessions = negotiationState?.priceConcessions ?? [];
+    const lastConcession = priceConcessions[priceConcessions.length - 1];
+    const previousVendorPrice =
+      lastConcession && typeof lastConcession.previousValue === 'number'
+        ? lastConcession.previousValue
+        : null;
+    const isBigJump =
+      typeof previousVendorPrice === 'number' &&
+      previousVendorPrice > 0 &&
+      vendorOffer.total_price !== null &&
+      vendorOffer.total_price < previousVendorPrice * 0.4;
+
+    if (belowTarget && isBigJump) {
+      // Both guards tripped simultaneously — strong signal this is a typo
+      // or a wild drop. Ask the vendor to confirm.
+      return {
+        action: 'ASK_CLARIFY',
+        utilityScore: 0,
+        counterOffer: null,
+        reasons: [
+          `Vendor price ${cs}${vendorOffer.total_price} is below target (${cs}${targetPrice}) ` +
+          `and represents a ${Math.round((1 - vendorOffer.total_price! / previousVendorPrice!) * 100)}% drop ` +
+          `from the previous offer of ${cs}${previousVendorPrice}. This looks unusually low — ` +
+          `can you please confirm the total price you're proposing?`,
+        ],
+      };
+    }
+  }
+
   // Auto-accept: if vendor's offer meets or beats PM's last counter, accept immediately
   // e.g., PM countered at $309,000 Net 60 and vendor offers $305,800 Net 60 → accept
   if (previousPmOffer && vendorOffer.total_price !== null) {

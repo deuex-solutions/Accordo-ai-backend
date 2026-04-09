@@ -1935,6 +1935,113 @@ export const generatePMResponseAsyncService = async (
       }
     }
 
+    // ========================================================================
+    // FEATURE 2 — Payment-terms prompt interception
+    // ========================================================================
+    // If the vendor's LATEST message contained a price but no payment terms,
+    // AND we are NOT currently inside a MESO presentation cycle, AND the
+    // initial-discount flow has already been resolved (so we don't fight with
+    // Feature 1), bypass the engine for this turn and return a templated
+    // "ask for payment terms" message. The frontend renders a dropdown
+    // instead of a free-text composer; the vendor's reply comes back via the
+    // dedicated /payment-terms endpoint which will then run the engine with
+    // a complete offer.
+    //
+    // IMPORTANT: we re-parse the raw message content here instead of reading
+    // `extractedOffer`, because `extractedOffer` is the result of
+    // `mergeOffers(prev, current)` and still carries forward terms from
+    // previous rounds. The client wants the prompt to fire whenever the
+    // *current* message contains only a price, regardless of whether prior
+    // rounds had terms attached.
+    {
+      const currentMsgExtraction = parseOfferWithDelivery(
+        vendorMessage.content,
+        config.currency as 'USD' | 'INR' | 'EUR' | 'GBP' | 'AUD' | undefined
+      );
+      const hasPriceInCurrentMsg =
+        currentMsgExtraction?.total_price != null &&
+        Number.isFinite(currentMsgExtraction.total_price);
+      const termsMissingInCurrentMsg =
+        currentMsgExtraction?.payment_terms == null &&
+        currentMsgExtraction?.payment_terms_days == null;
+
+      // MESO interlock — if a MESO round was shown recently we must not
+      // steal that turn with a payment-terms prompt. `mesoCycleState` is
+      // authoritative for "are we inside a MESO cycle right now".
+      const mesoState = negotiationState.mesoCycleState;
+      const inMesoCycle =
+        !!mesoState &&
+        mesoState.lastMesoShownAtRound > 0 &&
+        mesoState.lastMesoShownAtRound >= deal.round; // MESO shown this round or later
+
+      // Only trigger once the initial discount flow is settled. The flow is
+      // settled when the deal's config carries `initialDiscount`.
+      const discountSettled =
+        (deal.negotiationConfigJson as any)?.initialDiscount != null;
+
+      // Guard against re-asking: if the most recent ACCORDO message already
+      // has a pending payment_terms prompt, the frontend composer should
+      // already be in dropdown mode and the vendor should be answering via
+      // the dedicated endpoint — not this path. Skip to avoid a duplicate
+      // prompt.
+      const latestAccordoMsg = [...allMessages].reverse().find(
+        (m: ChatbotMessage) => m.role === 'ACCORDO'
+      );
+      const latestPendingPrompt = (latestAccordoMsg?.engineDecision as any)?.pendingPrompt;
+      const alreadyAsked = latestPendingPrompt?.type === 'payment_terms';
+
+      if (
+        hasPriceInCurrentMsg &&
+        termsMissingInCurrentMsg &&
+        !inMesoCycle &&
+        discountSettled &&
+        !alreadyAsked
+      ) {
+        logger.info(
+          `[PaymentTermsPrompt] Triggered for deal ${input.dealId} — ` +
+          `current msg has price but no terms, not in MESO, discount settled`
+        );
+
+        const { buildPaymentTermsPromptMessage } = await import(
+          '../vendor-chat/structuredPrompts.js'
+        );
+        const { content: promptContent, pendingPrompt } = buildPaymentTermsPromptMessage();
+
+        const promptMessage = await models.ChatbotMessage.create({
+          id: uuidv4(),
+          dealId: input.dealId,
+          role: 'ACCORDO',
+          content: promptContent,
+          extractedOffer: null,
+          engineDecision: {
+            action: 'PAYMENT_TERMS_PROMPT',
+            pendingPrompt,
+          } as any,
+          decisionAction: 'PAYMENT_TERMS_PROMPT',
+          utilityScore: null,
+          counterOffer: null,
+          explainabilityJson: null,
+          round: deal.round,
+        });
+
+        // Don't increment round, don't run engine. Return a minimal
+        // PMResponseResult-shaped object.
+        return {
+          message: promptMessage,
+          decision: {
+            action: 'ASK_CLARIFY' as any,
+            utilityScore: deal.latestUtility ?? 0,
+            counterOffer: null,
+            reasons: ['Awaiting payment terms from vendor via dropdown'],
+          },
+          explainability: {} as Explainability,
+          deal,
+          generationSource: 'fallback' as const,
+          meso: null,
+        };
+      }
+    }
+
     // Rejection detection: vendor expressing disagreement (e.g., "not possible", "too low margin")
     // If detected, never accept — even if utility is high enough
     const REJECTION_PATTERN = /\b(not\s+possible|not\s+acceptable|not\s+feasible|cannot\s+accept|can'?t\s+accept|too\s+low|too\s+high|too\s+much|not\s+workable|not\s+viable|impossible|unacceptable|won'?t\s+work|doesn'?t\s+work|low\s+margin|no\s+margin|thin\s+margin|reject|decline)\b/i;
@@ -2068,6 +2175,9 @@ export const generatePMResponseAsyncService = async (
     // Build resolved config for MESO generation (needed for multiple checks)
     const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
     const resolvedConfig = resolveNegotiationConfig(wizardConfig || {});
+    // Deal currency is stored on the negotiation config at deal creation (see createDealWithConfigService).
+    // Threaded through to all MESO generators so every option's price label uses the requisition currency.
+    const dealCurrency = ((deal.negotiationConfigJson as any)?.currency || 'USD') as SupportedCurrency;
 
     // ========================================================================
     // STALL DETECTION (February 2026)
@@ -2172,7 +2282,8 @@ export const generatePMResponseAsyncService = async (
             resolvedConfig,
             extractedOffer as any,
             currentRoundForMeso,
-            decision.utilityScore
+            decision.utilityScore,
+            dealCurrency
           );
 
           if (mesoResult.success) {
@@ -2198,7 +2309,8 @@ export const generatePMResponseAsyncService = async (
             currentRoundForMeso,
             negotiationState,
             previousMeso,
-            decision.utilityScore + 0.05 // Target slightly higher utility than current
+            decision.utilityScore + 0.05, // Target slightly higher utility than current
+            dealCurrency
           );
 
           if (mesoResult.success) {
@@ -2216,7 +2328,8 @@ export const generatePMResponseAsyncService = async (
             resolvedConfig,
             extractedOffer as any,
             currentRoundForMeso,
-            decision.utilityScore + 0.05 // Target slightly higher utility than current
+            decision.utilityScore + 0.05, // Target slightly higher utility than current
+            dealCurrency
           );
 
           if (mesoResult.success) {
@@ -2707,8 +2820,9 @@ export const listDealsService = async (
     const offset = (page - 1) * limit;
 
     // Company isolation filter via Requisition → Project
+    // Null-tolerant: legacy projects with null companyId remain accessible.
     if (filters.companyId) {
-      where['$Requisition.Project.companyId$'] = filters.companyId;
+      where['$Requisition.Project.companyId$'] = { [Op.or]: [filters.companyId, null] };
     }
 
     const { rows, count } = await models.ChatbotDeal.findAndCountAll({
@@ -3715,8 +3829,9 @@ export const getRequisitionsWithDealsService = async (
     };
 
     // Company isolation filter
+    // Null-tolerant: legacy projects with null companyId remain accessible.
     if (filters.companyId) {
-      whereClause['$Project.companyId$'] = filters.companyId;
+      whereClause['$Project.companyId$'] = { [Op.or]: [filters.companyId, null] };
     }
 
     if (filters.projectId) {
@@ -3903,8 +4018,11 @@ export const getRequisitionDealsService = async (
       throw new CustomError('Requisition not found', 404);
     }
 
-    // Company isolation check
-    if (companyId && (requisition as any).Project?.companyId !== companyId) {
+    // Company isolation check — only reject when Project has a non-null companyId
+    // that does not match. Legacy requisitions with null Project.companyId remain accessible
+    // so they continue to work after the multi-tenancy rollout.
+    const projectCompanyId = (requisition as any).Project?.companyId ?? null;
+    if (companyId && projectCompanyId !== null && projectCompanyId !== companyId) {
       throw new CustomError('Requisition not found', 404);
     }
 
@@ -4693,9 +4811,10 @@ export const getRequisitionsForNegotiationService = async (companyId?: number | 
 }> => {
   try {
     // Build where clause for company isolation
+    // Null-tolerant: legacy projects with null companyId remain accessible.
     const whereClause: any = {};
     if (companyId) {
-      whereClause['$Project.companyId$'] = companyId;
+      whereClause['$Project.companyId$'] = { [Op.or]: [companyId, null] };
     }
 
     // Find requisitions that have contracts (vendors attached)
@@ -6075,12 +6194,15 @@ export const processFinalOfferConfirmationService = async (
     // Get resolved config for MESO generation
     const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
     const resolvedConfig = resolveNegotiationConfig(wizardConfig || {});
+    // Deal currency is stored on the negotiation config at deal creation (chatbot.service.ts ~L607)
+    const dealCurrency = ((deal.negotiationConfigJson as any)?.currency || 'USD') as SupportedCurrency;
 
     // Generate MESO based on vendor's confirmed price
     const mesoResult = generateMesoFromVendorPrice(
       resolvedConfig,
       stalledPrice,
-      deal.round + 1
+      deal.round + 1,
+      dealCurrency
     );
 
     if (mesoResult.success && mesoResult.options.length > 0) {

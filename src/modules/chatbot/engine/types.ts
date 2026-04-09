@@ -231,7 +231,9 @@ export type NegotiationPhase =
   | 'FINAL_MESO'            // Final MESO, no Others option
   | 'STALL_QUESTION'        // "Is this your final offer?" shown
   | 'DEAL_ACCEPTED'         // Vendor selected MESO, deal closed
-  | 'ESCALATED';            // Human PM takeover
+  | 'ESCALATED'             // Human PM takeover
+  | 'DISCOUNT_PROMPT'       // PM asked for initial discount, composer shows numeric % input
+  | 'PAYMENT_TERMS_PROMPT'; // PM asked for payment terms, composer shows dropdown
 
 /**
  * Create an empty negotiation state

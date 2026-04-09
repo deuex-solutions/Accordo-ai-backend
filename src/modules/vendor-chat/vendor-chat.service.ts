@@ -15,6 +15,14 @@ import type { Contract } from '../../models/contract.js';
 import type { ChatbotDeal } from '../../models/chatbotDeal.js';
 import type { ChatbotMessage } from '../../models/chatbotMessage.js';
 import { formatCurrency, type SupportedCurrency } from '../../services/currency.service.js';
+import {
+  buildInitialDiscountPromptMessage,
+  buildVendorDiscountBubble,
+  buildDiscountAcknowledgement,
+  buildPaymentTermsPromptMessage,
+  buildVendorPaymentTermsBubble,
+  formatPaymentTermsLabel,
+} from './structuredPrompts.js';
 
 /**
  * Vendor Chat Service
@@ -459,13 +467,13 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
 
   // Build opening message content from quote
   let grandTotal = 0;
-  const productLines = vendorQuote.products.map((p) => {
+  let totalUnits = 0;
+  vendorQuote.products.forEach((p) => {
     const unitPrice = typeof p.quotedPrice === 'number' ? p.quotedPrice : parseFloat(p.quotedPrice as string) || 0;
     const quantity = p.quantity || 0;
-    const totalPrice = unitPrice * quantity;
-    grandTotal += totalPrice;
-    return `- ${p.productName}: ${formatCurrency(totalPrice, requisitionCurrency)} (${quantity} units)`;
-  }).join('\n');
+    grandTotal += unitPrice * quantity;
+    totalUnits += quantity;
+  });
 
   const terms = vendorQuote.additionalTerms;
   let termsText = '';
@@ -473,7 +481,7 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
     termsText += `\nPayment Terms: ${terms.paymentTerms === 'net_payment' ? `Net ${terms.netPaymentDay || 30} days` : 'Advance/Post payment'}`;
   }
 
-  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\n${productLines}\n\nTotal: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}\n\nI look forward to discussing the details.`;
+  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\nUnits: ${totalUnits} units\nTotal Price: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}\n\nI look forward to discussing the details.`;
 
   // Build payment terms string for extracted offer
   const paymentTermsStr = terms?.paymentTerms === 'net_payment'
@@ -483,17 +491,30 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
     ? Number(terms?.netPaymentDay || 30)
     : null;
 
+  // Build an AccumulatedOffer for the opening message so downstream rounds
+  // (which call mergeOffers / getMissingComponents) have a proper baseline
+  // with an `accumulation` block. Writing a plain Offer here would cause
+  // mergeOffers to throw on `base.accumulation.sourceMessageIds` next round.
+  const openingMessageId = uuidv4();
+  const { createAccumulatedOffer: createAccumulatedOfferForOpening } = await import(
+    '../chatbot/engine/offerAccumulator.js'
+  );
+  const openingAccumulatedOffer = createAccumulatedOfferForOpening(
+    {
+      total_price: grandTotal,
+      payment_terms: paymentTermsStr,
+      payment_terms_days: paymentDays,
+    } as any,
+    openingMessageId
+  );
+
   // Create the opening message with total_price (the format the decision engine expects)
   const openingMessage = await models.ChatbotMessage.create({
-    id: uuidv4(),
+    id: openingMessageId,
     dealId: deal.id,
     role: 'VENDOR',
     content: openingContent,
-    extractedOffer: {
-      total_price: grandTotal,  // Use total price, not unit price
-      payment_terms: paymentTermsStr,
-      payment_terms_days: paymentDays,
-    },
+    extractedOffer: openingAccumulatedOffer as any,
     counterOffer: null,
     engineDecision: null,
     decisionAction: null,
@@ -502,40 +523,52 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
     round: 1,
   });
 
-  // Update deal round
-  await deal.update({ round: 1 });
-
-  // Auto-generate PM response for opening message (async, fire-and-forget)
-  // This ensures the vendor sees a PM response immediately after entering chat
-  logger.info(`[VendorEnterChat] Auto-triggering PM response for opening message ${openingMessage.id}`);
-  generatePMResponseInternal(deal.id, openingMessage.id, uniqueToken).catch((err) => {
-    logger.error(`[VendorEnterChat] Failed to auto-generate PM response: ${(err as Error).message}`);
+  // Update deal round + set latestVendorOffer baseline (AccumulatedOffer
+  // shape, so downstream mergeOffers calls don't crash).
+  await deal.update({
+    round: 1,
+    latestVendorOffer: openingAccumulatedOffer as any,
   });
+
+  // Round-1 AI PM message is a deterministic templated "ask for initial
+  // discount" — the negotiation engine/LLM is NOT invoked on Round 1 anymore.
+  // The engine first runs after the vendor submits their discount reply via
+  // the dedicated /discount endpoint (see submitInitialDiscountService).
+  //
+  // Guardrail: only generate this if no ACCORDO message exists on the deal.
+  const existingAccordoCount = await models.ChatbotMessage.count({
+    where: { dealId: deal.id, role: 'ACCORDO' },
+  });
+  if (existingAccordoCount === 0) {
+    const { content: promptContent, pendingPrompt } =
+      buildInitialDiscountPromptMessage(grandTotal, requisitionCurrency);
+
+    await models.ChatbotMessage.create({
+      id: uuidv4(),
+      dealId: deal.id,
+      role: 'ACCORDO',
+      content: promptContent,
+      extractedOffer: null,
+      engineDecision: {
+        action: 'DISCOUNT_PROMPT',
+        pendingPrompt,
+      } as any,
+      decisionAction: 'DISCOUNT_PROMPT',
+      utilityScore: null,
+      counterOffer: null,
+      explainabilityJson: null,
+      round: 1,
+    });
+    logger.info(`[VendorEnterChat] Round-1 discount prompt message created for deal ${deal.id}`);
+  } else {
+    logger.warn(
+      `[VendorEnterChat] Skipping discount prompt — deal ${deal.id} already has ${existingAccordoCount} ACCORDO message(s)`
+    );
+  }
 
   return { deal, openingMessage };
 };
 
-/**
- * Internal helper to generate PM response (used by auto-trigger)
- */
-const generatePMResponseInternal = async (
-  dealId: string,
-  vendorMessageId: string,
-  _uniqueToken: string
-): Promise<void> => {
-  try {
-    const result = await generatePMResponseAsyncService({
-      dealId,
-      vendorMessageId,
-      userId: 0, // Vendor context
-    });
-
-    logger.info(`[VendorEnterChat] Auto PM response generated: ${result.decision.action} (utility: ${result.decision.utilityScore})`);
-  } catch (error) {
-    logger.error(`[VendorEnterChat] Auto PM response failed: ${(error as Error).message}`);
-    throw error;
-  }
-}
 
 /**
  * Vendor sends a message - Phase 1: Instant save
@@ -1156,6 +1189,327 @@ export const confirmFinalOfferService = async (
   };
 };
 
+// ============================================================================
+// Feature 1 — Initial discount submission
+// ============================================================================
+
+/**
+ * Handle the vendor's answer to the Round-1 "ask for initial discount" prompt.
+ * Persists a VENDOR message with the discounted total, writes the discount
+ * summary to the deal, then runs the real negotiation engine for the first
+ * time and prepends a templated acknowledgement to the engine's output.
+ */
+export const submitInitialDiscountService = async (
+  uniqueToken: string,
+  percent: number
+): Promise<{
+  vendorMessage: ChatbotMessage;
+  pmMessage: ChatbotMessage;
+  decision: {
+    action: 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY';
+    utilityScore: number;
+    counterOffer: any | null;
+    reasons: string[];
+  };
+  deal: ChatbotDeal;
+  meso: any | null;
+}> => {
+  // Validate
+  if (!Number.isFinite(percent)) {
+    throw new CustomError('Discount percent must be a number', 400);
+  }
+  if (!Number.isInteger(percent)) {
+    throw new CustomError('Discount percent must be a whole number', 400);
+  }
+  if (percent < 0 || percent > 100) {
+    throw new CustomError('Discount percent must be between 0 and 100', 400);
+  }
+
+  const contract = await findContractByToken(uniqueToken);
+  if (!contract) {
+    throw new CustomError('Contract not found', 404);
+  }
+  if (!contract.chatbotDealId) {
+    throw new CustomError('No negotiation deal found for this contract', 404);
+  }
+
+  const deal = await models.ChatbotDeal.findByPk(contract.chatbotDealId);
+  if (!deal) {
+    throw new CustomError('Deal not found', 404);
+  }
+  if (deal.status !== 'NEGOTIATING') {
+    throw new CustomError(`Cannot submit discount — negotiation is ${deal.status}`, 400);
+  }
+
+  // Verify the latest ACCORDO message is actually waiting on a discount reply
+  const latestAccordo = await models.ChatbotMessage.findOne({
+    where: { dealId: deal.id, role: 'ACCORDO' },
+    order: [['createdAt', 'DESC']],
+  });
+  const latestPendingPrompt = (latestAccordo?.engineDecision as any)?.pendingPrompt;
+  if (!latestAccordo || latestPendingPrompt?.type !== 'discount_percent') {
+    throw new CustomError('No discount prompt is pending for this deal', 400);
+  }
+
+  // Resolve currency + original total
+  const requisitionCurrency =
+    ((contract.Requisition as any)?.typeOfCurrency as SupportedCurrency) || 'USD';
+  const originalTotal = Number(latestPendingPrompt?.discount?.originalTotal) || 0;
+  if (originalTotal <= 0) {
+    throw new CustomError('Original quote total is missing from the pending prompt', 400);
+  }
+
+  // Compute the effective (discounted) total
+  const discountedTotal = Math.round(originalTotal * (1 - percent / 100) * 100) / 100;
+
+  // Carry forward payment terms from the opening vendor message (all fields
+  // on the quote form are compulsory, so these should exist).
+  const openingVendor = await models.ChatbotMessage.findOne({
+    where: { dealId: deal.id, role: 'VENDOR' },
+    order: [['createdAt', 'ASC']],
+  });
+  const openingOffer = (openingVendor?.extractedOffer as any) || {};
+  const paymentTermsStr = openingOffer.payment_terms ?? null;
+  const paymentDays = openingOffer.payment_terms_days ?? null;
+  const openingDeliveryDate = openingOffer.delivery_date ?? null;
+  const openingDeliveryDays = openingOffer.delivery_days ?? null;
+
+  // Build an AccumulatedOffer for the discounted reply so downstream rounds
+  // have a valid baseline with an `accumulation` block.
+  const { createAccumulatedOffer } = await import('../chatbot/engine/offerAccumulator.js');
+  const vendorMessageId = uuidv4();
+  const discountedAccumulatedOffer = createAccumulatedOffer(
+    {
+      total_price: discountedTotal,
+      payment_terms: paymentTermsStr,
+      payment_terms_days: paymentDays,
+      delivery_date: openingDeliveryDate,
+      delivery_days: openingDeliveryDays,
+    } as any,
+    vendorMessageId
+  );
+
+  // Persist the vendor's discount-reply message
+  const vendorBubble = buildVendorDiscountBubble(percent);
+  const newRound = deal.round + 1;
+  const vendorMessage = await models.ChatbotMessage.create({
+    id: vendorMessageId,
+    dealId: deal.id,
+    role: 'VENDOR',
+    content: vendorBubble,
+    extractedOffer: discountedAccumulatedOffer as any,
+    engineDecision: {
+      discountApplied: {
+        percent,
+        discountAppliedTo: originalTotal,
+      },
+    } as any,
+    decisionAction: null,
+    utilityScore: null,
+    counterOffer: null,
+    explainabilityJson: null,
+    round: newRound,
+  });
+
+  // Persist discount summary on the deal + update latestVendorOffer + round
+  const existingConfig = (deal.negotiationConfigJson as any) || {};
+  const updatedConfig = {
+    ...existingConfig,
+    initialDiscount: {
+      percent,
+      originalTotal,
+      discountedTotal,
+      appliedAt: new Date().toISOString(),
+    },
+  };
+  await deal.update({
+    negotiationConfigJson: updatedConfig as any,
+    latestVendorOffer: discountedAccumulatedOffer as any,
+    round: newRound,
+    lastMessageAt: new Date(),
+  });
+
+  logger.info(
+    `[Discount] Vendor applied ${percent}% discount to deal ${deal.id}: ` +
+    `${originalTotal} → ${discountedTotal} (${requisitionCurrency})`
+  );
+
+  // Now run the real engine for the first time — it sees the discounted total
+  // as the vendor's effective offer and produces a real decision.
+  const engineResult = await generatePMResponseAsyncService({
+    dealId: deal.id,
+    vendorMessageId: vendorMessage.id,
+    userId: 0,
+  });
+
+  await deal.reload();
+
+  // Prepend a templated acknowledgement line to the engine's output.
+  const ack = buildDiscountAcknowledgement(
+    percent,
+    originalTotal,
+    discountedTotal,
+    requisitionCurrency
+  );
+  const originalEngineContent = engineResult.message.content || '';
+  await engineResult.message.update({
+    content: ack + originalEngineContent,
+  });
+
+  const pmDecision = {
+    action: engineResult.decision.action as 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY',
+    utilityScore: engineResult.decision.utilityScore || 0,
+    counterOffer: engineResult.decision.counterOffer || null,
+    reasons: engineResult.decision.reasons || [],
+  };
+
+  return {
+    vendorMessage,
+    pmMessage: engineResult.message,
+    decision: pmDecision,
+    deal,
+    meso: engineResult.meso || null,
+  };
+};
+
+// ============================================================================
+// Feature 2 — Payment terms submission
+// ============================================================================
+
+/**
+ * Handle the vendor's answer to the "ask for payment terms" dropdown prompt.
+ * Persists a VENDOR message with the chosen payment_terms_days, updates the
+ * accumulated offer on the deal, and runs the real engine with a now-complete
+ * offer (price + terms).
+ */
+export const submitPaymentTermsService = async (
+  uniqueToken: string,
+  days: number
+): Promise<{
+  vendorMessage: ChatbotMessage;
+  pmMessage: ChatbotMessage;
+  decision: {
+    action: 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY';
+    utilityScore: number;
+    counterOffer: any | null;
+    reasons: string[];
+  };
+  deal: ChatbotDeal;
+  meso: any | null;
+}> => {
+  // Validate
+  if (!Number.isFinite(days)) {
+    throw new CustomError('Payment terms days must be a number', 400);
+  }
+  if (!Number.isInteger(days)) {
+    throw new CustomError('Payment terms days must be a whole number', 400);
+  }
+  if (days !== 0 && (days < 1 || days > 365)) {
+    throw new CustomError('Payment terms days must be 0 (immediate) or between 1 and 365', 400);
+  }
+
+  const contract = await findContractByToken(uniqueToken);
+  if (!contract) {
+    throw new CustomError('Contract not found', 404);
+  }
+  if (!contract.chatbotDealId) {
+    throw new CustomError('No negotiation deal found for this contract', 404);
+  }
+
+  const deal = await models.ChatbotDeal.findByPk(contract.chatbotDealId);
+  if (!deal) {
+    throw new CustomError('Deal not found', 404);
+  }
+  if (deal.status !== 'NEGOTIATING') {
+    throw new CustomError(`Cannot submit payment terms — negotiation is ${deal.status}`, 400);
+  }
+
+  // Verify the latest ACCORDO message is actually waiting on payment terms
+  const latestAccordo = await models.ChatbotMessage.findOne({
+    where: { dealId: deal.id, role: 'ACCORDO' },
+    order: [['createdAt', 'DESC']],
+  });
+  const latestPendingPrompt = (latestAccordo?.engineDecision as any)?.pendingPrompt;
+  if (!latestAccordo || latestPendingPrompt?.type !== 'payment_terms') {
+    throw new CustomError('No payment terms prompt is pending for this deal', 400);
+  }
+
+  // Merge with the previously accumulated vendor offer (which has a price
+  // but no terms — that's why we asked). Use mergeOffers so the result has a
+  // valid `accumulation` block regardless of whether the previous baseline
+  // was already an AccumulatedOffer or a plain Offer.
+  const { mergeOffers, isAccumulatedOffer } = await import(
+    '../chatbot/engine/offerAccumulator.js'
+  );
+  const vendorMessageId = uuidv4();
+  const previousOffer = (deal.latestVendorOffer as any) || null;
+  const previousAccumulated = previousOffer && isAccumulatedOffer(previousOffer)
+    ? previousOffer
+    : null;
+  const mergedOffer = mergeOffers(
+    previousAccumulated,
+    {
+      total_price: previousOffer?.total_price ?? null,
+      payment_terms: formatPaymentTermsLabel(days),
+      payment_terms_days: days,
+      delivery_date: previousOffer?.delivery_date ?? null,
+      delivery_days: previousOffer?.delivery_days ?? null,
+    } as any,
+    vendorMessageId
+  );
+
+  // Persist the vendor's reply
+  const vendorBubble = buildVendorPaymentTermsBubble(days);
+  const newRound = deal.round + 1;
+  const vendorMessage = await models.ChatbotMessage.create({
+    id: vendorMessageId,
+    dealId: deal.id,
+    role: 'VENDOR',
+    content: vendorBubble,
+    extractedOffer: mergedOffer as any,
+    engineDecision: null,
+    decisionAction: null,
+    utilityScore: null,
+    counterOffer: null,
+    explainabilityJson: null,
+    round: newRound,
+  });
+
+  await deal.update({
+    latestVendorOffer: mergedOffer as any,
+    round: newRound,
+    lastMessageAt: new Date(),
+  });
+
+  logger.info(
+    `[PaymentTerms] Vendor submitted ${formatPaymentTermsLabel(days)} for deal ${deal.id}`
+  );
+
+  // Run the real engine — the offer is now complete (price + terms).
+  const engineResult = await generatePMResponseAsyncService({
+    dealId: deal.id,
+    vendorMessageId: vendorMessage.id,
+    userId: 0,
+  });
+
+  await deal.reload();
+
+  const pmDecision = {
+    action: engineResult.decision.action as 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY',
+    utilityScore: engineResult.decision.utilityScore || 0,
+    counterOffer: engineResult.decision.counterOffer || null,
+    reasons: engineResult.decision.reasons || [],
+  };
+
+  return {
+    vendorMessage,
+    pmMessage: engineResult.message,
+    decision: pmDecision,
+    deal,
+    meso: engineResult.meso || null,
+  };
+};
+
 export default {
   submitVendorQuote,
   canEditQuote,
@@ -1167,4 +1521,6 @@ export default {
   selectMesoOptionService,
   submitOthersService,
   confirmFinalOfferService,
+  submitInitialDiscountService,
+  submitPaymentTermsService,
 };
