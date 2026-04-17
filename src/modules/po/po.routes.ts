@@ -1,19 +1,22 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createPo,
   getAllPo,
   getPo,
   cancelPo,
   downloadPo,
-} from './po.controller.js';
-import { authMiddleware } from '../../middlewares/auth.middleware.js';
+} from "./po.controller.js";
+import { authMiddleware } from "../../middlewares/auth.middleware.js";
 
 const poRouter = Router();
 
-poRouter.post('/create', authMiddleware, createPo);
-poRouter.get('/get-all', authMiddleware, getAllPo);
-poRouter.get('/get/:poid', authMiddleware, getPo);
-poRouter.put('/cancel/:poid', authMiddleware, cancelPo);
-poRouter.get('/download/:poid', downloadPo);
+poRouter.post("/", authMiddleware, createPo);
+poRouter.get("/", authMiddleware, getAllPo);
+
+// Static sub-routes must come before parameterized /:poId
+poRouter.put("/cancel/:poId", authMiddleware, cancelPo);
+poRouter.get("/download/:poId", downloadPo);
+
+poRouter.get("/:poId", authMiddleware, getPo);
 
 export default poRouter;

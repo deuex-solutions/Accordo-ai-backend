@@ -5,7 +5,7 @@
  */
 
 import * as templateRepo from './template.repo.js';
-import type { ChatbotTemplate } from '../../models/chatbotTemplate.js';
+import type { ChatbotTemplate } from '../../models/chatbot-template.js';
 import { CustomError } from '../../utils/custom-error.js';
 
 export interface CreateTemplateInput {

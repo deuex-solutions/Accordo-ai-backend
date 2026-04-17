@@ -15,8 +15,8 @@ import {
   type NegotiationMilestone,
   type MilestoneDetectionInput,
   type PersonalityEnrichment,
-} from '../../../src/modules/chatbot/engine/personalityLayer.js';
-import type { VendorTone } from '../../../src/modules/chatbot/engine/toneDetector.js';
+} from '../../../src/modules/chatbot/engine/personality-layer.js';
+import type { VendorTone } from '../../../src/modules/chatbot/engine/tone-detector.js';
 
 // ─────────────────────────────────────────────
 // Milestone Detection

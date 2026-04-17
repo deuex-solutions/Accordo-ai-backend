@@ -24,7 +24,7 @@ import type {
   FinalOfferState,
   NegotiationPhase,
 } from './types.js';
-import { calculateWeightedUtilityFromResolved } from './weightedUtility.js';
+import { calculateWeightedUtilityFromResolved } from './weighted-utility.js';
 import { formatCurrency, type SupportedCurrency } from '../../../services/currency.service.js';
 
 // ============================================

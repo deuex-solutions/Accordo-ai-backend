@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getFallbackResponse } from '../../../src/llm/fallbackTemplates.js';
-import type { NegotiationIntent, VendorTone } from '../../../src/negotiation/intent/buildNegotiationIntent.js';
+import { getFallbackResponse } from '../../../src/llm/fallback-templates.js';
+import type { NegotiationIntent, VendorTone } from '../../../src/negotiation/intent/build-negotiation-intent.js';
 
 // ─────────────────────────────────────────────
 // Helpers

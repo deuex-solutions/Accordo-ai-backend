@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildNegotiationIntent,
   type BuildIntentInput,
-} from '../../../src/negotiation/intent/buildNegotiationIntent.js';
+} from '../../../src/negotiation/intent/build-negotiation-intent.js';
 
 function makeInput(overrides: Partial<BuildIntentInput> = {}): BuildIntentInput {
   return {

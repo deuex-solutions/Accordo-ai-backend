@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { simulateTypingDelay, getDelayRange } from '../../../src/delivery/simulateTypingDelay.js';
-import type { NegotiationAction } from '../../../src/negotiation/intent/buildNegotiationIntent.js';
+import { simulateTypingDelay, getDelayRange } from '../../../src/delivery/simulate-typing-delay.js';
+import type { NegotiationAction } from '../../../src/negotiation/intent/build-negotiation-intent.js';
 
 // ─────────────────────────────────────────────
 // Expected ranges (mirrors the implementation)

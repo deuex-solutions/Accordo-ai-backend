@@ -14,28 +14,28 @@ const customerRouter = Router();
 const moduleId = 1;
 
 customerRouter.get(
-  '/get-all',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getAllCustomers
 );
 
 customerRouter.get(
-  '/get-all-customer',
+  '/all',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getCustomers
 );
 
 customerRouter.post(
-  '/create',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   createCustomer
 );
 
 customerRouter.put(
-  '/update/:customerid',
+  '/:customerId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 2),
   updateCustomer

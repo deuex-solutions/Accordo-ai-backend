@@ -34,7 +34,7 @@ interface RequestWithContext extends Request {
  */
 export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userid = getParam(req.params.userid);
+    const userid = getParam(req.params.userId);
     const { password } = req.body;
     const data = await resetPasswordService(userid, password);
     res.status(201).json({ message: "Password updated successfully", data });
@@ -51,7 +51,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
  */
 export const resetPasswordAuto = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userid = getParam(req.params.userid);
+    const userid = getParam(req.params.userId);
     const data = await resetPasswordAutoService(userid);
     res.status(201).json({ message: "Password updated successfully", data });
   } catch (error) {

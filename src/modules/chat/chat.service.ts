@@ -2,7 +2,7 @@ import models from '../../models/index.js';
 import llmService from '../../services/llm.service.js';
 import contextService from '../../services/context.service.js';
 import logger from '../../config/logger.js';
-import type { ChatSession } from '../../models/chatSession.js';
+import type { ChatSession } from '../../models/chat-session.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';

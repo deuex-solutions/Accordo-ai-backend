@@ -1,5 +1,5 @@
 import models from '../../models/index.js';
-import type { RolePermission } from '../../models/rolePermission.js';
+import type { RolePermission } from '../../models/role-permission.js';
 
 const repo = {
   getPermission: async (roleId: number | null): Promise<RolePermission | null> => {

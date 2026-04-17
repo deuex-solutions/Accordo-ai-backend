@@ -57,35 +57,35 @@ vendorRouter.post(
 
 // Legacy endpoint: Create vendor only (kept for backward compatibility)
 vendorRouter.post(
-  '/create',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   createVendor
 );
 
 vendorRouter.get(
-  '/get-all',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getAllVendors
 );
 
 vendorRouter.get(
-  '/get/:vendorid',
+  '/:vendorId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getVendor
 );
 
 vendorRouter.put(
-  '/update/:vendorid',
+  '/:vendorId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 2),
   updateVendor
 );
 
 vendorRouter.delete(
-  '/delete/:vendorid',
+  '/:vendorId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   deleteVendor

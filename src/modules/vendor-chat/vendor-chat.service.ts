@@ -12,8 +12,8 @@ import {
   syncContractStatus,
 } from '../chatbot/chatbot.service.js';
 import type { Contract } from '../../models/contract.js';
-import type { ChatbotDeal } from '../../models/chatbotDeal.js';
-import type { ChatbotMessage } from '../../models/chatbotMessage.js';
+import type { ChatbotDeal } from '../../models/chatbot-deal.js';
+import type { ChatbotMessage } from '../../models/chatbot-message.js';
 import { formatCurrency, type SupportedCurrency } from '../../services/currency.service.js';
 import {
   buildInitialDiscountPromptMessage,
@@ -22,7 +22,7 @@ import {
   buildPaymentTermsPromptMessage,
   buildVendorPaymentTermsBubble,
   formatPaymentTermsLabel,
-} from './structuredPrompts.js';
+} from './structured-prompts.js';
 
 /**
  * Vendor Chat Service
@@ -189,7 +189,7 @@ export const submitVendorQuote = async (
           id: uuidv4(),
           title: `${vendorName} - ${requisitionTitle}`,
           status: 'NEGOTIATING',
-          mode: 'INSIGHTS',
+          mode: 'CONVERSATION',
           round: 0,
           requisitionId: contract.requisitionId,
           vendorId: contract.vendorId,
@@ -415,7 +415,7 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
       id: uuidv4(),
       title: `${vendorName} - ${requisitionTitle}`,
       status: 'NEGOTIATING',
-      mode: 'INSIGHTS',
+      mode: 'CONVERSATION',
       round: 0,
       requisitionId: contract.requisitionId,
       vendorId: contract.vendorId,
@@ -497,7 +497,7 @@ export const vendorEnterChat = async (uniqueToken: string): Promise<{
   // mergeOffers to throw on `base.accumulation.sourceMessageIds` next round.
   const openingMessageId = uuidv4();
   const { createAccumulatedOffer: createAccumulatedOfferForOpening } = await import(
-    '../chatbot/engine/offerAccumulator.js'
+    '../chatbot/engine/offer-accumulator.js'
   );
   const openingAccumulatedOffer = createAccumulatedOfferForOpening(
     {
@@ -598,14 +598,14 @@ export const vendorSendMessageInstant = async (
   // Parse offer from vendor message using the same parser as the chatbot engine
   // Import parseOfferWithDelivery to ensure consistent offer extraction
   // Pass requisition currency for proper conversion (February 2026)
-  const { parseOfferWithDelivery } = await import('../chatbot/engine/parseOffer.js');
+  const { parseOfferWithDelivery } = await import('../chatbot/engine/parse-offer.js');
   const {
     mergeOffers,
     shouldResetAccumulation,
     createAccumulatedOffer,
     getProvidedComponents,
     getMissingComponents,
-  } = await import('../chatbot/engine/offerAccumulator.js');
+  } = await import('../chatbot/engine/offer-accumulator.js');
 
   const requisition = (contract as any).Requisition;
   const requisitionCurrency = requisition?.typeOfCurrency as 'USD' | 'INR' | 'EUR' | 'GBP' | 'AUD' | undefined;
@@ -747,8 +747,8 @@ export const generatePMResponse = async (
     // Fallback: run the decision engine directly (no LLM, template-based response)
     try {
       const { decideNextMove } = await import('../chatbot/engine/decide.js');
-      const { generateQuickFallback } = await import('../chatbot/engine/responseGenerator.js');
-      const { parseOfferWithDelivery } = await import('../chatbot/engine/parseOffer.js');
+      const { generateQuickFallback } = await import('../chatbot/engine/response-generator.js');
+      const { parseOfferWithDelivery } = await import('../chatbot/engine/parse-offer.js');
 
       // Build config from deal or requisition
       let config: any;
@@ -1276,7 +1276,7 @@ export const submitInitialDiscountService = async (
 
   // Build an AccumulatedOffer for the discounted reply so downstream rounds
   // have a valid baseline with an `accumulation` block.
-  const { createAccumulatedOffer } = await import('../chatbot/engine/offerAccumulator.js');
+  const { createAccumulatedOffer } = await import('../chatbot/engine/offer-accumulator.js');
   const vendorMessageId = uuidv4();
   const discountedAccumulatedOffer = createAccumulatedOffer(
     {
@@ -1439,7 +1439,7 @@ export const submitPaymentTermsService = async (
   // valid `accumulation` block regardless of whether the previous baseline
   // was already an AccumulatedOffer or a plain Offer.
   const { mergeOffers, isAccumulatedOffer } = await import(
-    '../chatbot/engine/offerAccumulator.js'
+    '../chatbot/engine/offer-accumulator.js'
   );
   const vendorMessageId = uuidv4();
   const previousOffer = (deal.latestVendorOffer as any) || null;

@@ -18,7 +18,7 @@ const requisitionRouter = Router();
 const moduleId = 3;
 
 requisitionRouter.post(
-  '/create',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   upload.array('files', 10),
@@ -26,7 +26,7 @@ requisitionRouter.post(
 );
 
 requisitionRouter.get(
-  '/get-all',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getAllRequisitions
@@ -49,14 +49,14 @@ requisitionRouter.get(
 );
 
 requisitionRouter.get(
-  '/get/:requisitionid',
+  '/:requisitionId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getRequisition
 );
 
 requisitionRouter.put(
-  '/update/:requisitionid',
+  '/:requisitionId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 2),
   upload.array('files', 10),
@@ -64,7 +64,7 @@ requisitionRouter.put(
 );
 
 requisitionRouter.delete(
-  '/delete/:requisitionid',
+  '/:requisitionId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   deleteRequisition

@@ -5,9 +5,9 @@ import logger from '../config/logger.js';
 import models from '../models/index.js';
 import type { Contract } from '../models/contract.js';
 import type { Requisition } from '../models/requisition.js';
-import type { VendorCompany } from '../models/vendorCompany.js';
+import type { VendorCompany } from '../models/vendor-company.js';
 import type { Product } from '../models/product.js';
-import type { EmailType, EmailStatus, EmailMetadata } from '../models/emailLog.js';
+import type { EmailType, EmailStatus, EmailMetadata } from '../models/email-log.js';
 import { formatCurrency, type SupportedCurrency } from './currency.service.js';
 
 const { smtp } = env;

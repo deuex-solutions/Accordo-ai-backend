@@ -15,7 +15,7 @@
  * @module errorRecovery
  * @example
  * ```typescript
- * import { retryWithBackoff, recoverConvoState } from './errorRecovery.js';
+ * import { retryWithBackoff, recoverConvoState } from './error-recovery.js';
  *
  * // Retry LLM call
  * const result = await retryWithBackoff(
@@ -546,7 +546,7 @@ export default {
  * Example 1: Retry LLM call
  *
  * ```typescript
- * import { retryWithBackoff } from './errorRecovery.js';
+ * import { retryWithBackoff } from './error-recovery.js';
  * import { llmService } from '../../../services/llm.service.js';
  *
  * const result = await retryWithBackoff(
@@ -559,7 +559,7 @@ export default {
  * Example 2: Recover corrupted state
  *
  * ```typescript
- * import { recoverConvoState } from './errorRecovery.js';
+ * import { recoverConvoState } from './error-recovery.js';
  *
  * const corruptedState = {
  *   phase: 'INVALID_PHASE',
@@ -574,7 +574,7 @@ export default {
  * Example 3: Fallback classification
  *
  * ```typescript
- * import { fallbackClassifyIntent } from './errorRecovery.js';
+ * import { fallbackClassifyIntent } from './error-recovery.js';
  *
  * try {
  *   intent = await llmService.classify(message);
@@ -587,7 +587,7 @@ export default {
  * Example 4: Dead letter queue
  *
  * ```typescript
- * import { addToDeadLetterQueue, retryDeadLetter } from './errorRecovery.js';
+ * import { addToDeadLetterQueue, retryDeadLetter } from './error-recovery.js';
  *
  * try {
  *   await processMessage(message);

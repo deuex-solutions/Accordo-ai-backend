@@ -6,7 +6,7 @@ import type { Requisition } from '../../models/requisition.js';
 import type { RequisitionData, RequisitionProductData, RequisitionAttachmentData } from './requisition.repo.js';
 import util from '../common/util.js';
 import models from '../../models/index.js';
-import { calculateRequisitionDiff, generateChangeSummary, type RequisitionDiff } from './requisitionDiff.js';
+import { calculateRequisitionDiff, generateChangeSummary, type RequisitionDiff } from './requisition-diff.js';
 import { sendRequisitionUpdatedEmail } from '../../services/email.service.js';
 import { buildConfigFromRequisition, createSystemMessageService } from '../chatbot/chatbot.service.js';
 import logger from '../../config/logger.js';

@@ -1,7 +1,7 @@
 import { QueryTypes } from 'sequelize';
 import models, { sequelize } from '../../models/index.js';
 import type { User } from '../../models/user.js';
-import type { VendorCompany } from '../../models/vendorCompany.js';
+import type { VendorCompany } from '../../models/vendor-company.js';
 
 interface VendorData {
   email: string;

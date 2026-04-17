@@ -12,7 +12,7 @@ import {
   type BuildIntentInput,
   type NegotiationAction,
   type VendorTone,
-} from '../../../src/negotiation/intent/buildNegotiationIntent.js';
+} from '../../../src/negotiation/intent/build-negotiation-intent.js';
 
 // ─────────────────────────────────────────────
 // Helpers

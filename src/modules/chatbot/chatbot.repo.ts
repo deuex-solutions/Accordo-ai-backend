@@ -1,7 +1,7 @@
 import { Op, Transaction } from 'sequelize';
 import models from '../../models/index.js';
-import type { ChatbotDeal } from '../../models/chatbotDeal.js';
-import type { ChatbotMessage } from '../../models/chatbotMessage.js';
+import type { ChatbotDeal } from '../../models/chatbot-deal.js';
+import type { ChatbotMessage } from '../../models/chatbot-message.js';
 
 /**
  * Repository layer for chatbot database operations

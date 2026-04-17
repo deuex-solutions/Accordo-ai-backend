@@ -16,8 +16,8 @@ import {
   getToneAskClarifyTemplate,
   getToneAwareTemplate,
   type TemplateContext,
-} from '../../../src/modules/chatbot/engine/toneTemplates.js';
-import type { VendorTone } from '../../../src/modules/chatbot/engine/toneDetector.js';
+} from '../../../src/modules/chatbot/engine/tone-templates.js';
+import type { VendorTone } from '../../../src/modules/chatbot/engine/tone-detector.js';
 
 // ─────────────────────────────────────────────
 // Helpers

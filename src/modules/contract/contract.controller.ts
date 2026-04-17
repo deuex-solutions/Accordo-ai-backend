@@ -65,7 +65,7 @@ export const getContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const contractId = getNumericParam(req.params.contractid);
+    const contractId = getNumericParam(req.params.contractId);
     if (isNaN(contractId) || contractId <= 0) {
       res.status(400).json({ message: 'Invalid contract ID' });
       return;
@@ -158,7 +158,7 @@ export const approveContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const contractId = getNumericParam(req.params.contractid);
+    const contractId = getNumericParam(req.params.contractId);
     if (isNaN(contractId) || contractId <= 0) {
       res.status(400).json({ message: 'Invalid contract ID' });
       return;
@@ -188,7 +188,7 @@ export const updateContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const contractId = getNumericParam(req.params.contractid);
+    const contractId = getNumericParam(req.params.contractId);
     if (isNaN(contractId) || contractId <= 0) {
       res.status(400).json({ message: 'Invalid contract ID' });
       return;
@@ -232,7 +232,7 @@ export const deleteContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const contractId = getNumericParam(req.params.contractid);
+    const contractId = getNumericParam(req.params.contractId);
     if (isNaN(contractId) || contractId <= 0) {
       res.status(400).json({ message: 'Invalid contract ID' });
       return;

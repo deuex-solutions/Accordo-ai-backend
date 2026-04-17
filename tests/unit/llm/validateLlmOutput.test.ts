@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateLlmOutput, ValidationError } from '../../../src/llm/validateLlmOutput.js';
-import type { NegotiationIntent } from '../../../src/negotiation/intent/buildNegotiationIntent.js';
+import { validateLlmOutput, ValidationError } from '../../../src/llm/validate-llm-output.js';
+import type { NegotiationIntent } from '../../../src/negotiation/intent/build-negotiation-intent.js';
 
 // ─────────────────────────────────────────────
 // Helpers

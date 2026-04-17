@@ -14,14 +14,19 @@ import {
   ResolvedNegotiationConfig,
   ACCORDO_DEFAULTS,
   DEFAULT_WEIGHTS,
-} from './types.js';
-import { totalUtility, priceUtility, termsUtility, NegotiationConfig } from './utility.js';
-import { getCurrencySymbol } from '../../../negotiation/intent/buildNegotiationIntent.js';
+} from "./types.js";
+import {
+  totalUtility,
+  priceUtility,
+  termsUtility,
+  NegotiationConfig,
+} from "./utility.js";
+import { getCurrencySymbol } from "../../../negotiation/intent/build-negotiation-intent.js";
 import {
   calculateWeightedUtility,
   resolveNegotiationConfig,
   calculateWeightedUtilityFromResolved,
-} from './weightedUtility.js';
+} from "./weighted-utility.js";
 import {
   detectVendorEmphasis,
   getTotalPriceConcession,
@@ -31,8 +36,8 @@ import {
   isNegotiationStalled,
   isVendorRigid,
   getUtilityTrend,
-} from './preferenceDetector.js';
-import * as negotiationLogger from './negotiationLogger.js';
+} from "./preference-detector.js";
+import * as negotiationLogger from "./negotiation-logger.js";
 
 /**
  * Extract the vendor's stated maximum payment terms from their message.
@@ -44,22 +49,27 @@ import * as negotiationLogger from './negotiationLogger.js';
  *
  * Returns the max days the vendor is willing to offer, or null if not stated.
  */
-export function extractVendorMaxTermsDays(vendorMessage?: string | null): number | null {
+export function extractVendorMaxTermsDays(
+  vendorMessage?: string | null,
+): number | null {
   if (!vendorMessage) return null;
   const lower = vendorMessage.toLowerCase();
 
   // Pattern 1: "max/maximum [I/we] can [do/offer/accept] is net X"
-  const maxPattern = /\b(?:max(?:imum)?|most)\s+(?:i|we)\s+can\s+(?:do|offer|accept|go|provide)\s+is\s+net\s*(\d+)/i;
+  const maxPattern =
+    /\b(?:max(?:imum)?|most)\s+(?:i|we)\s+can\s+(?:do|offer|accept|go|provide)\s+is\s+net\s*(\d+)/i;
   const maxMatch = lower.match(maxPattern);
   if (maxMatch) return parseInt(maxMatch[1], 10);
 
   // Pattern 2: "can only [do/offer] net X"
-  const onlyPattern = /\bcan\s+only\s+(?:do|offer|accept|go|provide)\s+net\s*(\d+)/i;
+  const onlyPattern =
+    /\bcan\s+only\s+(?:do|offer|accept|go|provide)\s+net\s*(\d+)/i;
   const onlyMatch = lower.match(onlyPattern);
   if (onlyMatch) return parseInt(onlyMatch[1], 10);
 
   // Pattern 3: "net X not possible" + "max net Y" or "net Y max"
-  const notPossibleWithMax = /net\s*(\d+)\s+(?:is\s+)?not\s+possible.*?(?:max(?:imum)?\s+(?:is\s+)?net\s*(\d+)|net\s*(\d+)\s+(?:is\s+)?(?:the\s+)?max)/i;
+  const notPossibleWithMax =
+    /net\s*(\d+)\s+(?:is\s+)?not\s+possible.*?(?:max(?:imum)?\s+(?:is\s+)?net\s*(\d+)|net\s*(\d+)\s+(?:is\s+)?(?:the\s+)?max)/i;
   const notPossMatch = lower.match(notPossibleWithMax);
   if (notPossMatch) return parseInt(notPossMatch[2] || notPossMatch[3], 10);
 
@@ -69,7 +79,8 @@ export function extractVendorMaxTermsDays(vendorMessage?: string | null): number
   if (simpleMaxMatch) return parseInt(simpleMaxMatch[1], 10);
 
   // Pattern 5: "net X is [the/our] max/maximum/limit"
-  const termsIsMax = /net\s*(\d+)\s+(?:is\s+)?(?:the\s+|our\s+)?(?:max(?:imum)?|limit|best\s+(?:i|we)\s+can\s+(?:do|offer))/i;
+  const termsIsMax =
+    /net\s*(\d+)\s+(?:is\s+)?(?:the\s+|our\s+)?(?:max(?:imum)?|limit|best\s+(?:i|we)\s+can\s+(?:do|offer))/i;
   const termsIsMaxMatch = lower.match(termsIsMax);
   if (termsIsMaxMatch) return parseInt(termsIsMaxMatch[1], 10);
 
@@ -80,7 +91,10 @@ export function extractVendorMaxTermsDays(vendorMessage?: string | null): number
  * Cap the chosen payment terms to not exceed the vendor's stated maximum.
  * If vendor said "max net 60", ensure we don't counter with net 90.
  */
-export function capTermsToVendorMax(chosenTerms: string, vendorMaxDays: number): string {
+export function capTermsToVendorMax(
+  chosenTerms: string,
+  vendorMaxDays: number,
+): string {
   const chosenDays = extractPaymentDays(chosenTerms);
   if (chosenDays === null) return chosenTerms;
 
@@ -108,7 +122,7 @@ export function capTermsToVendorMax(chosenTerms: string, vendorMaxDays: number):
  */
 function getDeliveryForCounter(
   vendorOffer: Offer,
-  config: NegotiationConfig
+  config: NegotiationConfig,
 ): { delivery_date: string; delivery_days: number } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -116,7 +130,9 @@ function getDeliveryForCounter(
   // Priority 1: Use vendor's delivery if provided
   if (vendorOffer.delivery_date) {
     const deliveryDate = new Date(vendorOffer.delivery_date);
-    const days = Math.ceil((deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const days = Math.ceil(
+      (deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
     return {
       delivery_date: vendorOffer.delivery_date,
       delivery_days: Math.max(1, days),
@@ -128,18 +144,25 @@ function getDeliveryForCounter(
     const deliveryDate = new Date(today);
     deliveryDate.setDate(deliveryDate.getDate() + vendorOffer.delivery_days);
     return {
-      delivery_date: deliveryDate.toISOString().split('T')[0],
+      delivery_date: deliveryDate.toISOString().split("T")[0],
       delivery_days: vendorOffer.delivery_days,
     };
   }
 
   // Priority 3: Use config delivery if available
   // Note: config doesn't currently have delivery, but we'll check anyway for future compatibility
-  const configDelivery = (config as unknown as { delivery?: { requiredDate?: string; preferredDate?: string } }).delivery;
+  const configDelivery = (
+    config as unknown as {
+      delivery?: { requiredDate?: string; preferredDate?: string };
+    }
+  ).delivery;
   if (configDelivery?.preferredDate || configDelivery?.requiredDate) {
-    const dateStr = configDelivery.preferredDate || configDelivery.requiredDate!;
+    const dateStr =
+      configDelivery.preferredDate || configDelivery.requiredDate!;
     const deliveryDate = new Date(dateStr);
-    const days = Math.ceil((deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const days = Math.ceil(
+      (deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
     return {
       delivery_date: dateStr,
       delivery_days: Math.max(1, days),
@@ -150,7 +173,7 @@ function getDeliveryForCounter(
   const defaultDate = new Date(today);
   defaultDate.setDate(defaultDate.getDate() + 30);
   return {
-    delivery_date: defaultDate.toISOString().split('T')[0],
+    delivery_date: defaultDate.toISOString().split("T")[0],
     delivery_days: 30,
   };
 }
@@ -165,15 +188,17 @@ function getDeliveryForCounter(
  */
 function nextBetterTerms(
   config: NegotiationConfig,
-  t: Offer['payment_terms']
+  t: Offer["payment_terms"],
 ): string {
-  const opts = config.parameters?.payment_terms?.options ?? ['Net 30', 'Net 60', 'Net 90'] as const;
+  const opts =
+    config.parameters?.payment_terms?.options ??
+    (["Net 30", "Net 60", "Net 90"] as const);
 
   // If null or undefined, return first option
   if (!t) return opts[0];
 
   // Check if it's a standard term
-  const idx = opts.indexOf(t as 'Net 30' | 'Net 60' | 'Net 90');
+  const idx = opts.indexOf(t as "Net 30" | "Net 60" | "Net 90");
   if (idx >= 0) {
     // Standard term - move to next option (longer is better for buyer)
     return opts[Math.min(idx + 1, opts.length - 1)];
@@ -184,9 +209,9 @@ function nextBetterTerms(
   if (days === null) return opts[0];
 
   // Find the next standard term with more days (better for buyer)
-  if (days < 30) return 'Net 30';
-  if (days < 60) return 'Net 60';
-  if (days < 90) return 'Net 90';
+  if (days < 30) return "Net 30";
+  if (days < 60) return "Net 60";
+  if (days < 90) return "Net 90";
 
   // Already better than all standard options, keep the same
   return t;
@@ -197,7 +222,11 @@ function nextBetterTerms(
  * Typically Net 90 (longest payment time)
  */
 function bestTerms(config: NegotiationConfig): string {
-  const opts = config.parameters?.payment_terms?.options ?? ['Net 30', 'Net 60', 'Net 90'];
+  const opts = config.parameters?.payment_terms?.options ?? [
+    "Net 30",
+    "Net 60",
+    "Net 90",
+  ];
   return opts[opts.length - 1];
 }
 
@@ -215,47 +244,61 @@ function bestTerms(config: NegotiationConfig): string {
 function calculateCounterPrice(
   config: NegotiationConfig,
   vendorOffer: Offer,
-  round: number
+  round: number,
 ): number {
   // Defensive: handle missing total_price config
-  const priceParams = config.parameters?.total_price ?? (config.parameters as Record<string, unknown>)?.unit_price as typeof config.parameters.total_price ?? { target: 1000, max_acceptable: 1500, anchor: 1000, concession_step: 50 };
+  const priceParams = config.parameters?.total_price ??
+    ((config.parameters as Record<string, unknown>)
+      ?.unit_price as typeof config.parameters.total_price) ?? {
+      target: 1000,
+      max_acceptable: 1500,
+      anchor: 1000,
+      concession_step: 50,
+    };
   const { target, max_acceptable, anchor, concession_step } = priceParams;
   const priceRange = max_acceptable - target;
-  const priority = config.priority || 'MEDIUM';
+  const priority = config.priority || "MEDIUM";
 
   let counterPrice: number;
 
   switch (priority) {
-    case 'HIGH': {
+    case "HIGH": {
       // Maximize Savings: Counter at 15% of range above target (very aggressive)
       // Small concessions as rounds progress: starts at 10%, max 15%
-      const aggressiveOffset = Math.min(0.15, 0.10 + round * 0.01); // 10% + 1% per round, max 15%
+      const aggressiveOffset = Math.min(0.15, 0.1 + round * 0.01); // 10% + 1% per round, max 15%
       counterPrice = target + priceRange * aggressiveOffset;
       break;
     }
-    case 'LOW': {
+    case "LOW": {
       // Quick Close: Counter at 55% of range above target
       // More willing to meet vendor halfway for faster closure
-      const quickCloseOffset = Math.min(0.55, 0.50 + round * 0.01); // 50% + 1% per round, max 55%
+      const quickCloseOffset = Math.min(0.55, 0.5 + round * 0.01); // 50% + 1% per round, max 55%
       counterPrice = target + priceRange * quickCloseOffset;
       break;
     }
-    case 'MEDIUM':
+    case "MEDIUM":
     default: {
       // Fair Deal: Counter at 40% of range above target
-      const balancedOffset = Math.min(0.40, 0.35 + round * 0.01); // 35% + 1% per round, max 40%
+      const balancedOffset = Math.min(0.4, 0.35 + round * 0.01); // 35% + 1% per round, max 40%
       counterPrice = target + priceRange * balancedOffset;
       break;
     }
   }
 
-  // Never counter above vendor's offer (would be illogical)
-  if (vendorOffer.total_price !== null) {
-    counterPrice = Math.min(counterPrice, vendorOffer.total_price);
-  }
-
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, max_acceptable);
+
+  // Never counter at or above vendor's offer — always go below
+  if (
+    vendorOffer.total_price !== null &&
+    counterPrice >= vendorOffer.total_price
+  ) {
+    const effectiveMax = Math.min(vendorOffer.total_price, max_acceptable);
+    counterPrice = Math.round(((target + effectiveMax) / 2) * 100) / 100;
+    if (counterPrice >= vendorOffer.total_price) {
+      counterPrice = target;
+    }
+  }
 
   // Guard: counter price must never be 0 or negative — fall back to target
   if (counterPrice <= 0 && target > 0) {
@@ -282,12 +325,13 @@ function calculateCounterPrice(
  */
 export function generateFlexibleTerms(
   currentDays: number,
-  direction: 'increase' | 'decrease',
-  step: number = 15
+  direction: "increase" | "decrease",
+  step: number = 15,
 ): string {
-  const newDays = direction === 'increase'
-    ? Math.min(currentDays + step, 120) // Max 120 days
-    : Math.max(currentDays - step, 7);   // Min 7 days
+  const newDays =
+    direction === "increase"
+      ? Math.min(currentDays + step, 120) // Max 120 days
+      : Math.max(currentDays - step, 7); // Min 7 days
 
   return formatPaymentTerms(newDays);
 }
@@ -313,31 +357,57 @@ export function calculateDynamicCounter(
   round: number,
   negotiationState?: NegotiationState | null,
   previousPmOffer?: Offer | PmCounterRecord | null,
-  adaptiveStrategy?: AdaptiveStrategyResult | null
+  adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): { price: number; terms: string; strategy: string } {
   // Defensive: handle missing total_price config
-  const priceParams = config.parameters?.total_price ?? (config.parameters as Record<string, unknown>)?.unit_price as typeof config.parameters.total_price ?? { target: 1000, max_acceptable: 1500 };
+  const priceParams = config.parameters?.total_price ??
+    ((config.parameters as Record<string, unknown>)
+      ?.unit_price as typeof config.parameters.total_price) ?? {
+      target: 1000,
+      max_acceptable: 1500,
+    };
   const { target, max_acceptable } = priceParams;
   const priceRange = max_acceptable - target;
-  const priority = config.priority || 'MEDIUM';
+  const priority = config.priority || "MEDIUM";
 
   // Use adaptive aggressiveness when available, otherwise fall back to static base
   const baseAggressiveness = adaptiveStrategy
     ? adaptiveStrategy.adjustedAggressiveness
     : ({
-        HIGH: 0.15,   // 15% above target
-        MEDIUM: 0.40, // 40% above target
-        LOW: 0.55,    // 55% above target
-      }[priority] ?? 0.40);
+        HIGH: 0.15, // 15% above target
+        MEDIUM: 0.4, // 40% above target
+        LOW: 0.55, // 55% above target
+      }[priority] ?? 0.4);
 
-  // Round adjustment: 2% per round, max 10%
-  const roundAdjustment = Math.min(0.10, round * 0.02);
+  // Round adjustment: 3% per round, max 20% — PM gradually concedes over time
+  const roundAdjustment = Math.min(0.2, round * 0.03);
 
-  // Calculate concession bonus (up to 10% if vendor dropped price)
+  // Calculate concession bonus from vendor's price drops (up to 10%)
   let concessionBonus = 0;
   if (negotiationState) {
     const totalConcession = getTotalPriceConcession(negotiationState);
-    concessionBonus = Math.min(0.10, totalConcession / 100);
+    concessionBonus = Math.min(0.1, totalConcession / 100);
+  }
+
+  // Rejection-based concession: when vendor rejects without a new offer,
+  // the PM should concede toward the vendor's position.
+  // Each rejection without a counter adds 5% of the price range to the offset.
+  let rejectionConcession = 0;
+  if (previousPmOffer && vendorOffer.total_price !== null) {
+    const prevPmPrice =
+      typeof previousPmOffer === "object" && "price" in previousPmOffer
+        ? (previousPmOffer as PmCounterRecord).price
+        : (previousPmOffer as Offer).total_price;
+
+    // If vendor's offer is the same as last round (they rejected without a new price),
+    // the PM should concede by moving toward the midpoint
+    if (prevPmPrice != null && vendorOffer.total_price != null) {
+      const gap = vendorOffer.total_price - prevPmPrice;
+      if (gap > 0) {
+        // Each round of rejection: concede 15% of the gap between PM and vendor
+        rejectionConcession = (gap / priceRange) * 0.15 * Math.min(round, 5);
+      }
+    }
   }
 
   // Detect vendor emphasis and calculate emphasis adjustment
@@ -345,19 +415,23 @@ export function calculateDynamicCounter(
   let chosenTerms: string;
   let strategy: string;
 
-  if (negotiationState && negotiationState.vendorEmphasis !== 'unknown' && negotiationState.emphasisConfidence >= 0.7) {
+  if (
+    negotiationState &&
+    negotiationState.vendorEmphasis !== "unknown" &&
+    negotiationState.emphasisConfidence >= 0.7
+  ) {
     const { vendorEmphasis, emphasisConfidence } = negotiationState;
 
-    if (vendorEmphasis === 'price-focused') {
+    if (vendorEmphasis === "price-focused") {
       // Vendor cares about price - offer higher price, push for longer terms
-      emphasisAdjustment = 0.10 * emphasisConfidence; // Up to +10% on price
+      emphasisAdjustment = 0.1 * emphasisConfidence; // Up to +10% on price
       // Push for longer terms
       const currentTermsDays = vendorOffer.payment_terms
-        ? extractPaymentDays(vendorOffer.payment_terms) ?? 30
+        ? (extractPaymentDays(vendorOffer.payment_terms) ?? 30)
         : 30;
-      chosenTerms = generateFlexibleTerms(currentTermsDays, 'increase', 15);
+      chosenTerms = generateFlexibleTerms(currentTermsDays, "increase", 15);
       strategy = `Dynamic (price-focused vendor): Conceding ${(emphasisAdjustment * 100).toFixed(0)}% on price, pushing ${chosenTerms}`;
-    } else if (vendorEmphasis === 'terms-focused') {
+    } else if (vendorEmphasis === "terms-focused") {
       // Vendor cares about terms - push harder on price, be flexible on terms
       emphasisAdjustment = -0.05 * emphasisConfidence; // Up to -5% on price (harder)
       // Accept or slightly improve vendor's terms
@@ -365,28 +439,50 @@ export function calculateDynamicCounter(
       strategy = `Dynamic (terms-focused vendor): Pushing ${(Math.abs(emphasisAdjustment) * 100).toFixed(0)}% harder on price, accepting ${chosenTerms}`;
     } else {
       // Balanced - use standard priority-based terms
-      chosenTerms = priority === 'HIGH' ? bestTerms(config) : nextBetterTerms(config, vendorOffer.payment_terms);
+      chosenTerms =
+        priority === "HIGH"
+          ? bestTerms(config)
+          : nextBetterTerms(config, vendorOffer.payment_terms);
       strategy = `Balanced: Standard priority-based counter`;
     }
   } else {
     // Unknown emphasis - use standard priority-based terms
-    chosenTerms = priority === 'HIGH' ? bestTerms(config) : nextBetterTerms(config, vendorOffer.payment_terms);
+    chosenTerms =
+      priority === "HIGH"
+        ? bestTerms(config)
+        : nextBetterTerms(config, vendorOffer.payment_terms);
     strategy = `Standard: ${priority} priority counter`;
   }
 
   // Calculate final counter price
-  const totalOffset = baseAggressiveness + roundAdjustment + concessionBonus + emphasisAdjustment;
+  // rejectionConcession makes PM gradually move toward vendor's position when rejected
+  const totalOffset =
+    baseAggressiveness +
+    roundAdjustment +
+    concessionBonus +
+    emphasisAdjustment +
+    rejectionConcession;
   let counterPrice = target + priceRange * totalOffset;
   let priceCapped = false;
 
-  // Never counter above vendor's offer
-  if (vendorOffer.total_price !== null && counterPrice > vendorOffer.total_price) {
-    counterPrice = vendorOffer.total_price;
-    priceCapped = true;
-  }
-
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, max_acceptable);
+
+  // Never counter above vendor's offer — counter should always be BELOW vendor's price
+  // If counter ends up at or above vendor's price, use a meaningful counter below it
+  if (
+    vendorOffer.total_price !== null &&
+    counterPrice >= vendorOffer.total_price
+  ) {
+    // Counter at midpoint between target and vendor's offer (or max_acceptable, whichever is lower)
+    const effectiveMax = Math.min(vendorOffer.total_price, max_acceptable);
+    counterPrice = Math.round(((target + effectiveMax) / 2) * 100) / 100;
+    // If midpoint is still above vendor's price, use target
+    if (counterPrice >= vendorOffer.total_price) {
+      counterPrice = target;
+    }
+    priceCapped = true;
+  }
 
   // Guard: counter price must never be 0 or negative — fall back to target
   if (counterPrice <= 0 && target > 0) {
@@ -396,24 +492,15 @@ export function calculateDynamicCounter(
   // Round to 2 decimal places
   counterPrice = Math.round(counterPrice * 100) / 100;
 
-  // FIX: When price is capped at vendor's offer, push harder on terms
-  // This prevents the confusing "same offer" counter when price matches
-  if (priceCapped && vendorOffer.payment_terms) {
+  // GUARD: PM counter should NEVER have shorter payment terms than vendor's offer.
+  // Longer terms = better for buyer (more cash flow time). If the counter terms are
+  // shorter than what the vendor already offered, use the vendor's terms instead.
+  if (vendorOffer.payment_terms) {
     const vendorDays = extractPaymentDays(vendorOffer.payment_terms);
-    if (vendorDays !== null && vendorDays > 30) {
-      // Push for shorter payment terms (better for buyer)
-      // If vendor offered Net 90, counter with Net 60
-      // If vendor offered Net 60, counter with Net 30
-      if (vendorDays >= 90) {
-        chosenTerms = 'Net 60';
-        strategy = `Price matched vendor's offer; pushing for shorter payment terms (Net 60 vs vendor's Net 90)`;
-      } else if (vendorDays >= 60) {
-        chosenTerms = 'Net 45';
-        strategy = `Price matched vendor's offer; pushing for shorter payment terms (Net 45 vs vendor's Net ${vendorDays})`;
-      } else if (vendorDays > 30) {
-        chosenTerms = 'Net 30';
-        strategy = `Price matched vendor's offer; pushing for shortest payment terms (Net 30)`;
-      }
+    const chosenDays = extractPaymentDays(chosenTerms);
+    if (vendorDays !== null && chosenDays !== null && chosenDays < vendorDays) {
+      chosenTerms = vendorOffer.payment_terms;
+      strategy += ` (terms kept at vendor's ${vendorOffer.payment_terms} — already favorable for buyer)`;
     }
   }
 
@@ -440,8 +527,12 @@ export function calculateDynamicCounter(
  * Returns true if the proposed counter offer is effectively identical to the vendor's offer.
  * In that case we should ACCEPT rather than echo the vendor's own terms back as a "counter".
  */
-function counterMatchesVendorOffer(counter: Offer, vendorOffer: Offer): boolean {
-  const priceMatch = counter.total_price != null &&
+function counterMatchesVendorOffer(
+  counter: Offer,
+  vendorOffer: Offer,
+): boolean {
+  const priceMatch =
+    counter.total_price != null &&
     vendorOffer.total_price != null &&
     Math.abs(counter.total_price - vendorOffer.total_price) < 0.01;
   const termsMatch = counter.payment_terms === vendorOffer.payment_terms;
@@ -455,16 +546,16 @@ export function decideNextMove(
   negotiationState?: NegotiationState | null,
   previousPmOffer?: Offer | PmCounterRecord | null,
   behavioralSignals?: BehavioralSignals | null,
-  adaptiveStrategy?: AdaptiveStrategyResult | null
+  adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): Decision {
   const reasons: string[] = [];
-  const priority = config.priority || 'MEDIUM';
+  const priority = config.priority || "MEDIUM";
   const cs = getCurrencySymbol(config.currency);
 
   // Get thresholds with defaults (70%, 50%, 30%)
-  const acceptThreshold = config.accept_threshold ?? 0.70;
-  const escalateThreshold = config.escalate_threshold ?? 0.50;
-  const walkawayThreshold = config.walkaway_threshold ?? 0.30;
+  const acceptThreshold = config.accept_threshold ?? 0.7;
+  const escalateThreshold = config.escalate_threshold ?? 0.5;
+  const walkawayThreshold = config.walkaway_threshold ?? 0.3;
 
   // Log adaptive strategy if present
   if (adaptiveStrategy) {
@@ -472,7 +563,9 @@ export function decideNextMove(
   }
 
   // Dynamic round limits (Phase 3)
-  const dynamicRounds = (config as NegotiationConfig & { dynamicRounds?: DynamicRoundConfig }).dynamicRounds;
+  const dynamicRounds = (
+    config as NegotiationConfig & { dynamicRounds?: DynamicRoundConfig }
+  ).dynamicRounds;
 
   if (dynamicRounds?.autoExtendEnabled && behavioralSignals) {
     const softMax = dynamicRounds.softMaxRounds;
@@ -481,7 +574,7 @@ export function decideNextMove(
     // Hard safety net - never exceeded
     if (round > hardMax) {
       return {
-        action: 'ESCALATE',
+        action: "ESCALATE",
         utilityScore: 0,
         counterOffer: null,
         reasons: [`Hard max rounds (${hardMax}) exceeded`],
@@ -490,16 +583,23 @@ export function decideNextMove(
 
     // Past soft max: check if we should auto-extend or escalate
     if (round > softMax) {
-      if (behavioralSignals.isConverging && behavioralSignals.convergenceRate > 0.10) {
+      if (
+        behavioralSignals.isConverging &&
+        behavioralSignals.convergenceRate > 0.1
+      ) {
         // Auto-extend: offers are converging, gap decreasing >10%/round
-        reasons.push(`Auto-extending: convergence rate ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round`);
+        reasons.push(
+          `Auto-extending: convergence rate ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round`,
+        );
         // Continue to negotiation logic below (don't escalate)
       } else {
         return {
-          action: 'ESCALATE',
+          action: "ESCALATE",
           utilityScore: 0,
           counterOffer: null,
-          reasons: [`Past soft max (${softMax}) rounds and not converging (rate: ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round)`],
+          reasons: [
+            `Past soft max (${softMax}) rounds and not converging (rate: ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round)`,
+          ],
         };
       }
     }
@@ -508,10 +608,12 @@ export function decideNextMove(
     if (round >= Math.ceil(softMax * 0.6) && behavioralSignals.isStalling) {
       if (adaptiveStrategy?.shouldEscalateEarly) {
         return {
-          action: 'ESCALATE',
+          action: "ESCALATE",
           utilityScore: 0,
           counterOffer: null,
-          reasons: [`Stalling detected after ${round} rounds (early escalation triggered)`],
+          reasons: [
+            `Stalling detected after ${round} rounds (early escalation triggered)`,
+          ],
         };
       }
     }
@@ -520,20 +622,22 @@ export function decideNextMove(
   // Escalation/walk-away now based on stall detection and vendor rigidity
 
   // Clarify if missing
-  if (
-    vendorOffer.total_price == null ||
-    vendorOffer.payment_terms == null
-  ) {
+  if (vendorOffer.total_price == null || vendorOffer.payment_terms == null) {
     return {
-      action: 'ASK_CLARIFY',
+      action: "ASK_CLARIFY",
       utilityScore: 0,
       counterOffer: null,
-      reasons: ['Missing total_price or payment_terms in vendor offer.'],
+      reasons: ["Missing total_price or payment_terms in vendor offer."],
     };
   }
 
   // Defensive: handle missing total_price config
-  const priceConfig = config.parameters?.total_price ?? (config.parameters as Record<string, unknown>)?.unit_price as typeof config.parameters.total_price ?? { target: 1000, max_acceptable: 1500 };
+  const priceConfig = config.parameters?.total_price ??
+    ((config.parameters as Record<string, unknown>)
+      ?.unit_price as typeof config.parameters.total_price) ?? {
+      target: 1000,
+      max_acceptable: 1500,
+    };
   const max = priceConfig.max_acceptable;
   // Feb 2026: Minimum 10 rounds before walking away
   // Walk-away only happens after vendor shows rigidity (no concessions) for 10+ rounds
@@ -549,7 +653,14 @@ export function decideNextMove(
     // This gives vendors a chance to come down to an acceptable range
     if (round < minRoundsBeforeWalkaway) {
       const delivery = getDeliveryForCounter(vendorOffer, config);
-      const dynamicCounter = calculateDynamicCounter(config, vendorOffer, round, negotiationState, previousPmOffer, adaptiveStrategy);
+      const dynamicCounter = calculateDynamicCounter(
+        config,
+        vendorOffer,
+        round,
+        negotiationState,
+        previousPmOffer,
+        adaptiveStrategy,
+      );
       const counter: Offer = {
         total_price: dynamicCounter.price,
         payment_terms: dynamicCounter.terms,
@@ -559,26 +670,32 @@ export function decideNextMove(
 
       if (counterMatchesVendorOffer(counter, vendorOffer)) {
         return {
-          action: 'MESO',
+          action: "MESO",
           utilityScore: totalUtility(config, vendorOffer),
           counterOffer: null,
-          reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+          reasons: [
+            `Counter equals vendor offer — presenting MESO options instead.`,
+          ],
         };
       }
       return {
-        action: 'COUNTER',
+        action: "COUNTER",
         utilityScore: 0,
         counterOffer: counter,
-        reasons: [`Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${max}. I can offer ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`],
+        reasons: [
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${max}. I can offer ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`,
+        ],
       };
     }
 
     // After minimum rounds, walk away if price still exceeds max
     return {
-      action: 'WALK_AWAY',
+      action: "WALK_AWAY",
       utilityScore: 0,
       counterOffer: null,
-      reasons: [`Price ${vendorOffer.total_price} > max acceptable ${max} after ${round} rounds of negotiation`],
+      reasons: [
+        `Price ${vendorOffer.total_price} > max acceptable ${max} after ${round} rounds of negotiation`,
+      ],
     };
   }
 
@@ -595,7 +712,7 @@ export function decideNextMove(
   {
     const targetPrice = priceConfig.target;
     const belowTarget =
-      typeof targetPrice === 'number' &&
+      typeof targetPrice === "number" &&
       vendorOffer.total_price !== null &&
       vendorOffer.total_price < targetPrice;
 
@@ -605,11 +722,11 @@ export function decideNextMove(
     const priceConcessions = negotiationState?.priceConcessions ?? [];
     const lastConcession = priceConcessions[priceConcessions.length - 1];
     const previousVendorPrice =
-      lastConcession && typeof lastConcession.previousValue === 'number'
+      lastConcession && typeof lastConcession.previousValue === "number"
         ? lastConcession.previousValue
         : null;
     const isBigJump =
-      typeof previousVendorPrice === 'number' &&
+      typeof previousVendorPrice === "number" &&
       previousVendorPrice > 0 &&
       vendorOffer.total_price !== null &&
       vendorOffer.total_price < previousVendorPrice * 0.4;
@@ -618,14 +735,14 @@ export function decideNextMove(
       // Both guards tripped simultaneously — strong signal this is a typo
       // or a wild drop. Ask the vendor to confirm.
       return {
-        action: 'ASK_CLARIFY',
+        action: "ASK_CLARIFY",
         utilityScore: 0,
         counterOffer: null,
         reasons: [
           `Vendor price ${cs}${vendorOffer.total_price} is below target (${cs}${targetPrice}) ` +
-          `and represents a ${Math.round((1 - vendorOffer.total_price! / previousVendorPrice!) * 100)}% drop ` +
-          `from the previous offer of ${cs}${previousVendorPrice}. This looks unusually low — ` +
-          `can you please confirm the total price you're proposing?`,
+            `and represents a ${Math.round((1 - vendorOffer.total_price! / previousVendorPrice!) * 100)}% drop ` +
+            `from the previous offer of ${cs}${previousVendorPrice}. This looks unusually low — ` +
+            `can you please confirm the total price you're proposing?`,
         ],
       };
     }
@@ -634,28 +751,35 @@ export function decideNextMove(
   // Auto-accept: if vendor's offer meets or beats PM's last counter, accept immediately
   // e.g., PM countered at $309,000 Net 60 and vendor offers $305,800 Net 60 → accept
   if (previousPmOffer && vendorOffer.total_price !== null) {
-    const pmCounterPrice = (previousPmOffer as PmCounterRecord).price
-      ?? (previousPmOffer as Offer).total_price
-      ?? null;
-    const pmCounterTerms = (previousPmOffer as PmCounterRecord).terms
-      ?? (previousPmOffer as Offer).payment_terms
-      ?? null;
+    const pmCounterPrice =
+      (previousPmOffer as PmCounterRecord).price ??
+      (previousPmOffer as Offer).total_price ??
+      null;
+    const pmCounterTerms =
+      (previousPmOffer as PmCounterRecord).terms ??
+      (previousPmOffer as Offer).payment_terms ??
+      null;
 
     if (pmCounterPrice !== null && vendorOffer.total_price <= pmCounterPrice) {
       // Vendor price is at or below PM's last counter — check terms too
-      const vendorDays = vendorOffer.payment_terms ? extractPaymentDays(vendorOffer.payment_terms) : null;
+      const vendorDays = vendorOffer.payment_terms
+        ? extractPaymentDays(vendorOffer.payment_terms)
+        : null;
       const pmDays = pmCounterTerms ? extractPaymentDays(pmCounterTerms) : null;
 
       // Terms are acceptable if: vendor terms match or are shorter (better for buyer = shorter payment)
       // OR if PM didn't specify terms
-      const termsAcceptable = pmDays === null || vendorDays === null || vendorDays <= pmDays;
+      const termsAcceptable =
+        pmDays === null || vendorDays === null || vendorDays <= pmDays;
 
       if (termsAcceptable) {
         return {
-          action: 'ACCEPT',
+          action: "ACCEPT",
           utilityScore: totalUtility(config, vendorOffer),
           counterOffer: null,
-          reasons: [`Vendor offer (${cs}${vendorOffer.total_price}, ${vendorOffer.payment_terms}) meets or beats PM's last counter (${cs}${pmCounterPrice}, ${pmCounterTerms}) — auto-accept`],
+          reasons: [
+            `Vendor offer (${cs}${vendorOffer.total_price}, ${vendorOffer.payment_terms}) meets or beats PM's last counter (${cs}${pmCounterPrice}, ${pmCounterTerms}) — auto-accept`,
+          ],
         };
       }
     }
@@ -667,38 +791,56 @@ export function decideNextMove(
   // Accept Zone: utility >= 70%
   if (u >= acceptThreshold) {
     return {
-      action: 'ACCEPT',
+      action: "ACCEPT",
       utilityScore: u,
       counterOffer: null,
-      reasons: [`Utility ${(u * 100).toFixed(0)}% >= accept threshold ${(acceptThreshold * 100).toFixed(0)}%`],
+      reasons: [
+        `Utility ${(u * 100).toFixed(0)}% >= accept threshold ${(acceptThreshold * 100).toFixed(0)}%`,
+      ],
     };
   }
 
   // Walk Away Zone: utility < walkaway threshold
   // Feb 2026: Walk away ONLY if vendor is rigid (no concessions) after 10+ rounds AND utility is below threshold
   // MESO Preference Exploration: If vendor selected "Balanced", extend negotiation
-  const inPreferenceExploration = isInPreferenceExploration(negotiationState ?? null);
-  const explorationRoundsRemaining = getPreferenceExplorationRoundsRemaining(negotiationState ?? null);
+  const inPreferenceExploration = isInPreferenceExploration(
+    negotiationState ?? null,
+  );
+  const explorationRoundsRemaining = getPreferenceExplorationRoundsRemaining(
+    negotiationState ?? null,
+  );
 
   if (u < walkawayThreshold) {
     // Only walk away if:
     // 1. We've had 10+ rounds AND
     // 2. Vendor is rigid (no concessions) AND
     // 3. NOT in preference exploration mode
-    const shouldWalkAway = round >= minRoundsBeforeWalkaway && vendorIsRigid && !inPreferenceExploration;
+    const shouldWalkAway =
+      round >= minRoundsBeforeWalkaway &&
+      vendorIsRigid &&
+      !inPreferenceExploration;
 
     if (shouldWalkAway) {
       return {
-        action: 'WALK_AWAY',
+        action: "WALK_AWAY",
         utilityScore: u,
         counterOffer: null,
-        reasons: [`Utility ${(u * 100).toFixed(0)}% < walkaway threshold after ${round} rounds. Vendor has shown no flexibility on price or terms.`],
+        reasons: [
+          `Utility ${(u * 100).toFixed(0)}% < walkaway threshold after ${round} rounds. Vendor has shown no flexibility on price or terms.`,
+        ],
       };
     }
 
     // Otherwise, keep countering
     const delivery = getDeliveryForCounter(vendorOffer, config);
-    const dynamicCounter = calculateDynamicCounter(config, vendorOffer, round, negotiationState, previousPmOffer, adaptiveStrategy);
+    const dynamicCounter = calculateDynamicCounter(
+      config,
+      vendorOffer,
+      round,
+      negotiationState,
+      previousPmOffer,
+      adaptiveStrategy,
+    );
     const counter: Offer = {
       total_price: dynamicCounter.price,
       payment_terms: dynamicCounter.terms,
@@ -708,10 +850,12 @@ export function decideNextMove(
 
     if (counterMatchesVendorOffer(counter, vendorOffer)) {
       return {
-        action: 'MESO',
+        action: "MESO",
         utilityScore: u,
         counterOffer: null,
-        reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+        reasons: [
+          `Counter equals vendor offer — presenting MESO options instead.`,
+        ],
       };
     }
 
@@ -726,7 +870,7 @@ export function decideNextMove(
     reason += `. Counter at ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`;
 
     return {
-      action: 'COUNTER',
+      action: "COUNTER",
       utilityScore: u,
       counterOffer: counter,
       reasons: [reason],
@@ -741,7 +885,14 @@ export function decideNextMove(
 
   if (u < escalateThreshold) {
     const delivery = getDeliveryForCounter(vendorOffer, config);
-    const dynamicCounter = calculateDynamicCounter(config, vendorOffer, round, negotiationState, previousPmOffer, adaptiveStrategy);
+    const dynamicCounter = calculateDynamicCounter(
+      config,
+      vendorOffer,
+      round,
+      negotiationState,
+      previousPmOffer,
+      adaptiveStrategy,
+    );
 
     const counter: Offer = {
       total_price: dynamicCounter.price,
@@ -752,14 +903,19 @@ export function decideNextMove(
 
     // Determine if we should escalate
     // Conditions: 10+ rounds AND stalled for 3+ rounds AND NOT in preference exploration
-    const shouldEscalate = round >= minRoundsBeforeEscalate && negotiationStalled && !inPreferenceExploration;
+    const shouldEscalate =
+      round >= minRoundsBeforeEscalate &&
+      negotiationStalled &&
+      !inPreferenceExploration;
 
     if (shouldEscalate) {
       return {
-        action: 'ESCALATE',
+        action: "ESCALATE",
         utilityScore: u,
         counterOffer: counter,
-        reasons: [`Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - needs human review.`],
+        reasons: [
+          `Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - needs human review.`,
+        ],
       };
     }
 
@@ -777,15 +933,17 @@ export function decideNextMove(
 
     if (counterMatchesVendorOffer(counter, vendorOffer)) {
       return {
-        action: 'MESO',
+        action: "MESO",
         utilityScore: u,
         counterOffer: null,
-        reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+        reasons: [
+          `Counter equals vendor offer — presenting MESO options instead.`,
+        ],
       };
     }
 
     return {
-      action: 'COUNTER',
+      action: "COUNTER",
       utilityScore: u,
       counterOffer: counter,
       reasons: [reason],
@@ -796,7 +954,14 @@ export function decideNextMove(
   // Continue negotiating with counter-offers using dynamic strategy
 
   const delivery = getDeliveryForCounter(vendorOffer, config);
-  const dynamicCounter = calculateDynamicCounter(config, vendorOffer, round, negotiationState, previousPmOffer, adaptiveStrategy);
+  const dynamicCounter = calculateDynamicCounter(
+    config,
+    vendorOffer,
+    round,
+    negotiationState,
+    previousPmOffer,
+    adaptiveStrategy,
+  );
 
   const counter: Offer = {
     total_price: dynamicCounter.price,
@@ -805,18 +970,22 @@ export function decideNextMove(
     delivery_days: delivery.delivery_days,
   };
 
-  reasons.push(`${dynamicCounter.strategy}: Counter at ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`);
+  reasons.push(
+    `${dynamicCounter.strategy}: Counter at ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms}.`,
+  );
 
   if (counterMatchesVendorOffer(counter, vendorOffer)) {
     return {
-      action: 'MESO',
+      action: "MESO",
       utilityScore: u,
       counterOffer: null,
-      reasons: [`Counter equals vendor offer — presenting MESO options instead.`],
+      reasons: [
+        `Counter equals vendor offer — presenting MESO options instead.`,
+      ],
     };
   }
 
-  return { action: 'COUNTER', utilityScore: u, counterOffer: counter, reasons };
+  return { action: "COUNTER", utilityScore: u, counterOffer: counter, reasons };
 }
 
 // ============================================
@@ -830,15 +999,18 @@ export interface WeightedDecision extends Decision {
   utilityBreakdown?: {
     totalUtility: number;
     totalUtilityPercent: number;
-    parameterUtilities: Record<string, {
-      parameterId: string;
-      parameterName: string;
-      utility: number;
-      weight: number;
-      contribution: number;
-      currentValue: number | string | boolean | null;
-      targetValue: number | string | boolean | null;
-    }>;
+    parameterUtilities: Record<
+      string,
+      {
+        parameterId: string;
+        parameterName: string;
+        utility: number;
+        weight: number;
+        contribution: number;
+        currentValue: number | string | boolean | null;
+        targetValue: number | string | boolean | null;
+      }
+    >;
     recommendation: string;
     recommendationReason: string;
   };
@@ -866,7 +1038,7 @@ export function decideWithWeightedUtility(
   negotiationState?: NegotiationState | null,
   previousPmOffer?: Offer | PmCounterRecord | null,
   behavioralSignals?: BehavioralSignals | null,
-  adaptiveStrategy?: AdaptiveStrategyResult | null
+  adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): WeightedDecision {
   const reasons: string[] = [];
   const cs = getCurrencySymbol(legacyConfig?.currency);
@@ -875,39 +1047,49 @@ export function decideWithWeightedUtility(
   // Resolve configuration with user/default priority
   // ============================================
 
-  const resolvedConfig = resolveNegotiationConfig(wizardConfig, legacyConfig ? {
-    total_price: legacyConfig.parameters?.total_price ?? (legacyConfig.parameters as any)?.unit_price,
-    accept_threshold: legacyConfig.accept_threshold,
-    escalate_threshold: legacyConfig.escalate_threshold,
-    walkaway_threshold: legacyConfig.walkaway_threshold,
-    max_rounds: legacyConfig.max_rounds,
-    priority: legacyConfig.priority,
-  } : undefined);
+  const resolvedConfig = resolveNegotiationConfig(
+    wizardConfig,
+    legacyConfig
+      ? {
+          total_price:
+            legacyConfig.parameters?.total_price ??
+            (legacyConfig.parameters as any)?.unit_price,
+          accept_threshold: legacyConfig.accept_threshold,
+          escalate_threshold: legacyConfig.escalate_threshold,
+          walkaway_threshold: legacyConfig.walkaway_threshold,
+          max_rounds: legacyConfig.max_rounds,
+          priority: legacyConfig.priority,
+        }
+      : undefined,
+  );
 
   const priority = resolvedConfig.priority;
 
   // Log config resolution
-  negotiationLogger.logConfigThresholds({
-    accept_threshold: resolvedConfig.acceptThreshold,
-    escalate_threshold: resolvedConfig.escalateThreshold,
-    walkaway_threshold: resolvedConfig.walkAwayThreshold,
-    max_rounds: resolvedConfig.maxRounds,
-    parameters: {
-      total_price: {
-        weight: resolvedConfig.weights.targetUnitPrice / 100,
-        direction: 'minimize',
-        anchor: resolvedConfig.anchorPrice,
-        target: resolvedConfig.targetPrice,
-        max_acceptable: resolvedConfig.maxAcceptablePrice,
-        concession_step: resolvedConfig.concessionStep,
-      },
-      payment_terms: {
-        weight: resolvedConfig.weights.paymentTermsRange / 100,
-        options: ['Net 30', 'Net 60', 'Net 90'] as const,
-        utility: { 'Net 30': 0.5, 'Net 60': 0.75, 'Net 90': 1.0 },
+  negotiationLogger.logConfigThresholds(
+    {
+      accept_threshold: resolvedConfig.acceptThreshold,
+      escalate_threshold: resolvedConfig.escalateThreshold,
+      walkaway_threshold: resolvedConfig.walkAwayThreshold,
+      max_rounds: resolvedConfig.maxRounds,
+      parameters: {
+        total_price: {
+          weight: resolvedConfig.weights.targetUnitPrice / 100,
+          direction: "minimize",
+          anchor: resolvedConfig.anchorPrice,
+          target: resolvedConfig.targetPrice,
+          max_acceptable: resolvedConfig.maxAcceptablePrice,
+          concession_step: resolvedConfig.concessionStep,
+        },
+        payment_terms: {
+          weight: resolvedConfig.weights.paymentTermsRange / 100,
+          options: ["Net 30", "Net 60", "Net 90"] as const,
+          utility: { "Net 30": 0.5, "Net 60": 0.75, "Net 90": 1.0 },
+        },
       },
     },
-  }, priority);
+    priority,
+  );
 
   // Log adaptive strategy if present
   if (adaptiveStrategy) {
@@ -918,7 +1100,9 @@ export function decideWithWeightedUtility(
   // Check round limits
   // ============================================
 
-  const dynamicRounds = (legacyConfig as NegotiationConfig & { dynamicRounds?: DynamicRoundConfig })?.dynamicRounds;
+  const dynamicRounds = (
+    legacyConfig as NegotiationConfig & { dynamicRounds?: DynamicRoundConfig }
+  )?.dynamicRounds;
 
   if (dynamicRounds?.autoExtendEnabled && behavioralSignals) {
     const softMax = dynamicRounds.softMaxRounds;
@@ -927,7 +1111,7 @@ export function decideWithWeightedUtility(
     // Hard safety net - never exceeded
     if (round > hardMax) {
       return {
-        action: 'ESCALATE',
+        action: "ESCALATE",
         utilityScore: 0,
         counterOffer: null,
         reasons: [`Hard max rounds (${hardMax}) exceeded`],
@@ -937,14 +1121,21 @@ export function decideWithWeightedUtility(
 
     // Past soft max: check if we should auto-extend or escalate
     if (round > softMax) {
-      if (behavioralSignals.isConverging && behavioralSignals.convergenceRate > 0.10) {
-        reasons.push(`Auto-extending: convergence rate ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round`);
+      if (
+        behavioralSignals.isConverging &&
+        behavioralSignals.convergenceRate > 0.1
+      ) {
+        reasons.push(
+          `Auto-extending: convergence rate ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round`,
+        );
       } else {
         return {
-          action: 'ESCALATE',
+          action: "ESCALATE",
           utilityScore: 0,
           counterOffer: null,
-          reasons: [`Past soft max (${softMax}) rounds and not converging (rate: ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round)`],
+          reasons: [
+            `Past soft max (${softMax}) rounds and not converging (rate: ${(behavioralSignals.convergenceRate * 100).toFixed(0)}%/round)`,
+          ],
           resolvedConfig,
         };
       }
@@ -954,10 +1145,12 @@ export function decideWithWeightedUtility(
     if (round >= Math.ceil(softMax * 0.6) && behavioralSignals.isStalling) {
       if (adaptiveStrategy?.shouldEscalateEarly) {
         return {
-          action: 'ESCALATE',
+          action: "ESCALATE",
           utilityScore: 0,
           counterOffer: null,
-          reasons: [`Stalling detected after ${round} rounds (early escalation triggered)`],
+          reasons: [
+            `Stalling detected after ${round} rounds (early escalation triggered)`,
+          ],
           resolvedConfig,
         };
       }
@@ -966,7 +1159,7 @@ export function decideWithWeightedUtility(
     // Backward compat: use max_rounds from resolved config
     if (round > resolvedConfig.maxRounds) {
       return {
-        action: 'ESCALATE',
+        action: "ESCALATE",
         utilityScore: 0,
         counterOffer: null,
         reasons: [`Max rounds (${resolvedConfig.maxRounds}) exceeded`],
@@ -981,10 +1174,10 @@ export function decideWithWeightedUtility(
 
   if (vendorOffer.total_price == null && vendorOffer.payment_terms == null) {
     return {
-      action: 'ASK_CLARIFY',
+      action: "ASK_CLARIFY",
       utilityScore: 0,
       counterOffer: null,
-      reasons: ['Missing total_price and payment_terms in vendor offer.'],
+      reasons: ["Missing total_price and payment_terms in vendor offer."],
       resolvedConfig,
     };
   }
@@ -993,19 +1186,22 @@ export function decideWithWeightedUtility(
   // Calculate weighted utility
   // ============================================
 
-  const utilityResult = calculateWeightedUtilityFromResolved(vendorOffer, resolvedConfig);
+  const utilityResult = calculateWeightedUtilityFromResolved(
+    vendorOffer,
+    resolvedConfig,
+  );
   const u = utilityResult.totalUtility;
 
   // Log utility calculation
   negotiationLogger.logUtilityCalculation(
-    utilityResult.parameterUtilities['targetUnitPrice']?.utility ?? 0,
-    utilityResult.parameterUtilities['paymentTermsRange']?.utility ?? 0,
+    utilityResult.parameterUtilities["targetUnitPrice"]?.utility ?? 0,
+    utilityResult.parameterUtilities["paymentTermsRange"]?.utility ?? 0,
     u,
     {
       parameters: {
         total_price: {
           weight: resolvedConfig.weights.targetUnitPrice / 100,
-          direction: 'minimize',
+          direction: "minimize",
           anchor: resolvedConfig.anchorPrice,
           target: resolvedConfig.targetPrice,
           max_acceptable: resolvedConfig.maxAcceptablePrice,
@@ -1013,14 +1209,14 @@ export function decideWithWeightedUtility(
         },
         payment_terms: {
           weight: resolvedConfig.weights.paymentTermsRange / 100,
-          options: ['Net 30', 'Net 60', 'Net 90'] as const,
-          utility: { 'Net 30': 0.5, 'Net 60': 0.75, 'Net 90': 1.0 },
+          options: ["Net 30", "Net 60", "Net 90"] as const,
+          utility: { "Net 30": 0.5, "Net 60": 0.75, "Net 90": 1.0 },
         },
       },
       accept_threshold: resolvedConfig.acceptThreshold,
       walkaway_threshold: resolvedConfig.walkAwayThreshold,
       max_rounds: resolvedConfig.maxRounds,
-    }
+    },
   );
 
   // ============================================
@@ -1037,18 +1233,32 @@ export function decideWithWeightedUtility(
 
   // Check vendor rigidity and stall detection
   const vendorIsRigidWeighted = isVendorRigid(negotiationState ?? null, 10);
-  const negotiationStalledWeighted = isNegotiationStalled(negotiationState ?? null, 3);
+  const negotiationStalledWeighted = isNegotiationStalled(
+    negotiationState ?? null,
+    3,
+  );
 
   // Check if price exceeds max acceptable
-  if (vendorOffer.total_price != null && vendorOffer.total_price > resolvedConfig.maxAcceptablePrice) {
+  if (
+    vendorOffer.total_price != null &&
+    vendorOffer.total_price > resolvedConfig.maxAcceptablePrice
+  ) {
     // Only walk away if vendor is rigid after 10+ rounds
     if (round < minRoundsBeforeWalkaway || !vendorIsRigidWeighted) {
-      const counterOffer = generateCounterOffer(resolvedConfig, vendorOffer, round, negotiationState, adaptiveStrategy);
+      const counterOffer = generateCounterOffer(
+        resolvedConfig,
+        vendorOffer,
+        round,
+        negotiationState,
+        adaptiveStrategy,
+      );
       return {
-        action: 'COUNTER',
+        action: "COUNTER",
         utilityScore: 0,
         counterOffer,
-        reasons: [`Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`],
+        reasons: [
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
+        ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
           totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -1061,34 +1271,43 @@ export function decideWithWeightedUtility(
     }
 
     return {
-      action: 'WALK_AWAY',
+      action: "WALK_AWAY",
       utilityScore: 0,
       counterOffer: null,
-      reasons: [`Price ${vendorOffer.total_price} > max acceptable ${resolvedConfig.maxAcceptablePrice} after ${round} rounds`],
+      reasons: [
+        `Price ${vendorOffer.total_price} > max acceptable ${resolvedConfig.maxAcceptablePrice} after ${round} rounds`,
+      ],
       resolvedConfig,
     };
   }
 
   // Auto-accept: if vendor's offer meets or beats PM's last counter, accept immediately
   if (previousPmOffer && vendorOffer.total_price != null) {
-    const pmCounterPrice = (previousPmOffer as PmCounterRecord).price
-      ?? (previousPmOffer as Offer).total_price
-      ?? null;
-    const pmCounterTerms = (previousPmOffer as PmCounterRecord).terms
-      ?? (previousPmOffer as Offer).payment_terms
-      ?? null;
+    const pmCounterPrice =
+      (previousPmOffer as PmCounterRecord).price ??
+      (previousPmOffer as Offer).total_price ??
+      null;
+    const pmCounterTerms =
+      (previousPmOffer as PmCounterRecord).terms ??
+      (previousPmOffer as Offer).payment_terms ??
+      null;
 
     if (pmCounterPrice !== null && vendorOffer.total_price <= pmCounterPrice) {
-      const vendorDays = vendorOffer.payment_terms ? extractPaymentDays(vendorOffer.payment_terms) : null;
+      const vendorDays = vendorOffer.payment_terms
+        ? extractPaymentDays(vendorOffer.payment_terms)
+        : null;
       const pmDays = pmCounterTerms ? extractPaymentDays(pmCounterTerms) : null;
-      const termsAcceptable = pmDays === null || vendorDays === null || vendorDays <= pmDays;
+      const termsAcceptable =
+        pmDays === null || vendorDays === null || vendorDays <= pmDays;
 
       if (termsAcceptable) {
         return {
-          action: 'ACCEPT',
+          action: "ACCEPT",
           utilityScore: u,
           counterOffer: null,
-          reasons: [`Vendor offer (${cs}${vendorOffer.total_price}, ${vendorOffer.payment_terms}) meets or beats PM's last counter (${cs}${pmCounterPrice}, ${pmCounterTerms}) — auto-accept`],
+          reasons: [
+            `Vendor offer (${cs}${vendorOffer.total_price}, ${vendorOffer.payment_terms}) meets or beats PM's last counter (${cs}${pmCounterPrice}, ${pmCounterTerms}) — auto-accept`,
+          ],
           utilityBreakdown: {
             totalUtility: utilityResult.totalUtility,
             totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -1105,10 +1324,12 @@ export function decideWithWeightedUtility(
   // Accept Zone: utility >= accept threshold
   if (u >= acceptThreshold) {
     return {
-      action: 'ACCEPT',
+      action: "ACCEPT",
       utilityScore: u,
       counterOffer: null,
-      reasons: [`Utility ${(u * 100).toFixed(0)}% >= accept threshold ${(acceptThreshold * 100).toFixed(0)}%`],
+      reasons: [
+        `Utility ${(u * 100).toFixed(0)}% >= accept threshold ${(acceptThreshold * 100).toFixed(0)}%`,
+      ],
       utilityBreakdown: {
         totalUtility: utilityResult.totalUtility,
         totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -1122,20 +1343,28 @@ export function decideWithWeightedUtility(
 
   // Walk Away Zone: utility < walkaway threshold
   // MESO Preference Exploration: If vendor selected "Balanced", extend negotiation
-  const inPreferenceExplorationWeighted = isInPreferenceExploration(negotiationState ?? null);
-  const explorationRoundsRemainingWeighted = getPreferenceExplorationRoundsRemaining(negotiationState ?? null);
+  const inPreferenceExplorationWeighted = isInPreferenceExploration(
+    negotiationState ?? null,
+  );
+  const explorationRoundsRemainingWeighted =
+    getPreferenceExplorationRoundsRemaining(negotiationState ?? null);
 
   // Walk Away Zone: utility < walkaway threshold
   // Feb 2026: Walk away ONLY if vendor is rigid (no concessions) after 10+ rounds
   if (u < walkawayThreshold) {
-    const shouldWalkAway = round >= minRoundsBeforeWalkaway && vendorIsRigidWeighted && !inPreferenceExplorationWeighted;
+    const shouldWalkAway =
+      round >= minRoundsBeforeWalkaway &&
+      vendorIsRigidWeighted &&
+      !inPreferenceExplorationWeighted;
 
     if (shouldWalkAway) {
       return {
-        action: 'WALK_AWAY',
+        action: "WALK_AWAY",
         utilityScore: u,
         counterOffer: null,
-        reasons: [`Utility ${(u * 100).toFixed(0)}% < walkaway threshold after ${round} rounds. Vendor has shown no flexibility.`],
+        reasons: [
+          `Utility ${(u * 100).toFixed(0)}% < walkaway threshold after ${round} rounds. Vendor has shown no flexibility.`,
+        ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
           totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -1148,7 +1377,13 @@ export function decideWithWeightedUtility(
     }
 
     // Otherwise, keep countering
-    const counterOffer = generateCounterOffer(resolvedConfig, vendorOffer, round, negotiationState, adaptiveStrategy);
+    const counterOffer = generateCounterOffer(
+      resolvedConfig,
+      vendorOffer,
+      round,
+      negotiationState,
+      adaptiveStrategy,
+    );
     let reason = `Utility ${(u * 100).toFixed(0)}% below threshold`;
     if (inPreferenceExplorationWeighted) {
       reason += ` - preference exploration: ${explorationRoundsRemainingWeighted} round(s) remaining`;
@@ -1160,7 +1395,7 @@ export function decideWithWeightedUtility(
     reason += `. Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`;
 
     return {
-      action: 'COUNTER',
+      action: "COUNTER",
       utilityScore: u,
       counterOffer,
       reasons: [reason],
@@ -1178,17 +1413,28 @@ export function decideWithWeightedUtility(
   // Escalate Zone: walkaway <= utility < escalate
   // Feb 2026: Escalate ONLY if 10+ rounds AND stalled for 3+ consecutive rounds
   if (u < escalateThreshold) {
-    const counterOffer = generateCounterOffer(resolvedConfig, vendorOffer, round, negotiationState, adaptiveStrategy);
+    const counterOffer = generateCounterOffer(
+      resolvedConfig,
+      vendorOffer,
+      round,
+      negotiationState,
+      adaptiveStrategy,
+    );
 
     // Determine if we should escalate
-    const shouldEscalate = round >= minRoundsBeforeEscalateWeighted && negotiationStalledWeighted && !inPreferenceExplorationWeighted;
+    const shouldEscalate =
+      round >= minRoundsBeforeEscalateWeighted &&
+      negotiationStalledWeighted &&
+      !inPreferenceExplorationWeighted;
 
     if (shouldEscalate) {
       return {
-        action: 'ESCALATE',
+        action: "ESCALATE",
         utilityScore: u,
         counterOffer,
-        reasons: [`Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms} - needs human review.`],
+        reasons: [
+          `Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms} - needs human review.`,
+        ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
           totalUtilityPercent: utilityResult.totalUtilityPercent,
@@ -1213,7 +1459,7 @@ export function decideWithWeightedUtility(
     reason += `. Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`;
 
     return {
-      action: 'COUNTER',
+      action: "COUNTER",
       utilityScore: u,
       counterOffer,
       reasons: [reason],
@@ -1229,11 +1475,19 @@ export function decideWithWeightedUtility(
   }
 
   // Counter Zone: escalate <= utility < accept
-  const counterOffer = generateCounterOffer(resolvedConfig, vendorOffer, round, negotiationState, adaptiveStrategy);
-  reasons.push(`Weighted utility ${(u * 100).toFixed(0)}%: Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`);
+  const counterOffer = generateCounterOffer(
+    resolvedConfig,
+    vendorOffer,
+    round,
+    negotiationState,
+    adaptiveStrategy,
+  );
+  reasons.push(
+    `Weighted utility ${(u * 100).toFixed(0)}%: Counter at ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
+  );
 
   return {
-    action: 'COUNTER',
+    action: "COUNTER",
     utilityScore: u,
     counterOffer,
     reasons,
@@ -1256,29 +1510,31 @@ function generateCounterOffer(
   vendorOffer: ExtendedOffer,
   round: number,
   negotiationState?: NegotiationState | null,
-  adaptiveStrategy?: AdaptiveStrategyResult | null
+  adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): Offer {
-  const { priority, targetPrice, maxAcceptablePrice, priceRange } = resolvedConfig;
+  const { priority, targetPrice, maxAcceptablePrice, priceRange } =
+    resolvedConfig;
 
   // Use adaptive aggressiveness when available
   const baseAggressiveness = adaptiveStrategy
     ? adaptiveStrategy.adjustedAggressiveness
     : ({
         HIGH: 0.15,
-        MEDIUM: 0.40,
+        MEDIUM: 0.4,
         LOW: 0.55,
-      }[priority] ?? 0.40);
+      }[priority] ?? 0.4);
 
   // Round adjustment: 2% per round, max 10%
-  const roundAdjustment = Math.min(0.10, round * 0.02);
+  const roundAdjustment = Math.min(0.1, round * 0.02);
 
   // Concession bonus based on vendor's previous concessions
   let concessionBonus = 0;
   if (negotiationState && negotiationState.priceConcessions.length > 0) {
     const totalConcession = negotiationState.priceConcessions.reduce(
-      (sum, c) => sum + c.changePercent, 0
+      (sum, c) => sum + c.changePercent,
+      0,
     );
-    concessionBonus = Math.min(0.10, totalConcession / 100);
+    concessionBonus = Math.min(0.1, totalConcession / 100);
   }
 
   // Calculate counter price
@@ -1296,11 +1552,14 @@ function generateCounterOffer(
 
   // Determine payment terms
   let counterTerms: string;
-  if (priority === 'HIGH') {
+  if (priority === "HIGH") {
     counterTerms = `Net ${resolvedConfig.paymentTermsMaxDays}`;
   } else {
     const currentDays = vendorOffer.payment_terms_days ?? 30;
-    const targetDays = Math.min(currentDays + 15, resolvedConfig.paymentTermsMaxDays);
+    const targetDays = Math.min(
+      currentDays + 15,
+      resolvedConfig.paymentTermsMaxDays,
+    );
     counterTerms = `Net ${targetDays}`;
   }
 
@@ -1312,20 +1571,25 @@ function generateCounterOffer(
   if (vendorOffer.delivery_date) {
     deliveryDate = vendorOffer.delivery_date;
     const offerDate = new Date(vendorOffer.delivery_date);
-    deliveryDays = Math.ceil((offerDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    deliveryDays = Math.ceil(
+      (offerDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
   } else if (vendorOffer.delivery_days) {
     deliveryDays = vendorOffer.delivery_days;
     const futureDate = new Date(today);
     futureDate.setDate(futureDate.getDate() + deliveryDays);
-    deliveryDate = futureDate.toISOString().split('T')[0];
+    deliveryDate = futureDate.toISOString().split("T")[0];
   } else if (resolvedConfig.deliveryDate) {
-    deliveryDate = resolvedConfig.deliveryDate.toISOString().split('T')[0];
-    deliveryDays = Math.ceil((resolvedConfig.deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    deliveryDate = resolvedConfig.deliveryDate.toISOString().split("T")[0];
+    deliveryDays = Math.ceil(
+      (resolvedConfig.deliveryDate.getTime() - today.getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
   } else {
     // Default 30 days
     const futureDate = new Date(today);
     futureDate.setDate(futureDate.getDate() + 30);
-    deliveryDate = futureDate.toISOString().split('T')[0];
+    deliveryDate = futureDate.toISOString().split("T")[0];
     deliveryDays = 30;
   }
 

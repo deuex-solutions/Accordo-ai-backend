@@ -7,7 +7,10 @@ import {
   updateRole,
   deleteRole,
 } from "./role.controller.js";
-import { authMiddleware, checkPermission } from "../../middlewares/auth.middleware.js";
+import {
+  authMiddleware,
+  checkPermission,
+} from "../../middlewares/auth.middleware.js";
 
 const roleRouter = Router();
 const moduleId = 6;
@@ -17,10 +20,11 @@ const moduleId = 6;
  * Requires: Authentication + Create permission (level 3)
  */
 roleRouter.post(
-  "/create",
+  "/",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
-  createRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  createRole,
 );
 
 /**
@@ -28,10 +32,11 @@ roleRouter.post(
  * Requires: Authentication + Read permission (level 1)
  */
 roleRouter.get(
-  "/get-all",
+  "/",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getAllRoles
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getAllRoles,
 );
 
 /**
@@ -39,10 +44,11 @@ roleRouter.get(
  * Requires: Authentication + Read permission (level 1)
  */
 roleRouter.get(
-  "/get/:roleid",
+  "/:roleId",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getRole,
 );
 
 /**
@@ -50,10 +56,11 @@ roleRouter.get(
  * Requires: Authentication + Update permission (level 2)
  */
 roleRouter.put(
-  "/update/:roleid",
+  "/:roleId",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 2),
-  updateRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 2),
+  updateRole,
 );
 
 /**
@@ -61,10 +68,11 @@ roleRouter.put(
  * Requires: Authentication + Delete permission (level 3)
  */
 roleRouter.delete(
-  "/delete/:roleid",
+  "/:roleId",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
-  deleteRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  deleteRole,
 );
 
 export default roleRouter;

@@ -1,9 +1,9 @@
 import { Op } from 'sequelize';
 import models from '../../models/index.js';
 import type { Requisition } from '../../models/requisition.js';
-import type { ChatbotDeal } from '../../models/chatbotDeal.js';
+import type { ChatbotDeal } from '../../models/chatbot-deal.js';
 import type { Contract } from '../../models/contract.js';
-import type { VendorBid } from '../../models/vendorBid.js';
+import type { VendorBid } from '../../models/vendor-bid.js';
 
 const repo = {
   // ============================================================================

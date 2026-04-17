@@ -12,6 +12,6 @@ export { default as chatbotRepo } from './chatbot.repo.js';
 // Re-export engine types and functions for external use
 export * from './engine/types.js';
 export * from './engine/config.js';
-export * from './engine/parseOffer.js';
+export * from './engine/parse-offer.js';
 export * from './engine/utility.js';
 export * from './engine/decide.js';

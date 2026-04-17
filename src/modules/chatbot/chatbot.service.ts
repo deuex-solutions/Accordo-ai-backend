@@ -5,28 +5,28 @@ import { CustomError } from '../../utils/custom-error.js';
 import logger from '../../config/logger.js';
 import models from '../../models/index.js';
 import sequelize from '../../config/database.js';
-import { parseOfferRegex, parseOfferWithDelivery } from './engine/parseOffer.js';
-import { generateHumanLikeResponse, generateQuickFallback } from './engine/responseGenerator.js';
+import { parseOfferRegex, parseOfferWithDelivery } from './engine/parse-offer.js';
+import { generateHumanLikeResponse, generateQuickFallback } from './engine/response-generator.js';
 import { decideNextMove, extractVendorMaxTermsDays, capTermsToVendorMax } from './engine/decide.js';
 import { computeExplainability, totalUtility, type NegotiationConfig } from './engine/utility.js';
 import { formatCurrency, type SupportedCurrency } from '../../services/currency.service.js';
-import { getCurrencySymbol } from '../../negotiation/intent/buildNegotiationIntent.js';
+import { getCurrencySymbol } from '../../negotiation/intent/build-negotiation-intent.js';
 import type { Offer, Decision, Explainability, WeightedUtilityResult, ParsedVendorOffer, AccumulatedOffer, NegotiationState, BehavioralSignals, AdaptiveStrategyResult, AdaptiveFeaturesConfig, MesoCycleState, FinalOfferState, NegotiationPhase, ExtendedOffer } from './engine/types.js';
 import { createEmptyNegotiationState, createEmptyMesoCycleState, createEmptyFinalOfferState } from './engine/types.js';
-import { analyzeBehavior, computeAdaptiveStrategy } from './engine/behavioralAnalyzer.js';
-import { getHistoricalInsights, adjustAnchorFromHistory } from './engine/historicalAnalyzer.js';
-import { mergeOffers, shouldResetAccumulation, createAccumulatedOffer, isOfferComplete, getMissingComponents, getProvidedComponents } from './engine/offerAccumulator.js';
-import { updateNegotiationState, getLastPmCounter, detectMesoSelectionFromMessage, recordMesoSelection, isInPreferenceExploration, getPreferenceExplorationRoundsRemaining, recordUtilityScore } from './engine/preferenceDetector.js';
-import type { DeliveryConfig } from './engine/deliveryUtility.js';
-import { calculateWeightedUtility, convertLegacyConfig, getUtilitySummary, extractValueFromOffer } from './engine/weightedUtility.js';
+import { analyzeBehavior, computeAdaptiveStrategy } from './engine/behavioral-analyzer.js';
+import { getHistoricalInsights, adjustAnchorFromHistory } from './engine/historical-analyzer.js';
+import { mergeOffers, shouldResetAccumulation, createAccumulatedOffer, isOfferComplete, getMissingComponents, getProvidedComponents } from './engine/offer-accumulator.js';
+import { updateNegotiationState, getLastPmCounter, detectMesoSelectionFromMessage, recordMesoSelection, isInPreferenceExploration, getPreferenceExplorationRoundsRemaining, recordUtilityScore } from './engine/preference-detector.js';
+import type { DeliveryConfig } from './engine/delivery-utility.js';
+import { calculateWeightedUtility, convertLegacyConfig, getUtilitySummary, extractValueFromOffer } from './engine/weighted-utility.js';
 import { DEFAULT_THRESHOLDS } from './engine/types.js';
-import type { ChatbotDeal } from '../../models/chatbotDeal.js';
-import type { ChatbotMessage } from '../../models/chatbotMessage.js';
+import type { ChatbotDeal } from '../../models/chatbot-deal.js';
+import type { ChatbotMessage } from '../../models/chatbot-message.js';
 import { chatCompletion } from '../../services/llm.service.js';
-import { captureVendorBid, checkAndTriggerComparison } from '../bidComparison/bidComparison.service.js';
+import { captureVendorBid, checkAndTriggerComparison } from '../bid-comparison/bid-comparison.service.js';
 import { sendDealCreatedEmail, sendContinuedNegotiationEmail, sendPmDealStatusNotificationEmail, sendDealSummaryPDFEmail } from '../../services/email.service.js';
-import { generateDealSummaryPDF, generatePDFFilename, type DealSummaryPDFInput } from './pdf/dealSummaryPdfGenerator.js';
-import { updateProfileAfterDeal, type DealOutcome } from './engine/vendorProfileService.js';
+import { generateDealSummaryPDF, generatePDFFilename, type DealSummaryPDFInput } from './pdf/deal-summary-pdf-generator.js';
+import { updateProfileAfterDeal, type DealOutcome } from './engine/vendor-profile-service.js';
 import {
   generateMesoOptions,
   generateDynamicMesoOptions,
@@ -47,15 +47,15 @@ import {
   type ShouldUseMesoParams,
   type ShouldUseMesoResult,
 } from './engine/meso.js';
-import { resolveNegotiationConfig } from './engine/weightedUtility.js';
+import { resolveNegotiationConfig } from './engine/weighted-utility.js';
 import {
   shouldAskFinalOffer,
   trackOffer,
   type ParameterHistory,
-} from './engine/stallDetector.js';
-import { checkScopeGuard } from './engine/scopeGuard.js';
-import { buildPartialResult, classifyError, getErrorFallbackResponse } from './engine/errorRecovery.js';
-import { sanitizeNegotiationHistory } from './engine/historySanitizer.js';
+} from './engine/stall-detector.js';
+import { checkScopeGuard } from './engine/scope-guard.js';
+import { buildPartialResult, classifyError, getErrorFallbackResponse } from './engine/error-recovery.js';
+import { sanitizeNegotiationHistory } from './engine/history-sanitizer.js';
 
 // ============================================================================
 // Contract-Deal Status Sync
@@ -2003,7 +2003,7 @@ export const generatePMResponseAsyncService = async (
         );
 
         const { buildPaymentTermsPromptMessage } = await import(
-          '../vendor-chat/structuredPrompts.js'
+          '../vendor-chat/structured-prompts.js'
         );
         const { content: promptContent, pendingPrompt } = buildPaymentTermsPromptMessage();
 
@@ -3499,7 +3499,7 @@ export const runDemoService = async (
     }
 
     // Import vendor agent (dynamic to avoid circular deps)
-    const { generateVendorReply } = await import('./vendor/vendorAgent.js');
+    const { generateVendorReply } = await import('./vendor/vendor-agent.js');
 
     // Extract PM's price config from deal configuration
     // This ensures vendor offers are ABOVE PM's target price
@@ -3699,7 +3699,7 @@ export const resumeDealService = async (dealId: string): Promise<ChatbotDeal> =>
     }
 
     // Use state machine to validate and execute the RESUME transition
-    const { transition: smTransition, canTransition: smCanTransition } = await import('./engine/negotiationStateMachine.js');
+    const { transition: smTransition, canTransition: smCanTransition } = await import('./engine/negotiation-state-machine.js');
     if (!smCanTransition(deal.status as any, 'RESUME')) {
       throw new CustomError(`Cannot resume deal in '${deal.status}' status. Only ESCALATED deals can be resumed.`, 400);
     }
@@ -5375,7 +5375,7 @@ import {
   type PmStance,
   type VendorScenarioOffer,
   type AiPmDecision,
-} from './vendor/vendorPolicy.js';
+} from './vendor/vendor-policy.js';
 
 /**
  * Extract PM stance from deal's wizard config

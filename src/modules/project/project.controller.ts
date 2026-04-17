@@ -34,7 +34,7 @@ export const getProject = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await getProjectService(getParam(req.params.projectid));
+    const data = await getProjectService(getParam(req.params.projectId));
     res.status(201).json({ message: 'Project', data });
   } catch (error) {
     next(error);
@@ -75,7 +75,7 @@ export const updateProject = async (
   try {
     const { pointOfContact = [] } = req.body;
     const data = await updateProjectService(
-      getParam(req.params.projectid),
+      getParam(req.params.projectId),
       req.context.userId,
       req.body,
       pointOfContact
@@ -95,7 +95,7 @@ export const deleteProject = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await deleteProjectService(getParam(req.params.projectid));
+    const data = await deleteProjectService(getParam(req.params.projectId));
     res.status(201).json({ message: 'Project deleted successfully', data });
   } catch (error) {
     next(error);
