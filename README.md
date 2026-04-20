@@ -25,19 +25,19 @@ The API runs on **http://localhost:5002** by default.
 
 Create `.env` from `.env.example`. Key variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `5002` | API server port |
-| `DB_HOST` | `127.0.0.1` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
-| `DB_NAME` | `accordo` | Database name |
-| `DB_USERNAME` | `postgres` | Database user |
-| `DB_PASSWORD` | `postgres` | Database password |
-| `JWT_SECRET` | — | JWT signing secret |
-| `LLM_BASE_URL` | `http://localhost:11434` | Ollama LLM endpoint |
-| `LLM_MODEL` | `qwen3` | LLM model name |
-| `VENDOR_PORTAL_URL` | `http://localhost:5001/vendor` | Frontend vendor portal URL |
-| `CHATBOT_FRONTEND_URL` | `http://localhost:5001` | Frontend base URL |
+| Variable               | Default                        | Description                |
+| ---------------------- | ------------------------------ | -------------------------- |
+| `PORT`                 | `5002`                         | API server port            |
+| `DB_HOST`              | `127.0.0.1`                    | PostgreSQL host            |
+| `DB_PORT`              | `5432`                         | PostgreSQL port            |
+| `DB_NAME`              | `accordo`                      | Database name              |
+| `DB_USERNAME`          | `postgres`                     | Database user              |
+| `DB_PASSWORD`          | `postgres`                     | Database password          |
+| `JWT_SECRET`           | —                              | JWT signing secret         |
+| `LLM_BASE_URL`         | `http://localhost:11434`       | Ollama LLM endpoint        |
+| `LLM_MODEL`            | `qwen3`                        | LLM model name             |
+| `VENDOR_PORTAL_URL`    | `http://localhost:5001/vendor` | Frontend vendor portal URL |
+| `CHATBOT_FRONTEND_URL` | `http://localhost:5001`        | Frontend base URL          |
 
 See `.env.example` for the full list including email (SMTP/SES), OpenAI, and embedding service configuration.
 
@@ -161,18 +161,18 @@ The `Dockerfile` uses multi-stage builds with two targets:
 
 ### Docker Environment Variables
 
-| Variable | Dev Default | Prod | Description |
-|----------|-------------|------|-------------|
-| `DB_PASSWORD` | `postgres` | **Required** | PostgreSQL password |
-| `DB_NAME` | `accordo` | `accordo` | Database name |
-| `DB_USERNAME` | `postgres` | `postgres` | Database user |
-| `DB_PORT` | `5432` | `5432` | PostgreSQL host port |
-| `JWT_SECRET` | `change-me-in-development` | **Required** | JWT signing secret |
-| `JWT_ACCESS_TOKEN_SECRET` | `change-me-access-secret` | **Required** | Access token secret |
-| `JWT_REFRESH_TOKEN_SECRET` | `change-me-refresh-secret` | **Required** | Refresh token secret |
-| `LLM_BASE_URL` | `http://host.docker.internal:11434` | same | Ollama endpoint |
-| `LLM_MODEL` | `qwen3` | `qwen3` | LLM model |
-| `PORT` | `5002` | `5002` | API server port |
+| Variable                   | Dev Default                         | Prod         | Description          |
+| -------------------------- | ----------------------------------- | ------------ | -------------------- |
+| `DB_PASSWORD`              | `postgres`                          | **Required** | PostgreSQL password  |
+| `DB_NAME`                  | `accordo`                           | `accordo`    | Database name        |
+| `DB_USERNAME`              | `postgres`                          | `postgres`   | Database user        |
+| `DB_PORT`                  | `5432`                              | `5432`       | PostgreSQL host port |
+| `JWT_SECRET`               | `change-me-in-development`          | **Required** | JWT signing secret   |
+| `JWT_ACCESS_TOKEN_SECRET`  | `change-me-access-secret`           | **Required** | Access token secret  |
+| `JWT_REFRESH_TOKEN_SECRET` | `change-me-refresh-secret`          | **Required** | Refresh token secret |
+| `LLM_BASE_URL`             | `http://host.docker.internal:11434` | same         | Ollama endpoint      |
+| `LLM_MODEL`                | `qwen3`                             | `qwen3`      | LLM model            |
+| `PORT`                     | `5002`                              | `5002`       | API server port      |
 
 ## Architecture
 
@@ -203,32 +203,32 @@ Each module follows: `controller.ts` → `service.ts` → `routes.ts` → `valid
 
 ### Core Engine (`modules/chatbot/engine/`)
 
-| File | Purpose |
-|------|---------|
-| `decide.ts` | Decision engine — utility thresholds, counter-offer generation, dynamic round limits |
-| `utility.ts` | Core utility calculations (price, terms, weighted) |
-| `weightedUtility.ts` | Multi-parameter weighted utility scoring |
-| `meso.ts` | MESO option generation with phased flow control |
-| `behavioralAnalyzer.ts` | Behavioral signal extraction — concession velocity, convergence, momentum |
-| `historicalAnalyzer.ts` | Historical deal analysis for anchor adjustment |
-| `preferenceDetector.ts` | Vendor emphasis detection (price vs terms focused) |
-| `offerAccumulator.ts` | Multi-message partial offer merging |
-| `parseOffer.ts` | Regex-based offer extraction from messages |
-| `responseGenerator.ts` | LLM-powered human-like response generation |
-| `toneDetector.ts` | Vendor emotional tone analysis |
-| `types.ts` | Engine type definitions (NegotiationState, MesoCycleState, etc.) |
+| File                    | Purpose                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `decide.ts`             | Decision engine — utility thresholds, counter-offer generation, dynamic round limits |
+| `utility.ts`            | Core utility calculations (price, terms, weighted)                                   |
+| `weightedUtility.ts`    | Multi-parameter weighted utility scoring                                             |
+| `meso.ts`               | MESO option generation with phased flow control                                      |
+| `behavioralAnalyzer.ts` | Behavioral signal extraction — concession velocity, convergence, momentum            |
+| `historicalAnalyzer.ts` | Historical deal analysis for anchor adjustment                                       |
+| `preferenceDetector.ts` | Vendor emphasis detection (price vs terms focused)                                   |
+| `offerAccumulator.ts`   | Multi-message partial offer merging                                                  |
+| `parseOffer.ts`         | Regex-based offer extraction from messages                                           |
+| `responseGenerator.ts`  | LLM-powered human-like response generation                                           |
+| `toneDetector.ts`       | Vendor emotional tone analysis                                                       |
+| `types.ts`              | Engine type definitions (NegotiationState, MesoCycleState, etc.)                     |
 
 ### Key Features
 
-| Feature | Description |
-|---------|-------------|
-| Adaptive Strategy | Behavioral analysis adjusts strategy in real-time (Holding Firm, Accelerating, Matching Pace, Final Push) |
-| Dynamic Round Limits | Soft max/hard max with auto-extension when converging, early escalation when stalling |
-| Historical Anchoring | Adjusts opening anchor based on past deal outcomes with the same vendor |
-| Weighted Utility | Multi-parameter utility (price, payment terms, delivery, custom) with configurable weights |
-| Two Modes | INSIGHTS (deterministic engine) and CONVERSATION (LLM-driven) |
-| Contract-Deal Sync | Automatic contract status updates based on deal lifecycle |
-| PDF Reports | Deal summary PDF generation with charts |
+| Feature              | Description                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| Adaptive Strategy    | Behavioral analysis adjusts strategy in real-time (Holding Firm, Accelerating, Matching Pace, Final Push) |
+| Dynamic Round Limits | Soft max/hard max with auto-extension when converging, early escalation when stalling                     |
+| Historical Anchoring | Adjusts opening anchor based on past deal outcomes with the same vendor                                   |
+| Weighted Utility     | Multi-parameter utility (price, payment terms, delivery, custom) with configurable weights                |
+| Two Modes            | INSIGHTS (deterministic engine) and CONVERSATION (LLM-driven)                                             |
+| Contract-Deal Sync   | Automatic contract status updates based on deal lifecycle                                                 |
+| PDF Reports          | Deal summary PDF generation with charts                                                                   |
 
 ## MESO + Others Flow
 
@@ -236,32 +236,32 @@ The backend implements a phased MESO (Multiple Equivalent Simultaneous Offers) n
 
 ### Flow Phases
 
-| Phase | Rounds | Description |
-|-------|--------|-------------|
-| Normal Negotiation | 1-5 | Standard text-based negotiation |
-| MESO Presentation | After 5 | Generate and present 3 MESO offers + "Others" option |
-| Others Submission | On selection | Vendor submits custom price + payment terms |
-| Post-Others | 4 rounds | Text negotiation before next MESO cycle |
-| Stall Detection | After 3 identical | "Is this your final offer?" prompt |
-| Final MESO | On confirmation | MESO without "Others" option |
-| Escalation | After 5 cycles | Notify human PM |
+| Phase              | Rounds            | Description                                          |
+| ------------------ | ----------------- | ---------------------------------------------------- |
+| Normal Negotiation | 1-5               | Standard text-based negotiation                      |
+| MESO Presentation  | After 5           | Generate and present 3 MESO offers + "Others" option |
+| Others Submission  | On selection      | Vendor submits custom price + payment terms          |
+| Post-Others        | 4 rounds          | Text negotiation before next MESO cycle              |
+| Stall Detection    | After 3 identical | "Is this your final offer?" prompt                   |
+| Final MESO         | On confirmation   | MESO without "Others" option                         |
+| Escalation         | After 5 cycles    | Notify human PM                                      |
 
 ### MESO State Tracking
 
 ```typescript
 // Tracked in NegotiationState
 interface MesoCycleState {
-  mesoCycleNumber: number;        // Current cycle (1-5 max)
-  lastMesoShownAtRound: number;   // When MESO was last shown
-  roundsInCurrentCycle: number;   // Rounds since Others (0-4)
-  othersSelectedCount: number;    // Times vendor selected Others
-  inPostOthersPhase: boolean;     // Currently in post-Others phase
+  mesoCycleNumber: number; // Current cycle (1-5 max)
+  lastMesoShownAtRound: number; // When MESO was last shown
+  roundsInCurrentCycle: number; // Rounds since Others (0-4)
+  othersSelectedCount: number; // Times vendor selected Others
+  inPostOthersPhase: boolean; // Currently in post-Others phase
 }
 
 interface FinalOfferState {
-  vendorConfirmedFinal: boolean;  // Vendor confirmed final offer
-  stalledPrice?: number;          // The stalled price value
-  finalMesoShown: boolean;        // Final MESO (no Others) shown
+  vendorConfirmedFinal: boolean; // Vendor confirmed final offer
+  stalledPrice?: number; // The stalled price value
+  finalMesoShown: boolean; // Final MESO (no Others) shown
 }
 ```
 
@@ -269,17 +269,18 @@ interface FinalOfferState {
 
 New endpoints for vendor MESO flow (`/api/vendor-chat/`):
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/meso/select` | POST | Select MESO option (auto-accepts deal) |
-| `/meso/others` | POST | Submit custom price + payment terms |
-| `/final-offer/confirm` | POST | Confirm/deny final offer |
+| Endpoint               | Method | Description                            |
+| ---------------------- | ------ | -------------------------------------- |
+| `/meso/select`         | POST   | Select MESO option (auto-accepts deal) |
+| `/meso/others`         | POST   | Submit custom price + payment terms    |
+| `/final-offer/confirm` | POST   | Confirm/deny final offer               |
 
 All vendor-chat endpoints use `uniqueToken` authentication (no JWT required).
 
 ### Counter-Offer Logic
 
 When the PM's calculated counter-price exceeds the vendor's offer, the system:
+
 1. Caps the counter at the vendor's price (never overpay)
 2. Pushes harder on payment terms to make progress
 3. Strategy: "Price matched vendor's offer; pushing for shorter payment terms"
@@ -288,16 +289,16 @@ When the PM's calculated counter-price exceeds the vendor's offer, the system:
 
 All routes under `/api`:
 
-| Group | Base Path | Description |
-|-------|-----------|-------------|
-| Auth | `/api/auth` | JWT authentication |
-| Chatbot | `/api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId` | Negotiation chatbot |
-| Vendor Chat | `/api/vendor-chat` | Vendor-facing portal (token auth) |
-| Bid Analysis | `/api/bid-analysis` | Vendor bid comparison |
-| Requisitions | `/api/requisition` | Purchase requisitions |
-| Contracts | `/api/contract` | Contract management |
-| Vendors | `/api/vendor` | Vendor management |
-| Health | `/api/health` | Service health check |
+| Group        | Base Path                                                          | Description                       |
+| ------------ | ------------------------------------------------------------------ | --------------------------------- |
+| Auth         | `/api/auth`                                                        | JWT authentication                |
+| Chatbot      | `/api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId` | Negotiation chatbot               |
+| Vendor Chat  | `/api/vendor-chat`                                                 | Vendor-facing portal (token auth) |
+| Bid Analysis | `/api/bid-analysis`                                                | Vendor bid comparison             |
+| Requisitions | `/api/requisition`                                                 | Purchase requisitions             |
+| Contracts    | `/api/contract`                                                    | Contract management               |
+| Vendors      | `/api/vendor`                                                      | Vendor management                 |
+| Health       | `/api/health`                                                      | Service health check              |
 
 Swagger docs available at `http://localhost:5002/api-docs`.
 
@@ -338,13 +339,13 @@ POST   /final-offer/confirm # Confirm final offer
 
 ## Port Configuration
 
-| Service | Port | Description |
-|---------|------|-------------|
-| Frontend | 5001 | React/Vite application |
-| **Backend API** | **5002** | **This Express.js server** |
-| Embedding Service | 5003 | Python FastAPI (optional) |
-| MailHog SMTP | 5004 | Email testing |
-| MailHog Web UI | 5005 | Email testing UI |
+| Service           | Port     | Description                |
+| ----------------- | -------- | -------------------------- |
+| Frontend          | 5001     | React/Vite application     |
+| **Backend API**   | **5002** | **This Express.js server** |
+| Embedding Service | 5003     | Python FastAPI (optional)  |
+| MailHog SMTP      | 5004     | Email testing              |
+| MailHog Web UI    | 5005     | Email testing UI           |
 
 > Port 5000 is reserved by macOS AirPlay Receiver.
 
@@ -363,14 +364,14 @@ POST   /final-offer/confirm # Confirm final offer
 
 Key models for negotiation:
 
-| Model | Description |
-|-------|-------------|
-| `ChatbotDeal` | Negotiation deal with status, rounds, config |
-| `ChatbotMessage` | Messages (VENDOR, ACCORDO, SYSTEM roles) |
-| `ChatbotDraft` | Auto-saved deal drafts |
-| `MesoRound` | MESO round data with options and selection |
-| `Contract` | Contract linked to deal |
-| `Requisition` | RFQ with products and vendors |
+| Model            | Description                                  |
+| ---------------- | -------------------------------------------- |
+| `ChatbotDeal`    | Negotiation deal with status, rounds, config |
+| `ChatbotMessage` | Messages (VENDOR, ACCORDO, SYSTEM roles)     |
+| `ChatbotDraft`   | Auto-saved deal drafts                       |
+| `MesoRound`      | MESO round data with options and selection   |
+| `Contract`       | Contract linked to deal                      |
+| `Requisition`    | RFQ with products and vendors                |
 
 ## Database Migration (Important)
 
@@ -413,16 +414,16 @@ This tells Sequelize CLI that the consolidated migrations have already been appl
 
 ### Migration Files
 
-| # | File | Tables |
-|---|------|--------|
-| 1 | `foundation.cjs` | Companies, Modules, Roles, User, authTokens, Otps, RolePermissions, UserActions, Addresses |
-| 2 | `projects-products.cjs` | Products, Projects, ProjectPocs |
-| 3 | `requisitions.cjs` | Requisitions, RequisitionProducts, Attachments, Approvals |
-| 4 | `vendors-contracts.cjs` | VendorCompanies, Contracts, Pos, EmailLogs |
-| 5 | `chatbot-core.cjs` | chatbot_templates, Preferences, template_parameters, chatbot_deals, chatbot_messages, meso_rounds, vendor_profiles |
-| 6 | `bid-analysis.cjs` | vendor_bids, bid_comparisons, bid_action_histories, vendor_selections, vendor_notifications |
-| 7 | `vectors-ml.cjs` | negotiation_patterns, vector_migration_status, ApiUsageLogs, Negotiations, NegotiationRounds, ChatSessions, training_data, deal_embeddings, message_embeddings |
-| 8 | `indexes-and-constraints.cjs` | Deferred FK constraints |
+| #   | File                          | Tables                                                                                                                                                         |
+| --- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `foundation.cjs`              | Companies, Modules, Roles, User, authTokens, Otps, RolePermissions, UserActions, Addresses                                                                     |
+| 2   | `projects-products.cjs`       | Products, Projects, ProjectPocs                                                                                                                                |
+| 3   | `requisitions.cjs`            | Requisitions, RequisitionProducts, Attachments, Approvals                                                                                                      |
+| 4   | `vendors-contracts.cjs`       | VendorCompanies, Contracts, Pos, EmailLogs                                                                                                                     |
+| 5   | `chatbot-core.cjs`            | chatbot_templates, Preferences, template_parameters, chatbot_deals, chatbot_messages, meso_rounds, vendor_profiles                                             |
+| 6   | `bid-analysis.cjs`            | vendor_bids, bid_comparisons, bid_action_histories, vendor_selections, vendor_notifications                                                                    |
+| 7   | `vectors-ml.cjs`              | negotiation_patterns, vector_migration_status, ApiUsageLogs, Negotiations, NegotiationRounds, ChatSessions, training_data, deal_embeddings, message_embeddings |
+| 8   | `indexes-and-constraints.cjs` | Deferred FK constraints                                                                                                                                        |
 
 ## Troubleshooting
 
@@ -443,6 +444,70 @@ docker run -d -p 5004:1025 -p 5005:8025 mailhog/mailhog
 ```
 
 View emails at http://localhost:5005
+
+## Naming Conventions
+
+All contributors must follow these naming standards for consistency and predictable file discovery.
+
+| Area              | Convention                           | Example                                            |
+| ----------------- | ------------------------------------ | -------------------------------------------------- |
+| Source files      | kebab-case with dot-separation       | `bid-comparison.controller.ts`, `parse-offer.ts`   |
+| Folders           | kebab-case                           | `bid-analysis/`, `vendor-chat/`, `bid-comparison/` |
+| Route paths       | RESTful, kebab-case                  | `/api/vendor-chat`, `/api/bid-analysis`            |
+| Route params      | camelCase                            | `:userId`, `:companyId`, `:requisitionId`          |
+| Import extensions | Always `.js` (ES Modules convention) | `import { User } from '../models/user.js'`         |
+
+### Examples
+
+```
+src/
+├── modules/
+│   ├── bid-analysis/                    # Folder: kebab-case
+│   │   ├── bid-analysis.controller.ts      # File: kebab-case + dot-separation
+│   │   ├── bid-analysis.service.ts
+│   │   ├── bid-analysis.routes.ts
+│   │   └── bid-analysis.validator.ts
+│   ├── vendor-chat/                     # Folder: kebab-case
+│   │   ├── vendor-chat.controller.ts
+│   │   └── vendor-chat.service.ts
+│   └── chatbot/
+│       └── engine/
+│           ├── parse-offer.ts              # Utility: kebab-case
+│           ├── behavioral-analyzer.ts
+│           └── stall-detector.ts
+├── services/
+│   ├── llm.service.ts                      # Shared service: kebab-case + dot
+│   └── email.service.ts
+└── middlewares/
+    ├── auth.middleware.ts
+    └── error-handler.ts
+```
+
+### Route Pattern
+
+Routes follow RESTful conventions — no verbose CRUD prefixes:
+
+```typescript
+// Correct — RESTful
+router.post('/',         createHandler);     // Create
+router.get('/',          listHandler);       // List
+router.get('/:id',       getHandler);        // Get by ID
+router.put('/:id',       updateHandler);     // Update
+router.delete('/:id',    deleteHandler);     // Delete
+
+// Incorrect — verbose prefixes
+router.post('/create',          ...);   // Don't do this
+router.get('/get-all',          ...);   // Don't do this
+router.get('/get/:id',          ...);   // Don't do this
+```
+
+### Rules
+
+1. **New files** → always kebab-case (e.g., `my-feature.service.ts`, `parse-input.ts`)
+2. **New folders** → always kebab-case (e.g., `my-feature/`)
+3. **Route params** → always camelCase (e.g., `:vendorId` not `:vendor_id` or `:vendor-id`)
+4. **Imports** → always include `.js` extension (TypeScript ES Modules requirement)
+5. **Never** use camelCase or PascalCase for file names (e.g., ~~`parseOffer.ts`~~, ~~`BidAnalysis.ts`~~)
 
 ## License
 

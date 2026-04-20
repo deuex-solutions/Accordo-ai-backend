@@ -1,9 +1,9 @@
-import { Op } from 'sequelize';
-import models from '../../models/index.js';
-import type { Requisition } from '../../models/requisition.js';
-import type { ChatbotDeal } from '../../models/chatbot-deal.js';
-import type { Contract } from '../../models/contract.js';
-import type { VendorBid } from '../../models/vendor-bid.js';
+import { Op } from "sequelize";
+import models from "../../models/index.js";
+import type { Requisition } from "../../models/requisition.js";
+import type { ChatbotDeal } from "../../models/chatbot-deal.js";
+import type { Contract } from "../../models/contract.js";
+import type { VendorBid } from "../../models/vendor-bid.js";
 
 const repo = {
   // ============================================================================
@@ -11,7 +11,7 @@ const repo = {
   // ============================================================================
   findRequisitionsForCompany: async (
     companyId: number,
-    fromDate: Date
+    fromDate: Date,
   ): Promise<Requisition[]> => {
     return models.Requisition.findAll({
       where: {
@@ -22,20 +22,20 @@ const repo = {
       include: [
         {
           model: models.Project,
-          as: 'Project',
+          as: "Project",
           attributes: [],
           where: { companyId },
         },
         {
           model: models.Contract,
-          as: 'Contract',
+          as: "Contract",
         },
         {
           model: models.RequisitionProduct,
-          as: 'RequisitionProduct',
+          as: "RequisitionProduct",
         },
       ],
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       subQuery: false,
     });
   },
@@ -50,7 +50,7 @@ const repo = {
   findRequisitionsInPeriod: async (
     companyId: number,
     fromDate: Date,
-    toDate: Date
+    toDate: Date,
   ): Promise<Requisition[]> => {
     return models.Requisition.findAll({
       where: {
@@ -62,20 +62,20 @@ const repo = {
       include: [
         {
           model: models.Project,
-          as: 'Project',
+          as: "Project",
           attributes: [],
           where: { companyId },
         },
         {
           model: models.Contract,
-          as: 'Contract',
+          as: "Contract",
         },
         {
           model: models.RequisitionProduct,
-          as: 'RequisitionProduct',
+          as: "RequisitionProduct",
         },
       ],
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       subQuery: false,
     });
   },
@@ -87,10 +87,9 @@ const repo = {
   findDealsForCompany: async (
     companyId: number,
     fromDate?: Date,
-    toDate?: Date
+    toDate?: Date,
   ): Promise<ChatbotDeal[]> => {
     const where: any = {
-      archivedAt: { [Op.is]: null as any },
       deletedAt: { [Op.is]: null as any },
     };
     if (fromDate && toDate) {
@@ -101,13 +100,13 @@ const repo = {
       include: [
         {
           model: models.Requisition,
-          as: 'Requisition',
+          as: "Requisition",
           required: true,
-          attributes: ['id', 'rfqId', 'subject', 'totalPrice', 'category'],
+          attributes: ["id", "rfqId", "subject", "totalPrice", "category"],
           include: [
             {
               model: models.Project,
-              as: 'Project',
+              as: "Project",
               attributes: [],
               where: { companyId },
             },
@@ -115,11 +114,11 @@ const repo = {
         },
         {
           model: models.User,
-          as: 'Vendor',
-          attributes: ['id', 'name', 'email'],
+          as: "Vendor",
+          attributes: ["id", "name", "email"],
         },
       ],
-      order: [['updatedAt', 'DESC']],
+      order: [["updatedAt", "DESC"]],
       subQuery: false,
     });
   },
@@ -130,7 +129,7 @@ const repo = {
   findVendorBidsForCompany: async (
     companyId: number,
     fromDate: Date,
-    toDate: Date
+    toDate: Date,
   ): Promise<VendorBid[]> => {
     return models.VendorBid.findAll({
       where: {
@@ -142,13 +141,13 @@ const repo = {
       include: [
         {
           model: models.Requisition,
-          as: 'Requisition',
+          as: "Requisition",
           required: true,
-          attributes: ['id', 'rfqId', 'projectId'],
+          attributes: ["id", "rfqId", "projectId"],
           include: [
             {
               model: models.Project,
-              as: 'Project',
+              as: "Project",
               attributes: [],
               where: { companyId },
             },
@@ -167,7 +166,7 @@ const repo = {
     companyId: number,
     limit: number,
     fromDate?: Date,
-    toDate?: Date
+    toDate?: Date,
   ): Promise<ChatbotDeal[]> => {
     const where: any = {
       deletedAt: { [Op.is]: null as any },
@@ -180,13 +179,13 @@ const repo = {
       include: [
         {
           model: models.Requisition,
-          as: 'Requisition',
+          as: "Requisition",
           required: true,
-          attributes: ['id', 'rfqId', 'subject'],
+          attributes: ["id", "rfqId", "subject"],
           include: [
             {
               model: models.Project,
-              as: 'Project',
+              as: "Project",
               attributes: [],
               where: { companyId },
             },
@@ -194,11 +193,11 @@ const repo = {
         },
         {
           model: models.User,
-          as: 'Vendor',
-          attributes: ['id', 'name'],
+          as: "Vendor",
+          attributes: ["id", "name"],
         },
       ],
-      order: [['updatedAt', 'DESC']],
+      order: [["updatedAt", "DESC"]],
       limit,
       subQuery: false,
     });
@@ -208,7 +207,7 @@ const repo = {
     companyId: number,
     limit: number,
     fromDate?: Date,
-    toDate?: Date
+    toDate?: Date,
   ): Promise<Requisition[]> => {
     const where: any = {};
     if (fromDate && toDate) {
@@ -219,12 +218,12 @@ const repo = {
       include: [
         {
           model: models.Project,
-          as: 'Project',
+          as: "Project",
           attributes: [],
           where: { companyId },
         },
       ],
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       limit,
       subQuery: false,
     });
@@ -236,13 +235,13 @@ const repo = {
   findStalledDeals: async (
     companyId: number,
     staleDays: number,
-    fromDate?: Date
+    fromDate?: Date,
   ): Promise<ChatbotDeal[]> => {
     const staleDate = new Date();
     staleDate.setDate(staleDate.getDate() - staleDays);
 
     const where: any = {
-      status: 'NEGOTIATING',
+      status: "NEGOTIATING",
       archivedAt: { [Op.is]: null as any },
       deletedAt: { [Op.is]: null as any },
       lastMessageAt: { [Op.lt]: staleDate },
@@ -256,13 +255,13 @@ const repo = {
       include: [
         {
           model: models.Requisition,
-          as: 'Requisition',
+          as: "Requisition",
           required: true,
-          attributes: ['id', 'rfqId', 'subject'],
+          attributes: ["id", "rfqId", "subject"],
           include: [
             {
               model: models.Project,
-              as: 'Project',
+              as: "Project",
               attributes: [],
               where: { companyId },
             },
@@ -270,11 +269,11 @@ const repo = {
         },
         {
           model: models.User,
-          as: 'Vendor',
-          attributes: ['id', 'name'],
+          as: "Vendor",
+          attributes: ["id", "name"],
         },
       ],
-      order: [['lastMessageAt', 'ASC']],
+      order: [["lastMessageAt", "ASC"]],
       subQuery: false,
     });
   },
@@ -285,13 +284,13 @@ const repo = {
   findApproachingDeadlines: async (
     companyId: number,
     withinDays: number,
-    fromDate?: Date
+    fromDate?: Date,
   ): Promise<ChatbotDeal[]> => {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + withinDays);
 
     const where: any = {
-      status: 'NEGOTIATING',
+      status: "NEGOTIATING",
       archivedAt: { [Op.is]: null as any },
       deletedAt: { [Op.is]: null as any },
     };
@@ -304,20 +303,20 @@ const repo = {
       include: [
         {
           model: models.Requisition,
-          as: 'Requisition',
+          as: "Requisition",
           required: true,
-          attributes: ['id', 'rfqId', 'subject'],
+          attributes: ["id", "rfqId", "subject"],
           include: [
             {
               model: models.Project,
-              as: 'Project',
+              as: "Project",
               attributes: [],
               where: { companyId },
             },
           ],
         },
       ],
-      order: [['createdAt', 'ASC']],
+      order: [["createdAt", "ASC"]],
       subQuery: false,
     });
   },
@@ -327,10 +326,10 @@ const repo = {
    */
   findEscalatedDeals: async (
     companyId: number,
-    fromDate?: Date
+    fromDate?: Date,
   ): Promise<ChatbotDeal[]> => {
     const where: any = {
-      status: 'ESCALATED',
+      status: "ESCALATED",
       archivedAt: { [Op.is]: null as any },
       deletedAt: { [Op.is]: null as any },
     };
@@ -343,13 +342,13 @@ const repo = {
       include: [
         {
           model: models.Requisition,
-          as: 'Requisition',
+          as: "Requisition",
           required: true,
-          attributes: ['id', 'rfqId', 'subject'],
+          attributes: ["id", "rfqId", "subject"],
           include: [
             {
               model: models.Project,
-              as: 'Project',
+              as: "Project",
               attributes: [],
               where: { companyId },
             },
@@ -357,11 +356,11 @@ const repo = {
         },
         {
           model: models.User,
-          as: 'Vendor',
-          attributes: ['id', 'name'],
+          as: "Vendor",
+          attributes: ["id", "name"],
         },
       ],
-      order: [['updatedAt', 'DESC']],
+      order: [["updatedAt", "DESC"]],
       subQuery: false,
     });
   },
@@ -372,14 +371,14 @@ const repo = {
   findUnresponsiveVendors: async (
     companyId: number,
     staleDays: number,
-    fromDate?: Date
+    fromDate?: Date,
   ): Promise<Contract[]> => {
     const staleDate = new Date();
     staleDate.setDate(staleDate.getDate() - staleDays);
 
     const where: any = {
       companyId,
-      status: 'Created',
+      status: "Created",
       createdAt: {
         [Op.lt]: staleDate,
       },
@@ -393,16 +392,16 @@ const repo = {
       include: [
         {
           model: models.User,
-          as: 'Vendor',
-          attributes: ['id', 'name', 'email'],
+          as: "Vendor",
+          attributes: ["id", "name", "email"],
         },
         {
           model: models.Requisition,
-          as: 'Requisition',
-          attributes: ['id', 'rfqId', 'subject'],
+          as: "Requisition",
+          attributes: ["id", "rfqId", "subject"],
         },
       ],
-      order: [['createdAt', 'ASC']],
+      order: [["createdAt", "ASC"]],
     });
   },
 };
