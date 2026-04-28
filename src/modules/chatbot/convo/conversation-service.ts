@@ -56,7 +56,10 @@ import {
   shouldAutoStartConversation,
   getDefaultGreeting,
 } from "./conversation-manager.js";
-import { detectVendorTone } from "../engine/tone-detector.js";
+import {
+  detectVendorTone,
+  detectStrictFirmness,
+} from "../engine/tone-detector.js";
 import { buildNegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
 import { renderNegotiationMessage } from "../../../llm/persona-renderer.js";
 import {
@@ -320,7 +323,41 @@ export async function processConversationMessage(
       | "GBP"
       | "AUD"
       | undefined;
-    const parsedOffer = parseOfferRegex(vendorMessage, requisitionCurrency);
+    let parsedOffer = parseOfferRegex(vendorMessage, requisitionCurrency);
+
+    // 5-pre. Affirmative-acceptance fast path.
+    // If vendor sends a short acceptance phrase ("agree", "i accept", "deal", "ok", etc.)
+    // AND we have an active PM counter on the table (deal.latestOfferJson),
+    // treat it as ACCEPT of the PM's last counter. This prevents the bot from
+    // re-running utility scoring and accidentally generating yet another counter.
+    const AFFIRMATIVE_PATTERN =
+      /^\s*(ok|okay|sure|agreed|agree|deal|yes|yeah|yep|accept|accepted|i\s+accept(\s+the\s+offer)?|we\s+accept|i\s+agree|we\s+agree|yes\s+i\s+agree|yes\s+i\s+accept|confirm|confirmed|sounds\s+good|looks\s+good|that\s+works|works\s+for\s+me|perfect|fine|great|done|alright|alright\s+then|absolutely|of\s+course|let'?s\s+do\s+it)\s*[.!]?\s*$/i;
+    const previousPmCounter =
+      (deal.latestOfferJson as {
+        total_price?: number;
+        payment_terms?: string;
+        payment_terms_days?: number | null;
+        delivery_date?: string | null;
+        delivery_days?: number | null;
+      } | null) ?? null;
+    const isVendorAffirmative =
+      AFFIRMATIVE_PATTERN.test(vendorMessage.trim()) &&
+      previousPmCounter?.total_price != null;
+    if (isVendorAffirmative && previousPmCounter) {
+      logger.info(
+        `[ConversationService] Affirmative message detected ("${vendorMessage.trim()}") — forcing ACCEPT on PM's last counter`,
+        { dealId, pmCounter: previousPmCounter },
+      );
+      // Rewrite parsedOffer to mirror the PM counter so downstream logic sees a
+      // "complete" offer matching what the vendor is agreeing to.
+      parsedOffer = {
+        total_price: previousPmCounter.total_price ?? null,
+        payment_terms: previousPmCounter.payment_terms ?? null,
+        payment_terms_days: previousPmCounter.payment_terms_days ?? null,
+        delivery_date: previousPmCounter.delivery_date ?? null,
+        delivery_days: previousPmCounter.delivery_days ?? null,
+      };
+    }
 
     // 5b. Payment terms interception: if vendor sent a price but no terms,
     // ask for terms instead of merging with old terms and making a decision.
@@ -453,6 +490,123 @@ export async function processConversationMessage(
     ) {
       decision = decideNextMove(config, vendorOffer, deal.round + 1);
       explainability = computeExplainability(config, vendorOffer, decision);
+
+      // 7-pre-0. Affirmative override: if vendor's message was a short acceptance
+      // phrase, force ACCEPT regardless of utility score. The vendor is agreeing
+      // to OUR last counter — finalize the deal on those terms.
+      if (isVendorAffirmative) {
+        decision = {
+          action: "ACCEPT",
+          utilityScore: decision.utilityScore,
+          counterOffer: null,
+          reasons: [
+            `Vendor sent affirmative acceptance ("${vendorMessage.trim()}"). Locking in PM's last counter.`,
+          ],
+        };
+        explainability = computeExplainability(config, vendorOffer, decision);
+      }
+
+      // 7-pre-A. Firmness handling — vendor signals "this is final / best price / non-negotiable"
+      // Strategy: if vendor's price is at or below max_acceptable → ACCEPT.
+      // If over budget and we have not yet made our last attempt → counter at max_acceptable
+      // and mark lastAttemptUsed. If over budget and lastAttemptUsed already → ESCALATE.
+      const firmnessSignal = isVendorAffirmative
+        ? { isFirm: false, matched: null }
+        : detectStrictFirmness(vendorMessage);
+      const priceParamsForFirm =
+        config.parameters?.total_price ??
+        ((config.parameters as any)?.unit_price as
+          | { target: number; max_acceptable: number }
+          | undefined);
+      if (
+        firmnessSignal.isFirm &&
+        vendorOffer.total_price != null &&
+        priceParamsForFirm
+      ) {
+        const maxAcc = priceParamsForFirm.max_acceptable;
+        if (vendorOffer.total_price <= maxAcc) {
+          // Within budget — accept the firm price
+          logger.info(
+            `[ConversationService] Firmness detected ("${firmnessSignal.matched}") and within budget — ACCEPT`,
+            { dealId, vendorPrice: vendorOffer.total_price, maxAcc },
+          );
+          decision = {
+            action: "ACCEPT",
+            utilityScore: decision.utilityScore,
+            counterOffer: null,
+            reasons: [
+              ...decision.reasons,
+              `Vendor firm signal: "${firmnessSignal.matched}". Price within max_acceptable — accepting.`,
+            ],
+          };
+        } else if (conversationState.lastAttemptUsed) {
+          // Already tried our last attempt — escalate
+          logger.info(
+            `[ConversationService] Firm vendor over-budget after last-attempt — ESCALATE`,
+            { dealId, vendorPrice: vendorOffer.total_price, maxAcc },
+          );
+          decision = {
+            action: "ESCALATE",
+            utilityScore: decision.utilityScore,
+            counterOffer: null,
+            reasons: [
+              ...decision.reasons,
+              `Vendor firm at ${vendorOffer.total_price} (over max_acceptable ${maxAcc}). Last attempt already used — needs human review.`,
+            ],
+          };
+        } else {
+          // Make our one last attempt at max_acceptable
+          logger.info(
+            `[ConversationService] Firm vendor — making last attempt at max_acceptable`,
+            { dealId, vendorPrice: vendorOffer.total_price, maxAcc },
+          );
+          decision = {
+            action: "COUNTER",
+            utilityScore: decision.utilityScore,
+            counterOffer: {
+              total_price: maxAcc,
+              payment_terms:
+                vendorOffer.payment_terms ??
+                decision.counterOffer?.payment_terms ??
+                "Net 30",
+              payment_terms_days: vendorOffer.payment_terms_days ?? null,
+              delivery_date: vendorOffer.delivery_date ?? null,
+              delivery_days: vendorOffer.delivery_days ?? null,
+            },
+            reasons: [
+              ...decision.reasons,
+              `Vendor firm signal: "${firmnessSignal.matched}". Last attempt at max_acceptable ${maxAcc}.`,
+            ],
+          };
+          conversationState.lastAttemptUsed = true;
+        }
+      }
+
+      // 7-pre-B. Identical-counter stall → force MESO this round
+      // If our last 2 PM counters were the exact same price, switching MESO
+      // breaks the loop with an equivalent-bundles offer.
+      const pmHist = conversationState.pmCounterHistory ?? [];
+      const lastTwoIdentical =
+        pmHist.length >= 2 &&
+        pmHist[pmHist.length - 1] === pmHist[pmHist.length - 2];
+      if (
+        lastTwoIdentical &&
+        decision.action === "COUNTER" &&
+        decision.counterOffer?.total_price === pmHist[pmHist.length - 1]
+      ) {
+        logger.info(
+          `[ConversationService] Two identical PM counters in a row — forcing MESO`,
+          { dealId, repeatedPrice: pmHist[pmHist.length - 1] },
+        );
+        decision = {
+          ...decision,
+          action: "MESO",
+          reasons: [
+            ...decision.reasons,
+            `Two identical PM counters at ${pmHist[pmHist.length - 1]} — switching to MESO to break stall.`,
+          ],
+        };
+      }
 
       // REJECT_TERMS guard: if vendor is rejecting terms (e.g., "329,650 is not possible")
       // the engine may return ACCEPT because it scored the mentioned price favorably.
@@ -748,6 +902,37 @@ export async function processConversationMessage(
           { dealId },
         );
         decision.counterOffer.total_price = vendorOffer.total_price;
+      }
+    }
+
+    // 7e. Monotonic floor: PM counter must never go BELOW our previous counter.
+    // Source of truth: deal.latestOfferJson (last persisted PM counter).
+    // Once we've offered X to the vendor, walking back to <X weakens our position.
+    if (
+      decision.action === "COUNTER" &&
+      decision.counterOffer?.total_price != null &&
+      vendorOffer.total_price != null
+    ) {
+      const prevPmPrice =
+        (deal.latestOfferJson as { total_price?: number } | null)
+          ?.total_price ?? null;
+      if (
+        prevPmPrice != null &&
+        decision.counterOffer.total_price < prevPmPrice
+      ) {
+        // Floor at previous counter, but stay strictly below vendor's current price.
+        const flooredPrice = Math.min(
+          prevPmPrice,
+          vendorOffer.total_price - 0.01,
+        );
+        if (flooredPrice > decision.counterOffer.total_price) {
+          logger.info(
+            `[ConversationService] Monotonic floor: lifting counter from ${decision.counterOffer.total_price} to ${flooredPrice} (prev PM counter ${prevPmPrice})`,
+            { dealId },
+          );
+          decision.counterOffer.total_price =
+            Math.round(flooredPrice * 100) / 100;
+        }
       }
     }
 

@@ -13,18 +13,18 @@ import type {
   RefusalType,
   Offer,
   Decision,
-} from './types.js';
-import type { ChatbotMessage } from '../../../models/chatbot-message.js';
+} from "./types.js";
+import type { ChatbotMessage } from "../../../models/chatbot-message.js";
 
 /**
  * Initialize conversation state for a new deal
  */
 export function initializeConversationState(): ConversationState {
   return {
-    phase: 'WAITING_FOR_OFFER',
+    phase: "WAITING_FOR_OFFER",
     askedPreference: false,
     lastVendorOffer: null,
-    detectedPreference: 'NEITHER',
+    detectedPreference: "NEITHER",
     lastTransitionAt: new Date().toISOString(),
   };
 }
@@ -38,12 +38,12 @@ export function initializeConversationState(): ConversationState {
  * - NEITHER: No clear preference detected
  */
 export function detectVendorPreference(
-  messages: ChatbotMessage[]
+  messages: ChatbotMessage[],
 ): VendorPreference {
-  const vendorMessages = messages.filter((msg) => msg.role === 'VENDOR');
+  const vendorMessages = messages.filter((msg) => msg.role === "VENDOR");
 
   if (vendorMessages.length < 2) {
-    return 'NEITHER'; // Need at least 2 messages to detect pattern
+    return "NEITHER"; // Need at least 2 messages to detect pattern
   }
 
   let priceChanges = 0;
@@ -72,18 +72,18 @@ export function detectVendorPreference(
 
   // Determine preference based on change frequency
   if (priceChanges === 0 && termsChanges === 0) {
-    return 'NEITHER'; // No changes detected
+    return "NEITHER"; // No changes detected
   }
 
   if (priceChanges > termsChanges * 1.5) {
-    return 'PRICE'; // Vendor is more flexible on price
+    return "PRICE"; // Vendor is more flexible on price
   }
 
   if (termsChanges > priceChanges * 1.5) {
-    return 'TERMS'; // Vendor is more flexible on terms
+    return "TERMS"; // Vendor is more flexible on terms
   }
 
-  return 'NEITHER'; // No clear preference
+  return "NEITHER"; // No clear preference
 }
 
 /**
@@ -101,28 +101,38 @@ export function classifyRefusal(content: string): RefusalType {
 
   // Check for explicit "no"
   if (/\b(no|nope|nah|not interested)\b/.test(lower)) {
-    return 'NO';
+    return "NO";
   }
 
   // Check for delay tactics
-  if (/\b(later|next\s+time|some\s+other\s+time|not\s+(right\s+)?now)\b/.test(lower)) {
-    return 'LATER';
+  if (
+    /\b(later|next\s+time|some\s+other\s+time|not\s+(right\s+)?now)\b/.test(
+      lower,
+    )
+  ) {
+    return "LATER";
   }
 
   // Check for "already shared"
   if (/\b(already\s+(told|shared|said|mentioned)|I\s+said)\b/.test(lower)) {
-    return 'ALREADY_SHARED';
+    return "ALREADY_SHARED";
   }
 
   // Check for confusion
-  if (/\b(what|huh|don't\s+understand|confused|not\s+sure\s+what)\b/.test(lower)) {
-    return 'CONFUSED';
+  if (
+    /\b(what|huh|don't\s+understand|confused|not\s+sure\s+what)\b/.test(lower)
+  ) {
+    return "CONFUSED";
   }
 
   // Check for rejection of proposed terms (vendor disagrees but may include a price)
   // e.g., "329,650 is not possible", "too low margin", "can't accept this price"
-  if (/\b(not\s+possible|not\s+acceptable|not\s+feasible|cannot\s+accept|can'?t\s+accept|too\s+low|too\s+high|too\s+much|not\s+workable|not\s+viable|impossible|unacceptable|won'?t\s+work|doesn'?t\s+work|doesn'?t\s+meet|not\s+enough|low\s+margin|no\s+margin|thin\s+margin|reject|decline)\b/i.test(lower)) {
-    return 'REJECT_TERMS';
+  if (
+    /\b(not\s+possible|not\s+acceptable|not\s+feasible|cannot\s+accept|can'?t\s+accept|too\s+low|too\s+high|too\s+much|not\s+workable|not\s+viable|impossible|unacceptable|won'?t\s+work|doesn'?t\s+work|doesn'?t\s+meet|not\s+enough|low\s+margin|no\s+margin|thin\s+margin|reject|decline)\b/i.test(
+      lower,
+    )
+  ) {
+    return "REJECT_TERMS";
   }
 
   // Not a refusal
@@ -137,7 +147,7 @@ export function classifyRefusal(content: string): RefusalType {
  */
 export function mergeWithLastOffer(
   newOffer: Offer,
-  lastOffer: Offer | null
+  lastOffer: Offer | null,
 ): Offer {
   if (!lastOffer) {
     return newOffer; // No previous offer to merge with
@@ -160,53 +170,56 @@ export function determineIntent(
   decision: Decision,
   vendorOfferExtracted: Offer | null,
   refusalType: RefusalType,
-  round: number
+  round: number,
 ): ConversationIntent {
   // Handle refusals first
   // REJECT_TERMS is special: vendor disagrees but may include a price (e.g., "329,650 is not possible")
   // We still parse the offer but never accept — always counter
-  if (refusalType !== null && refusalType !== 'REJECT_TERMS') {
-    return 'HANDLE_REFUSAL';
+  if (refusalType !== null && refusalType !== "REJECT_TERMS") {
+    return "HANDLE_REFUSAL";
   }
 
   // If no offer extracted yet, ask for one
-  if (vendorOfferExtracted === null || vendorOfferExtracted.total_price === null) {
+  if (
+    vendorOfferExtracted === null ||
+    vendorOfferExtracted.total_price === null
+  ) {
     if (round === 0) {
-      return 'GREET'; // First message from Accordo
+      return "GREET"; // First message from Accordo
     }
-    return 'ASK_FOR_OFFER';
+    return "ASK_FOR_OFFER";
   }
 
   // Map decision actions to intents
   switch (decision.action) {
-    case 'ACCEPT':
-      return 'ACCEPT';
+    case "ACCEPT":
+      return "ACCEPT";
 
-    case 'WALK_AWAY':
-      return 'WALK_AWAY';
+    case "WALK_AWAY":
+      return "WALK_AWAY";
 
-    case 'ESCALATE':
-      return 'ESCALATE';
+    case "ESCALATE":
+      return "ESCALATE";
 
-    case 'COUNTER':
+    case "COUNTER":
       // After several rounds, ask about preference
       if (round >= 3 && !state.askedPreference) {
-        return 'ASK_FOR_PREFERENCE';
+        return "ASK_FOR_PREFERENCE";
       }
 
       // If counter-offer has specific values, use direct language
       if (decision.counterOffer?.total_price !== null) {
-        return 'COUNTER_DIRECT';
+        return "COUNTER_DIRECT";
       }
 
       // Otherwise use strategic/vague language
-      return 'COUNTER_INDIRECT';
+      return "COUNTER_INDIRECT";
 
-    case 'ASK_CLARIFY':
-      return 'ASK_FOR_OFFER'; // Ask vendor to clarify their offer
+    case "ASK_CLARIFY":
+      return "ASK_FOR_OFFER"; // Ask vendor to clarify their offer
 
     default:
-      return 'COUNTER_INDIRECT'; // Fallback
+      return "COUNTER_INDIRECT"; // Fallback
   }
 }
 
@@ -224,7 +237,7 @@ export function updateConversationState(
   intent: ConversationIntent,
   decision: Decision,
   vendorOffer: Offer | null,
-  detectedPreference: VendorPreference
+  detectedPreference: VendorPreference,
 ): ConversationState {
   const newState: ConversationState = {
     ...currentState,
@@ -242,34 +255,50 @@ export function updateConversationState(
   // Update detected preference
   newState.detectedPreference = detectedPreference;
 
+  // Append PM counter to history (capped at last 10 to avoid unbounded growth)
+  if (
+    decision.action === "COUNTER" &&
+    decision.counterOffer?.total_price != null
+  ) {
+    const prior = currentState.pmCounterHistory ?? [];
+    newState.pmCounterHistory = [
+      ...prior,
+      decision.counterOffer.total_price,
+    ].slice(-10);
+  } else {
+    newState.pmCounterHistory = currentState.pmCounterHistory ?? [];
+  }
+  // Preserve lastAttemptUsed flag (set by conversation-service when firing last-attempt logic)
+  newState.lastAttemptUsed = currentState.lastAttemptUsed ?? false;
+
   // Update phase based on intent
   switch (intent) {
-    case 'GREET':
-    case 'ASK_FOR_OFFER':
-      newState.phase = 'WAITING_FOR_OFFER';
+    case "GREET":
+    case "ASK_FOR_OFFER":
+      newState.phase = "WAITING_FOR_OFFER";
       break;
 
-    case 'COUNTER_DIRECT':
-    case 'COUNTER_INDIRECT':
-      newState.phase = 'NEGOTIATING';
+    case "COUNTER_DIRECT":
+    case "COUNTER_INDIRECT":
+      newState.phase = "NEGOTIATING";
       break;
 
-    case 'ASK_FOR_PREFERENCE':
-      newState.phase = 'WAITING_FOR_PREFERENCE';
+    case "ASK_FOR_PREFERENCE":
+      newState.phase = "WAITING_FOR_PREFERENCE";
       newState.askedPreference = true;
       break;
 
-    case 'ACKNOWLEDGE_PREFERENCE':
-      newState.phase = 'NEGOTIATING';
+    case "ACKNOWLEDGE_PREFERENCE":
+      newState.phase = "NEGOTIATING";
       break;
 
-    case 'ACCEPT':
-    case 'WALK_AWAY':
-    case 'ESCALATE':
-      newState.phase = 'TERMINAL';
+    case "ACCEPT":
+    case "WALK_AWAY":
+    case "ESCALATE":
+      newState.phase = "TERMINAL";
       break;
 
-    case 'HANDLE_REFUSAL':
+    case "HANDLE_REFUSAL":
       // Keep current phase
       break;
 
@@ -292,9 +321,9 @@ export function updateConversationState(
 export function shouldAutoStartConversation(
   dealMode: string,
   round: number,
-  messageCount: number
+  messageCount: number,
 ): boolean {
-  return dealMode === 'CONVERSATION' && round === 0 && messageCount === 0;
+  return dealMode === "CONVERSATION" && round === 0 && messageCount === 0;
 }
 
 /**

@@ -113,6 +113,19 @@ export interface ConversationState {
    * Timestamp of last state transition (for debugging)
    */
   lastTransitionAt?: string;
+
+  /**
+   * Rolling history of PM counter prices (most recent last).
+   * Used for monotonic-floor enforcement and identical-counter stall detection.
+   */
+  pmCounterHistory?: number[];
+
+  /**
+   * True once we've made our "last attempt" counter at max_acceptable in
+   * response to a vendor firmness signal. If the vendor is still firm and
+   * over-budget on the next round, we escalate.
+   */
+  lastAttemptUsed?: boolean;
 }
 
 /**

@@ -492,6 +492,28 @@ export function calculateDynamicCounter(
   // Round to 2 decimal places
   counterPrice = Math.round(counterPrice * 100) / 100;
 
+  // GUARD: PM counter price must never go BELOW the previous PM counter.
+  // Negotiations should be monotonic on price — once we've offered X, we don't
+  // walk it back to <X in a later round (that would weaken our position and
+  // confuse the vendor). Clamp upward to the previous PM counter if needed,
+  // but stay below the vendor's current price (the no-cross guard above).
+  if (previousPmOffer && vendorOffer.total_price !== null) {
+    const prevPmPrice =
+      typeof previousPmOffer === "object" && "price" in previousPmOffer
+        ? (previousPmOffer as PmCounterRecord).price
+        : (previousPmOffer as Offer).total_price;
+    if (prevPmPrice != null && counterPrice < prevPmPrice) {
+      const flooredPrice = Math.min(
+        prevPmPrice,
+        vendorOffer.total_price - 0.01,
+      );
+      if (flooredPrice > counterPrice) {
+        counterPrice = Math.round(flooredPrice * 100) / 100;
+        strategy += ` (floored to previous PM counter ${prevPmPrice} — monotonic)`;
+      }
+    }
+  }
+
   // GUARD: PM counter should NEVER have shorter payment terms than vendor's offer.
   // Longer terms = better for buyer (more cash flow time). If the counter terms are
   // shorter than what the vendor already offered, use the vendor's terms instead.
