@@ -2507,6 +2507,34 @@ export const generatePMResponseAsyncService = async (
       /\b(not\s+possible|not\s+acceptable|not\s+feasible|cannot\s+accept|can'?t\s+accept|too\s+low|too\s+high|too\s+much|not\s+workable|not\s+viable|impossible|unacceptable|won'?t\s+work|doesn'?t\s+work|low\s+margin|no\s+margin|thin\s+margin|reject|decline)\b/i;
     const isVendorRejecting = REJECTION_PATTERN.test(rawContent);
 
+    // Vendor-convergence ACCEPT (Apr 2026): when the vendor's NEW price is
+    //   (a) within our maxAcceptable ceiling, AND
+    //   (b) lower than their previous offer (i.e. they moved toward us),
+    // close the deal at the vendor's price instead of generating yet another
+    // counter. Catches the "vendor said 29K which we'd have accepted, but we
+    // re-offered 28K and prolonged the negotiation" failure mode.
+    const priceCfg =
+      config.parameters?.total_price ??
+      ((config.parameters as Record<string, unknown>)
+        ?.unit_price as typeof config.parameters.total_price);
+    const maxAcceptable = priceCfg?.max_acceptable;
+    const previousVendorPrice =
+      (previousVendorOffer as any)?.total_price ?? null;
+    const currentVendorPrice = extractedOffer?.total_price ?? null;
+    const isVendorConverging =
+      !isVendorAffirmative &&
+      currentVendorPrice != null &&
+      maxAcceptable != null &&
+      currentVendorPrice <= maxAcceptable &&
+      previousVendorPrice != null &&
+      currentVendorPrice < previousVendorPrice;
+    if (isVendorConverging) {
+      logger.info(
+        `[Phase2] Vendor-convergence ACCEPT — vendor moved from ${previousVendorPrice} to ${currentVendorPrice} (within ceiling ${maxAcceptable})`,
+        { dealId: input.dealId },
+      );
+    }
+
     // Make decision using the engine with negotiation state for dynamic counters
     // If vendor sent an affirmative, force ACCEPT — don't run utility scoring
     let decision = isVendorAffirmative
@@ -2518,15 +2546,24 @@ export const generatePMResponseAsyncService = async (
             `Vendor accepted PM's counter offer of ${getCurrencySymbol(config.currency)}${extractedOffer.total_price} with ${extractedOffer.payment_terms}.`,
           ],
         }
-      : decideNextMove(
-          config,
-          extractedOffer,
-          deal.round,
-          negotiationState,
-          previousPmOffer,
-          behavioralSignals,
-          adaptiveStrategy,
-        );
+      : isVendorConverging
+        ? {
+            action: "ACCEPT" as const,
+            utilityScore: 1.0,
+            counterOffer: null as Offer | null,
+            reasons: [
+              `Vendor moved from ${getCurrencySymbol(config.currency)}${previousVendorPrice} to ${getCurrencySymbol(config.currency)}${currentVendorPrice}, within our acceptable range.`,
+            ],
+          }
+        : decideNextMove(
+            config,
+            extractedOffer,
+            deal.round,
+            negotiationState,
+            previousPmOffer,
+            behavioralSignals,
+            adaptiveStrategy,
+          );
 
     // Guard: override ACCEPT → COUNTER if vendor is expressing rejection
     if (isVendorRejecting && decision.action === "ACCEPT") {
@@ -2879,6 +2916,7 @@ export const generatePMResponseAsyncService = async (
             currentRoundForMeso,
             decision.utilityScore + 0.05, // Target slightly higher utility than current
             dealCurrency,
+            (deal.latestOfferJson as any)?.total_price ?? null,
           );
 
           if (mesoResult.success) {

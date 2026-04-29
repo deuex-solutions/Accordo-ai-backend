@@ -772,12 +772,15 @@ export async function processConversationMessage(
         };
 
         const currency = (config.currency || "USD") as SupportedCurrency;
+        const lastAccordoCounterPrice =
+          (deal.latestOfferJson as any)?.total_price ?? null;
         mesoResult = generateMesoOptions(
           resolvedConfig,
           extendedVendorOffer,
           deal.round + 1,
           0.65,
           currency,
+          lastAccordoCounterPrice,
         );
 
         // Apply flow control flags from shouldUseMeso
