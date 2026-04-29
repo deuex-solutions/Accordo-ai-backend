@@ -22,24 +22,30 @@
 // ─────────────────────────────────────────────
 
 const CURRENCY_SYMBOL_MAP: Record<string, string> = {
-  USD: '$',
-  INR: '₹',
-  EUR: '€',
-  GBP: '£',
-  AUD: 'A$',
+  USD: "$",
+  INR: "₹",
+  EUR: "€",
+  GBP: "£",
+  AUD: "A$",
 };
 
 export function getCurrencySymbol(code?: string): string {
-  return CURRENCY_SYMBOL_MAP[(code || 'USD').toUpperCase()] || '$';
+  return CURRENCY_SYMBOL_MAP[(code || "USD").toUpperCase()] || "$";
 }
 
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 
-export type NegotiationAction = 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY' | 'MESO' | 'ASK_CLARIFY';
+export type NegotiationAction =
+  | "ACCEPT"
+  | "COUNTER"
+  | "ESCALATE"
+  | "WALK_AWAY"
+  | "MESO"
+  | "ASK_CLARIFY";
 
-export type VendorTone = 'formal' | 'casual' | 'urgent' | 'firm' | 'friendly';
+export type VendorTone = "formal" | "casual" | "urgent" | "firm" | "friendly";
 
 export interface MesoOfferVariant {
   label: string;
@@ -94,7 +100,7 @@ export interface NegotiationIntent {
    * Used to help the LLM address the weakest negotiation dimension naturally.
    * Absent for non-COUNTER actions or when primary params are all strong.
    */
-  weakestPrimaryParameter?: 'price' | 'terms' | 'delivery';
+  weakestPrimaryParameter?: "price" | "terms" | "delivery";
 
   /**
    * MESO offer variants, passed through unchanged from the engine.
@@ -110,6 +116,50 @@ export interface NegotiationIntent {
 
   /** Currency symbol for price display (e.g. "$", "₹", "€"). Defaults to "$" if not set. */
   currencySymbol: string;
+
+  // ── Humanization signals (Apr 2026) ─────────────────────────────────────
+  // Optional and additive: legacy callers that don't supply these still work.
+
+  /**
+   * Deterministic vendor-style signals derived from the latest vendor message.
+   * Drives adaptive humanization (formality mirroring, language choice, hostility
+   * neutralizing, smalltalk redirect, price-before-question ordering, etc.).
+   */
+  vendorStyle?: VendorStyleSignals;
+
+  /** 1-indexed round number. Persona-renderer suppresses greetings when > 1. */
+  roundNumber?: number;
+
+  /**
+   * Recent phrasing fingerprints already used in this deal — the renderer
+   * passes these to the LLM and the fallback selector uses them to avoid
+   * repeating the same opener. See src/llm/phrasing-history.ts.
+   */
+  phrasingHistory?: string[];
+
+  /**
+   * Vendor questions previously asked but not yet answered. The LLM is told
+   * to address these before continuing the negotiation thread.
+   */
+  openQuestions?: Array<{ question: string; askedAtRound: number }>;
+}
+
+/**
+ * Subset of VendorStyle (defined in tone-detector) safe to forward to the LLM
+ * layer. Kept minimal and structural to avoid cross-module type coupling.
+ */
+export interface VendorStyleSignals {
+  formality: number;
+  length: number;
+  language: "en" | "es" | "hi" | "fr" | "de" | "pt" | "und";
+  languageConfidence: number;
+  hostility: boolean;
+  hasQuestion: boolean;
+  isNumberOnly: boolean;
+  hasGreeting: boolean;
+  repeatedOfferCount: number;
+  lastVendorPrice: number | null;
+  acceptanceDetected: boolean;
 }
 
 // ─────────────────────────────────────────────
@@ -117,30 +167,40 @@ export interface NegotiationIntent {
 // Selected by action + firmness — NO AI generation
 // ─────────────────────────────────────────────
 
-const COMMERCIAL_POSITIONS: Record<NegotiationAction, Record<string, string>> = {
+const COMMERCIAL_POSITIONS: Record<
+  NegotiationAction,
+  Record<string, string>
+> = {
   ACCEPT: {
-    default: 'We are pleased to accept this offer as it meets our procurement requirements.',
-    friendly: 'This offer works well for us and we are happy to proceed.',
-    formal: 'We confirm formal acceptance of the terms as presented.',
+    default:
+      "We are pleased to accept this offer as it meets our procurement requirements.",
+    friendly: "This offer works well for us and we are happy to proceed.",
+    formal: "We confirm formal acceptance of the terms as presented.",
   },
   COUNTER: {
-    high_firmness:   'Our budget constraints require us to maintain firm terms for this procurement.',
-    medium_firmness: 'We are working toward mutually beneficial terms that align with our requirements.',
-    low_firmness:    'We remain flexible and are committed to finding an arrangement that works for both parties.',
-    urgent:          'Given our project timeline, we need to reach an agreement on these terms promptly.',
+    high_firmness:
+      "Our budget constraints require us to maintain firm terms for this procurement.",
+    medium_firmness:
+      "We are working toward mutually beneficial terms that align with our requirements.",
+    low_firmness:
+      "We remain flexible and are committed to finding an arrangement that works for both parties.",
+    urgent:
+      "Given our project timeline, we need to reach an agreement on these terms promptly.",
   },
   WALK_AWAY: {
-    default: 'After careful consideration, the current terms do not align with our procurement requirements.',
-    firm:    'We have reached the limit of what is workable within our constraints.',
+    default:
+      "After careful consideration, the current terms do not align with our procurement requirements.",
+    firm: "We have reached the limit of what is workable within our constraints.",
   },
   ESCALATE: {
-    default: 'This negotiation requires senior review before we can proceed further.',
+    default:
+      "This negotiation requires senior review before we can proceed further.",
   },
   MESO: {
-    default: 'We have prepared several options that may work for both parties.',
+    default: "We have prepared several options that may work for both parties.",
   },
   ASK_CLARIFY: {
-    default: 'We need a few more details to move this negotiation forward.',
+    default: "We need a few more details to move this negotiation forward.",
   },
 };
 
@@ -151,29 +211,31 @@ const COMMERCIAL_POSITIONS: Record<NegotiationAction, Record<string, string>> = 
 function selectCommercialPosition(
   action: NegotiationAction,
   firmness: number,
-  tone: VendorTone
+  tone: VendorTone,
 ): string {
   const pool = COMMERCIAL_POSITIONS[action];
 
-  if (action === 'COUNTER') {
-    if (firmness >= 0.75) return pool['high_firmness'];
-    if (firmness >= 0.55) return pool['medium_firmness'];
-    if (tone === 'urgent') return pool['urgent'];
-    return pool['low_firmness'];
+  if (action === "COUNTER") {
+    if (firmness >= 0.75) return pool["high_firmness"];
+    if (firmness >= 0.55) return pool["medium_firmness"];
+    if (tone === "urgent") return pool["urgent"];
+    return pool["low_firmness"];
   }
 
-  if (action === 'ACCEPT') {
-    if (tone === 'friendly') return pool['friendly'];
-    if (tone === 'formal') return pool['formal'];
-    return pool['default'];
+  if (action === "ACCEPT") {
+    if (tone === "friendly") return pool["friendly"];
+    if (tone === "formal") return pool["formal"];
+    return pool["default"];
   }
 
-  if (action === 'WALK_AWAY') {
-    if (tone === 'firm') return pool['firm'];
-    return pool['default'];
+  if (action === "WALK_AWAY") {
+    if (tone === "firm") return pool["firm"];
+    return pool["default"];
   }
 
-  return pool['default'] ?? 'We are working toward a mutually beneficial agreement.';
+  return (
+    pool["default"] ?? "We are working toward a mutually beneficial agreement."
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -190,10 +252,10 @@ function selectCommercialPosition(
  * Utility < 30%  → firmness 0.90  (walk-away zone, very firm)
  */
 export function mapUtilityToFirmness(utilityScore: number): number {
-  if (utilityScore >= 0.70) return 0.25;
-  if (utilityScore >= 0.50) return 0.55;
-  if (utilityScore >= 0.30) return 0.75;
-  return 0.90;
+  if (utilityScore >= 0.7) return 0.25;
+  if (utilityScore >= 0.5) return 0.55;
+  if (utilityScore >= 0.3) return 0.75;
+  return 0.9;
 }
 
 // ─────────────────────────────────────────────
@@ -208,7 +270,7 @@ export function mapUtilityToFirmness(utilityScore: number): number {
 function resolveAllowedPrice(
   counterPrice: number | null | undefined,
   targetPrice?: number,
-  maxAcceptablePrice?: number
+  maxAcceptablePrice?: number,
 ): number | undefined {
   if (counterPrice == null) return undefined;
   if (targetPrice == null || maxAcceptablePrice == null) return counterPrice;
@@ -226,7 +288,7 @@ function resolveAllowedPrice(
 
 export interface BuildIntentInput {
   /** Decision action from the engine */
-  action: 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY' | 'ASK_CLARIFY';
+  action: "ACCEPT" | "COUNTER" | "ESCALATE" | "WALK_AWAY" | "ASK_CLARIFY";
   /** Raw utility score from the engine (0–1) */
   utilityScore: number;
   /** Counter-offer price from the engine (only used for COUNTER) */
@@ -250,9 +312,19 @@ export interface BuildIntentInput {
    * Only 'price', 'terms', or 'delivery' — warranty/quality are NEVER surfaced to vendor.
    * Computed in conversationService from parameterUtilities before calling buildNegotiationIntent.
    */
-  weakestPrimaryParameter?: 'price' | 'terms' | 'delivery';
+  weakestPrimaryParameter?: "price" | "terms" | "delivery";
   /** Currency code from the negotiation config (e.g. "USD", "INR"). Defaults to "USD". */
   currencyCode?: string;
+
+  // ── Humanization signals (Apr 2026) — all optional, additive ─────────────
+  /** Deterministic vendor-style signals from tone-detector.detectVendorStyle(). */
+  vendorStyle?: VendorStyleSignals;
+  /** 1-indexed round number; round 1 allows greetings, > 1 suppresses them. */
+  roundNumber?: number;
+  /** Recent phrasing fingerprints for this deal — see src/llm/phrasing-history.ts. */
+  phrasingHistory?: string[];
+  /** Vendor questions previously asked but not yet answered. */
+  openQuestions?: Array<{ question: string; askedAtRound: number }>;
 }
 
 /**
@@ -261,7 +333,9 @@ export interface BuildIntentInput {
  * This is the only bridge between the commercial engine and the LLM.
  * All commercial intelligence is distilled into safe, presentation-ready fields.
  */
-export function buildNegotiationIntent(input: BuildIntentInput): NegotiationIntent {
+export function buildNegotiationIntent(
+  input: BuildIntentInput,
+): NegotiationIntent {
   const {
     action,
     utilityScore,
@@ -275,14 +349,22 @@ export function buildNegotiationIntent(input: BuildIntentInput): NegotiationInte
     maxAcceptablePrice,
     weakestPrimaryParameter,
     currencyCode,
+    vendorStyle,
+    roundNumber,
+    phrasingHistory,
+    openQuestions,
   } = input;
 
   // Determine if this is a MESO action (overrides base action when variants present)
   const finalAction: NegotiationAction =
-    mesoOffers && mesoOffers.length > 0 ? 'MESO' : action;
+    mesoOffers && mesoOffers.length > 0 ? "MESO" : action;
 
   const firmness = mapUtilityToFirmness(utilityScore);
-  const commercialPosition = selectCommercialPosition(finalAction, firmness, tone);
+  const commercialPosition = selectCommercialPosition(
+    finalAction,
+    firmness,
+    tone,
+  );
 
   const intent: NegotiationIntent = {
     action: finalAction,
@@ -293,9 +375,22 @@ export function buildNegotiationIntent(input: BuildIntentInput): NegotiationInte
     currencySymbol: getCurrencySymbol(currencyCode),
   };
 
+  // Forward humanization signals when supplied. Hard boundary still holds:
+  // none of these contain utility scores, weights, thresholds, or config.
+  if (vendorStyle) intent.vendorStyle = vendorStyle;
+  if (roundNumber != null) intent.roundNumber = roundNumber;
+  if (phrasingHistory && phrasingHistory.length > 0)
+    intent.phrasingHistory = phrasingHistory;
+  if (openQuestions && openQuestions.length > 0)
+    intent.openQuestions = openQuestions;
+
   // Only COUNTER gets pricing fields and weakest parameter signal
-  if (finalAction === 'COUNTER' && counterPrice != null) {
-    let resolved = resolveAllowedPrice(counterPrice, targetPrice, maxAcceptablePrice);
+  if (finalAction === "COUNTER" && counterPrice != null) {
+    let resolved = resolveAllowedPrice(
+      counterPrice,
+      targetPrice,
+      maxAcceptablePrice,
+    );
     // Guard: never allow $0 counter-offer — fall back to target price
     if (resolved != null && resolved <= 0 && targetPrice && targetPrice > 0) {
       resolved = targetPrice;
@@ -315,7 +410,7 @@ export function buildNegotiationIntent(input: BuildIntentInput): NegotiationInte
   }
 
   // MESO passes offer variants through unchanged
-  if (finalAction === 'MESO' && mesoOffers) {
+  if (finalAction === "MESO" && mesoOffers) {
     intent.offerVariants = mesoOffers;
   }
 

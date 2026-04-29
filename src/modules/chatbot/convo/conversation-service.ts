@@ -59,7 +59,10 @@ import {
 import {
   detectVendorTone,
   detectStrictFirmness,
+  detectVendorStyle,
+  type VendorStyle,
 } from "../engine/tone-detector.js";
+import { recordPhrasing, getPhrasings } from "../../../llm/phrasing-history.js";
 import { buildNegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
 import { renderNegotiationMessage } from "../../../llm/persona-renderer.js";
 import {
@@ -967,6 +970,13 @@ export async function processConversationMessage(
       { role: "VENDOR", content: vendorMessage },
     ]);
 
+    // 10b. Detect deterministic vendor-style signals (Apr 2026 humanization).
+    //      Includes repeatedOfferCount used by the escape hatch below.
+    const vendorStyle: VendorStyle = detectVendorStyle(
+      vendorMessage,
+      toneHistory,
+    );
+
     // 11. Resolve price boundaries for intent builder (used to clamp allowedPrice)
     const storedConfig = deal.negotiationConfigJson as any;
     const targetPrice: number | undefined =
@@ -978,7 +988,68 @@ export async function processConversationMessage(
       storedConfig?.wizardConfig?.priceQuantity?.maxAcceptablePrice ??
       undefined;
 
+    // 11b. Repeat-offer escape hatch (Apr 2026).
+    //      When the vendor restates the same exact price 3+ times in a row, we
+    //      stop the back-and-forth: ACCEPT if their price fits our ceiling, or
+    //      send a final MESO at maxAcceptable. If we already sent that MESO
+    //      last round and they still won't move, we walk away politely.
+    //      Strategy lives here — the LLM only ever sees the resulting intent.
+    const convoState = (deal.convoStateJson as any) || {};
+    const lastWasCeilingMeso = convoState?.lastCeilingMesoRound === deal.round;
+    let escapeHatchApplied:
+      | "accept"
+      | "ceiling-meso"
+      | "post-meso-walk"
+      | null = null;
+
+    if (
+      vendorStyle.repeatedOfferCount >= 3 &&
+      vendorStyle.lastVendorPrice != null
+    ) {
+      if (lastWasCeilingMeso) {
+        // Vendor still won't move after our maxAcceptable counter — walk away.
+        decision.action = "WALK_AWAY";
+        decision.counterOffer = null;
+        escapeHatchApplied = "post-meso-walk";
+      } else if (
+        maxAcceptablePrice != null &&
+        vendorStyle.lastVendorPrice <= maxAcceptablePrice
+      ) {
+        // Vendor's stuck price is within our ceiling — close the deal.
+        decision.action = "ACCEPT";
+        decision.counterOffer = {
+          ...(decision.counterOffer || {}),
+          total_price: vendorStyle.lastVendorPrice,
+        } as any;
+        escapeHatchApplied = "accept";
+      } else if (maxAcceptablePrice != null) {
+        // Above ceiling — send a final counter at maxAcceptable, framed as a
+        // regular meet-in-the-middle move (no "this is final" signal leaks).
+        decision.action = "COUNTER";
+        decision.counterOffer = {
+          ...(decision.counterOffer || {}),
+          total_price: maxAcceptablePrice,
+        } as any;
+        escapeHatchApplied = "ceiling-meso";
+      }
+
+      if (escapeHatchApplied) {
+        logger.info("[ConversationService] Repeat-offer escape hatch applied", {
+          dealId,
+          mode: escapeHatchApplied,
+          repeatedOfferCount: vendorStyle.repeatedOfferCount,
+          vendorPrice: vendorStyle.lastVendorPrice,
+        });
+      }
+    }
+
     // 12. Build NegotiationIntent — the hard boundary between engine and LLM
+    const phrasingHistory = getPhrasings(dealId);
+    const openQuestions =
+      (deal.openQuestions as Array<{
+        question: string;
+        askedAtRound: number;
+      }>) ?? [];
     const negotiationIntent = buildNegotiationIntent({
       action: decision.action as
         | "ACCEPT"
@@ -1000,6 +1071,10 @@ export async function processConversationMessage(
       maxAcceptablePrice,
       weakestPrimaryParameter,
       currencyCode: storedConfig?.currency || "USD",
+      vendorStyle,
+      roundNumber: deal.round + 1,
+      phrasingHistory,
+      openQuestions,
     });
 
     // 13. Get non-commercial context for persona (safe to pass to LLM)
@@ -1043,6 +1118,9 @@ export async function processConversationMessage(
       fromLlm = false;
     }
 
+    // 15b. Record the phrasing fingerprint so the next round avoids reusing it.
+    recordPhrasing(dealId, negotiationIntent.action, accordoReplyContent);
+
     // 16. Log the negotiation step (audit trail — no LLM text, no scores)
     logNegotiationStep({
       action: negotiationIntent.action,
@@ -1052,10 +1130,34 @@ export async function processConversationMessage(
       vendorTone: negotiationIntent.vendorTone,
       dealId,
       fromLlm,
+      vendorStyle: {
+        formality: vendorStyle.formality,
+        language: vendorStyle.language,
+        languageConfidence: vendorStyle.languageConfidence,
+        hostility: vendorStyle.hostility,
+        hasQuestion: vendorStyle.hasQuestion,
+        repeatedOfferCount: vendorStyle.repeatedOfferCount,
+        acceptanceDetected: vendorStyle.acceptanceDetected,
+      },
+      escapeHatchApplied,
+      messageWordCount: accordoReplyContent.trim().split(/\s+/).filter(Boolean)
+        .length,
     });
 
-    // 17. Simulate typing delay + capture delayMs for frontend typing indicator
-    const { delayMs } = await simulateTypingDelay(negotiationIntent.action);
+    // 17. Simulate typing delay + capture delayMs for frontend typing indicator.
+    //      Pass output and vendor-message word counts for complexity scaling.
+    const replyWordCount = accordoReplyContent
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
+    const vendorWordCount = (vendorMessage || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
+    const { delayMs } = await simulateTypingDelay(negotiationIntent.action, {
+      outputWordCount: replyWordCount,
+      vendorMessageWordCount: vendorWordCount,
+    });
 
     const newConversationState = updateConversationState(
       conversationState,
@@ -1101,8 +1203,34 @@ export async function processConversationMessage(
     deal.latestDecisionAction = decision.action;
     deal.latestUtility = decision.utilityScore;
     deal.latestOfferJson = (decision.counterOffer as any) || null;
-    deal.convoStateJson = newConversationState as any;
+    // Track the round we sent the maxAcceptable counter so next round can walk
+    // away if the vendor still hasn't moved.
+    const updatedConvoState: any = { ...(newConversationState as any) };
+    if (escapeHatchApplied === "ceiling-meso") {
+      updatedConvoState.lastCeilingMesoRound = deal.round + 1;
+    }
+    deal.convoStateJson = updatedConvoState;
     deal.lastMessageAt = new Date();
+
+    // 21b. Update openQuestions list:
+    //  - Existing questions are considered addressed (the persona-renderer was
+    //    instructed to answer them) so we clear what was carried in.
+    //  - New questions in this vendor message that we couldn't fully address
+    //    (heuristic: COUNTER/MESO/ACCEPT actions tend to focus on price, not
+    //    payment-term/delivery questions) get appended for the next round.
+    const newQuestions: Array<{ question: string; askedAtRound: number }> = [];
+    if (vendorStyle.hasQuestion) {
+      const sentences = vendorMessage.split(/(?<=[.?!])\s+/);
+      for (const sent of sentences) {
+        const trimmed = sent.trim();
+        if (!trimmed.endsWith("?")) continue;
+        if (trimmed.length < 6 || trimmed.length > 240) continue;
+        // Skip rhetorical "is that right?" / "ok?" filler.
+        if (/^(is\s+that|ok|okay|right|sure)\b/i.test(trimmed)) continue;
+        newQuestions.push({ question: trimmed, askedAtRound: deal.round });
+      }
+    }
+    deal.openQuestions = newQuestions;
 
     // Update status via state machine
     const event = actionToEvent(decision.action);

@@ -427,9 +427,279 @@ export function detectStrictFirmness(message: string): {
   return { isFirm: false, matched: null };
 }
 
+// ─────────────────────────────────────────────
+// Vendor-Style Detector (Apr 2026 — humanization pass)
+//
+// Pure function: extracts deterministic signals from the latest vendor message
+// (and prior offers) so the persona-renderer and decision engine can react
+// without leaking strategy. Used for adaptive humanization in CONVERSATION mode.
+// ─────────────────────────────────────────────
+
+/**
+ * Detected language code (ISO 639-1 subset we explicitly support for mirroring).
+ * "und" = undetermined / low confidence.
+ */
+export type VendorLanguage = "en" | "es" | "hi" | "fr" | "de" | "pt" | "und";
+
+export interface VendorStyle {
+  /** Formality on a 0–1 scale (0 = very casual, 1 = very formal). */
+  formality: number;
+  /** Word count of the latest vendor message. */
+  length: number;
+  /** Detected language of the latest vendor message. */
+  language: VendorLanguage;
+  /** Confidence in language detection (0–1). Below 0.6 → caller should inherit prev language. */
+  languageConfidence: number;
+  /** True when the vendor message reads as hostile/rude (drops adaptive mirroring). */
+  hostility: boolean;
+  /** True when the vendor asked a direct question. */
+  hasQuestion: boolean;
+  /** True when the message is essentially just a number/price with no prose. */
+  isNumberOnly: boolean;
+  /** True when the message opens with a greeting ("hi", "hola", "namaste", etc.). */
+  hasGreeting: boolean;
+  /**
+   * How many times the vendor has stated this exact same price across recent rounds
+   * (current message included). 1 = first time, 3 = trigger threshold for escape hatch.
+   */
+  repeatedOfferCount: number;
+  /** The numeric price extracted from the latest vendor message, if any. */
+  lastVendorPrice: number | null;
+  /** True when the vendor message reads as an acceptance ("ok deal", "we accept", etc.). */
+  acceptanceDetected: boolean;
+}
+
+// Hostility patterns — explicit rudeness or contempt (NOT mere firmness)
+const HOSTILITY_PATTERNS: RegExp[] = [
+  /\bare\s+you\s+(serious|kidding|joking)\b/i,
+  /\bthis\s+(price|offer|quote)\s+is\s+a?\s*(joke|insult|ridiculous|absurd)\b/i,
+  /\b(ridiculous|absurd|laughable|insulting|outrageous)\b/i,
+  /\bwasting\s+(my|our)\s+time\b/i,
+  /\bdon'?t\s+(insult|waste)\b/i,
+  /\bget\s+real\b/i,
+  /\bnot\s+gonna\s+happen\b/i,
+];
+
+// Acceptance patterns — vendor explicitly agreeing to a price/deal
+const ACCEPTANCE_PATTERNS: RegExp[] = [
+  /\b(ok|okay|alright|fine)[,.\s]+(deal|done|agreed|let'?s\s+go)\b/i,
+  /\b(we|i)\s+(accept|agree|will\s+accept|are\s+in)\b/i,
+  /\b(deal|done|agreed|sold)\b\s*[!.]?\s*$/i,
+  /\bsounds\s+(good|great)\b.*\b(deal|agreed|let'?s)\b/i,
+  /\blet'?s\s+(do\s+it|go\s+with\s+(that|it|this))\b/i,
+];
+
+// Simple greeting tokens across languages we support
+const GREETING_PATTERNS: RegExp[] = [
+  /^\s*(hi|hello|hey|good\s+(morning|afternoon|evening)|dear|greetings)\b/i,
+  /^\s*(hola|buenos\s+(d[ií]as|tardes|noches))\b/i,
+  /^\s*(namaste|namaskar)\b/i,
+  /^\s*(bonjour|salut)\b/i,
+  /^\s*(hallo|guten\s+(tag|morgen|abend))\b/i,
+  /^\s*(ol[áa]|bom\s+dia|boa\s+(tarde|noite))\b/i,
+];
+
+// Lightweight language fingerprints — common stop-words
+const LANGUAGE_HINTS: Record<Exclude<VendorLanguage, "und">, RegExp[]> = {
+  en: [
+    /\b(the|and|with|please|thanks|that|this|would|could|will|have|our|your)\b/gi,
+  ],
+  es: [
+    /\b(el|la|los|las|de|por\s+favor|gracias|nuestro|nuestra|saludos|hola)\b/gi,
+  ],
+  hi: [
+    /\b(aap|kya|hai|hain|kripaya|dhanyavaad|namaste|theek|bahut)\b/gi,
+    /[\u0900-\u097F]/g,
+  ],
+  fr: [/\b(le|la|les|de|merci|s'il\s+vous\s+pla[ií]t|bonjour|nous|votre)\b/gi],
+  de: [/\b(der|die|das|und|bitte|danke|wir|ihre|hallo|sehr)\b/gi],
+  pt: [/\b(o|a|os|as|de|obrigado|obrigada|por\s+favor|nosso|nossa|ol[áa])\b/gi],
+};
+
+function detectLanguage(text: string): {
+  language: VendorLanguage;
+  confidence: number;
+} {
+  const trimmed = text.trim();
+  if (trimmed.length < 4) return { language: "und", confidence: 0 };
+
+  const scores: Record<string, number> = {};
+  for (const [lang, patterns] of Object.entries(LANGUAGE_HINTS)) {
+    let hits = 0;
+    for (const pattern of patterns) {
+      const matches = trimmed.match(pattern);
+      if (matches) hits += matches.length;
+    }
+    if (hits > 0) scores[lang] = hits;
+  }
+
+  const total = Object.values(scores).reduce((a, b) => a + b, 0);
+  if (total === 0) return { language: "und", confidence: 0 };
+
+  let topLang: VendorLanguage = "und";
+  let topScore = 0;
+  for (const [lang, score] of Object.entries(scores)) {
+    if (score > topScore) {
+      topScore = score;
+      topLang = lang as VendorLanguage;
+    }
+  }
+
+  // Confidence: top score share, scaled by message length signal
+  const wordCount = trimmed.split(/\s+/).length;
+  const share = topScore / total;
+  const lengthFactor = Math.min(1, wordCount / 8);
+  const confidence = Math.max(0, Math.min(1, share * lengthFactor));
+
+  return { language: topLang, confidence };
+}
+
+function detectFormality(text: string, hasGreeting: boolean): number {
+  const t = text.toLowerCase();
+  let score = 0.5;
+
+  // Formal signals
+  if (/\b(dear|sir|madam|respectfully|kindly|sincerely|regards)\b/i.test(text))
+    score += 0.25;
+  if (
+    /\b(pursuant\s+to|in\s+accordance\s+with|hereby|please\s+find)\b/i.test(
+      text,
+    )
+  )
+    score += 0.15;
+  if (
+    hasGreeting &&
+    /\b(dear|good\s+(morning|afternoon|evening))\b/i.test(text)
+  )
+    score += 0.1;
+
+  // Casual signals
+  if (/\b(hey|yeah|nope|cool|gotcha|btw|fyi|lol|haha)\b/i.test(t))
+    score -= 0.25;
+  if (/!{2,}/.test(text)) score -= 0.1;
+
+  // Contractions tilt casual
+  const contractions = (t.match(/\b\w+'(s|t|re|ll|ve|d|m)\b/g) || []).length;
+  if (contractions >= 2) score -= 0.1;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function isJustNumber(text: string): boolean {
+  const stripped = text.replace(/[\s$₹€£,.\-:]/g, "");
+  // Pure-digit (with optional currency/punctuation) and short
+  return stripped.length > 0 && /^\d+$/.test(stripped) && stripped.length <= 12;
+}
+
+function extractFirstPrice(text: string): number | null {
+  // Reuse the same patterns as the validator's price extractor (kept local to avoid cross-module deps)
+  const dollarPattern = /[$₹€£]\s*([\d,]+(?:\.\d{1,2})?)/;
+  const kPattern = /[$₹€£]?\s*([\d.]+)\s*[kK]\b/;
+  const mPattern = /[$₹€£]?\s*([\d.]+)\s*[mM]\b/;
+
+  let match = text.match(dollarPattern);
+  if (match) {
+    const value = parseFloat(match[1].replace(/,/g, ""));
+    if (!isNaN(value) && value > 100) return value;
+  }
+  match = text.match(kPattern);
+  if (match) {
+    const value = parseFloat(match[1]) * 1000;
+    if (!isNaN(value) && value > 100) return value;
+  }
+  match = text.match(mPattern);
+  if (match) {
+    const value = parseFloat(match[1]) * 1_000_000;
+    if (!isNaN(value) && value > 100) return value;
+  }
+
+  // Bare number ≥ 1000 (handles "26000" or "26,000")
+  const bare = text.match(/\b(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d{1,2})?\b/);
+  if (bare) {
+    const value = parseFloat(bare[1].replace(/,/g, ""));
+    if (!isNaN(value) && value >= 1000) return value;
+  }
+
+  return null;
+}
+
+/**
+ * Count how many recent vendor messages stated the exact same price as `currentPrice`.
+ * Includes the current message in the count.
+ *
+ * "Exact match" per spec: strict equality (no tolerance).
+ */
+function countRepeatedOffers(
+  currentPrice: number | null,
+  priorVendorMessages: ToneMessage[],
+): number {
+  if (currentPrice == null) return 0;
+
+  let count = 1; // include the current statement
+  // Walk backwards through prior vendor messages until a different price appears
+  for (let i = priorVendorMessages.length - 1; i >= 0; i--) {
+    const msg = priorVendorMessages[i];
+    if (msg.role !== "VENDOR") continue;
+    const priorPrice = extractFirstPrice(msg.content);
+    if (priorPrice == null) continue; // non-pricing message — skip, don't break
+    if (priorPrice === currentPrice) {
+      count += 1;
+    } else {
+      break; // chain broken
+    }
+  }
+  return count;
+}
+
+/**
+ * Extract deterministic vendor-style signals from the latest vendor message.
+ *
+ * @param latestVendorMessage - The most recent vendor message text.
+ * @param priorVendorMessages - Prior conversation history (used for repeat-offer chain detection).
+ *                              Pass [] when called outside a deal context.
+ *
+ * Pure function: same inputs → same outputs. Safe to call repeatedly.
+ */
+export function detectVendorStyle(
+  latestVendorMessage: string,
+  priorVendorMessages: ToneMessage[] = [],
+): VendorStyle {
+  const text = latestVendorMessage || "";
+  const trimmed = text.trim();
+  const wordCount = trimmed === "" ? 0 : trimmed.split(/\s+/).length;
+
+  const hasGreeting = GREETING_PATTERNS.some((p) => p.test(trimmed));
+  const formality = detectFormality(text, hasGreeting);
+  const hostility = HOSTILITY_PATTERNS.some((p) => p.test(text));
+  const hasQuestion = /\?/.test(text);
+  const isNumberOnly = isJustNumber(trimmed);
+  const acceptanceDetected = ACCEPTANCE_PATTERNS.some((p) => p.test(text));
+  const { language, confidence } = detectLanguage(text);
+  const lastVendorPrice = extractFirstPrice(text);
+  const repeatedOfferCount = countRepeatedOffers(
+    lastVendorPrice,
+    priorVendorMessages,
+  );
+
+  return {
+    formality,
+    length: wordCount,
+    language,
+    languageConfidence: confidence,
+    hostility,
+    hasQuestion,
+    isNumberOnly,
+    hasGreeting,
+    repeatedOfferCount,
+    lastVendorPrice,
+    acceptanceDetected,
+  };
+}
+
 export default {
   detectVendorTone,
   getToneDescription,
   getResponseStyleRecommendation,
   detectStrictFirmness,
+  detectVendorStyle,
 };

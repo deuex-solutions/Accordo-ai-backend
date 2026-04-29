@@ -16,7 +16,7 @@
  * On failure: throws ValidationError so the caller can use a fallback template.
  */
 
-import type { NegotiationIntent } from '../negotiation/intent/build-negotiation-intent.js';
+import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Validation error
@@ -25,55 +25,97 @@ import type { NegotiationIntent } from '../negotiation/intent/build-negotiation-
 export class ValidationError extends Error {
   constructor(
     message: string,
-    public readonly reason: string
+    public readonly reason: string,
   ) {
     super(message);
-    this.name = 'ValidationError';
+    this.name = "ValidationError";
   }
 }
 
 // ─────────────────────────────────────────────
-// Banned keywords (must never appear in output)
+// Hard bans (Apr 2026, two-tier)
+//
+// Tier 1 — strategy-leak phrases that ALWAYS reject:
+//   AI/system identifiers and explicit algorithm references.
+// Tier 2 — context-sensitive bans (REJECT only when the word appears NEAR a
+//   number or strategy verb, e.g. "our target is $4500" → leak;
+//   "what's your target delivery date?" → fine).
+//
+// Rejection returns rule codes only — the rejected text is never logged.
 // ─────────────────────────────────────────────
 
-const BANNED_KEYWORDS: RegExp[] = [
+const HARD_BANS_ALWAYS: RegExp[] = [
   /\butility\b/i,
   /\balgorithm\b/i,
-  /\bscoring\b/i,
-  /\bscore\b/i,
-  /\bthreshold\b/i,
-  /\bmodel\b/i,
   /\bweighted\b/i,
   /\bbatna\b/i,
   /\bdecision tree\b/i,
-  /\bengine\b/i,
-  /\bconfig\b/i,
-  /\bparameters\b/i,
   /\bgpt\b/i,
   /\bopenai\b/i,
   /\bai model\b/i,
   /\blanguage model\b/i,
   /\bllm\b/i,
   /\bautomated system\b/i,
-  /\boutput\b/i,
-  /\bprompt\b/i,
+  /\bas an ai\b/i,
+  /\bI('m| am) (an? )?ai\b/i,
 ];
+
+/**
+ * Tier-2 hard bans: only fire when the keyword sits within 5 tokens of a price
+ * or strategy verb. Catches "our max is $4500" but not "what's your max delivery date?".
+ */
+const HARD_BANS_NEAR_STRATEGY: Array<{ word: RegExp; label: string }> = [
+  {
+    word: /\b(target|maximum|max|ceiling|threshold|limit)\b/i,
+    label: "strategy_leak_target",
+  },
+  { word: /\b(score|scoring)\b/i, label: "strategy_leak_score" },
+  {
+    word: /\b(model|engine|config|parameters?)\b/i,
+    label: "strategy_leak_internal",
+  },
+];
+
+const STRATEGY_PROXIMITY =
+  /[\$₹€£]\s*[\d,]+|[\d,]{4,}|\b(can('?t|not)? (go|pay|exceed)|won('?t|not) (exceed|go))\b/i;
+
+// ─────────────────────────────────────────────
+// Per-action length bounds (Apr 2026, adaptive)
+//
+// Replaces the old blanket 160-word cap. The persona-renderer aims for these;
+// the validator enforces them.
+// ─────────────────────────────────────────────
+
+const LENGTH_BOUNDS: Record<
+  "ACCEPT" | "COUNTER" | "MESO" | "WALK_AWAY" | "ESCALATE" | "ASK_CLARIFY",
+  { min: number; max: number }
+> = {
+  COUNTER: { min: 25, max: 110 },
+  MESO: { min: 25, max: 140 },
+  ACCEPT: { min: 8, max: 60 },
+  WALK_AWAY: { min: 20, max: 90 },
+  ESCALATE: { min: 20, max: 90 },
+  ASK_CLARIFY: { min: 10, max: 60 },
+};
 
 // ─────────────────────────────────────────────
 // Soft filler phrases to strip
 // ─────────────────────────────────────────────
 
+// Soft phrases — stripped silently, never reject for these. Stays narrow so we
+// don't strip humanization touches like "honestly" or "appreciate".
 const SOFT_PHRASES: RegExp[] = [
   /\bhappy to help\b/gi,
   /\bI('m| am) here to help\b/gi,
-  /\bcertainly\b/gi,
-  /\bof course\b/gi,
-  /\bkindly\b/gi,
   /\bplease note that\b/gi,
   /\bit is important to note\b/gi,
-  /\bas an ai\b/gi,
-  /\bas a language model\b/gi,
-  /\bI('m| am) just an ai\b/gi,
+];
+
+// Weak-apology phrases — stripped silently (off-limits per spec).
+const WEAK_APOLOGY_PHRASES: RegExp[] = [
+  /\b(I'?m|I am) sorry to push back\b/gi,
+  /\bI hate to ask\b/gi,
+  /\bsorry for being difficult\b/gi,
 ];
 
 // ─────────────────────────────────────────────
@@ -93,8 +135,9 @@ function extractPrices(text: string): number[] {
   const dollarPattern = /\$\s*([\d,]+(?:\.\d{1,2})?)/g;
   let match;
   while ((match = dollarPattern.exec(text)) !== null) {
-    const value = parseFloat(match[1].replace(/,/g, ''));
-    if (!isNaN(value) && value > 100) { // ignore trivially small numbers
+    const value = parseFloat(match[1].replace(/,/g, ""));
+    if (!isNaN(value) && value > 100) {
+      // ignore trivially small numbers
       prices.push(value);
     }
   }
@@ -170,10 +213,10 @@ function countWords(text: string): number {
 function stripSoftPhrases(text: string): string {
   let cleaned = text;
   for (const pattern of SOFT_PHRASES) {
-    cleaned = cleaned.replace(pattern, '');
+    cleaned = cleaned.replace(pattern, "");
   }
   // Clean up extra whitespace / double spaces
-  return cleaned.replace(/\s{2,}/g, ' ').trim();
+  return cleaned.replace(/\s{2,}/g, " ").trim();
 }
 
 // ─────────────────────────────────────────────
@@ -190,107 +233,107 @@ function stripSoftPhrases(text: string): string {
  */
 export function validateLlmOutput(
   response: string,
-  intent: NegotiationIntent
+  intent: NegotiationIntent,
 ): string {
   if (!response || response.trim().length === 0) {
-    throw new ValidationError('LLM returned empty response', 'empty_response');
+    throw new ValidationError("empty_response", "empty_response");
   }
 
-  // Step 1: Strip soft filler phrases first
+  // Step 1: Strip soft filler + weak-apology phrases (silent, no reject).
   let sanitized = stripSoftPhrases(response);
+  for (const pattern of WEAK_APOLOGY_PHRASES) {
+    sanitized = sanitized.replace(pattern, "");
+  }
+  sanitized = sanitized.replace(/\s{2,}/g, " ").trim();
 
-  // Step 2: Check for banned keywords
-  for (const pattern of BANNED_KEYWORDS) {
+  // Step 2a: Hard bans — always reject (AI/system identifiers).
+  for (const pattern of HARD_BANS_ALWAYS) {
     if (pattern.test(sanitized)) {
-      throw new ValidationError(
-        `Response contains banned keyword matching: ${pattern}`,
-        'banned_keyword'
-      );
+      throw new ValidationError("banned_keyword_hard", "banned_keyword_hard");
     }
   }
 
-  // Step 3: Word count limit
+  // Step 2b: Tier-2 hard bans — reject only when keyword sits within 60 chars
+  // of a price/strategy verb (catches "our max is $4500" but not "max delivery").
+  for (const { word, label } of HARD_BANS_NEAR_STRATEGY) {
+    const m = sanitized.match(word);
+    if (!m || m.index == null) continue;
+    const window = sanitized.slice(
+      Math.max(0, m.index - 60),
+      Math.min(sanitized.length, m.index + 60),
+    );
+    if (STRATEGY_PROXIMITY.test(window)) {
+      throw new ValidationError(label, label);
+    }
+  }
+
+  // Step 3: Adaptive per-action length bounds (replaces blanket 160-word cap).
+  const action = intent.action;
+  const bounds = LENGTH_BOUNDS[action as keyof typeof LENGTH_BOUNDS];
   const wordCount = countWords(sanitized);
-  if (wordCount > 160) {
-    throw new ValidationError(
-      `Response too long: ${wordCount} words (max 160)`,
-      'too_long'
-    );
+  if (bounds) {
+    if (wordCount > bounds.max) {
+      throw new ValidationError("too_long", "too_long");
+    }
+    if (wordCount < bounds.min) {
+      throw new ValidationError("too_short", "too_short");
+    }
   }
 
-  // Step 4: Price validation for COUNTER action
-  if (intent.action === 'COUNTER' && intent.allowedPrice != null && intent.allowedPrice <= 0) {
-    throw new ValidationError(
-      'COUNTER has zero or negative allowedPrice — falling back to template',
-      'zero_price'
-    );
+  // Step 4: Price validation for COUNTER action (factual checks unchanged).
+  if (
+    action === "COUNTER" &&
+    intent.allowedPrice != null &&
+    intent.allowedPrice <= 0
+  ) {
+    throw new ValidationError("zero_price", "zero_price");
   }
-  if (intent.action === 'COUNTER' && intent.allowedPrice != null) {
+  if (action === "COUNTER" && intent.allowedPrice != null) {
     const detectedPrices = extractPrices(sanitized);
-
-    // Must contain at least one price
     if (detectedPrices.length === 0) {
-      throw new ValidationError(
-        'COUNTER response does not contain any price',
-        'missing_price'
-      );
+      throw new ValidationError("missing_price", "missing_price");
     }
-
-    // Every detected price must be within [targetPrice, maxAcceptablePrice]
-    // If we have the boundaries, enforce them
-    if (intent.allowedPrice != null) {
-      // The LLM was given exactly allowedPrice — verify it's present (fuzzy)
-      const hasCorrectPrice = detectedPrices.some(p => isPriceMatch(p, intent.allowedPrice!));
-
-      if (!hasCorrectPrice) {
-        throw new ValidationError(
-          `COUNTER response does not contain the allowed price $${intent.allowedPrice}. Found: ${detectedPrices.join(', ')}`,
-          'wrong_price'
-        );
-      }
-
-      // Check no wildly different prices appear (>10% deviation from allowedPrice)
-      const rogue = detectedPrices.filter(p => {
-        const deviation = Math.abs(p - intent.allowedPrice!) / intent.allowedPrice!;
-        return deviation > 0.10; // More than 10% off
-      });
-
-      if (rogue.length > 0) {
-        throw new ValidationError(
-          `COUNTER response contains unauthorized price(s): ${rogue.join(', ')}`,
-          'unauthorized_price'
-        );
-      }
+    const hasCorrectPrice = detectedPrices.some((p) =>
+      isPriceMatch(p, intent.allowedPrice!),
+    );
+    if (!hasCorrectPrice) {
+      throw new ValidationError("wrong_price", "wrong_price");
+    }
+    const rogue = detectedPrices.filter((p) => {
+      const deviation =
+        Math.abs(p - intent.allowedPrice!) / intent.allowedPrice!;
+      return deviation > 0.1;
+    });
+    if (rogue.length > 0) {
+      throw new ValidationError("unauthorized_price", "unauthorized_price");
     }
   }
 
-  // Step 5: For ACCEPT action, reject if LLM hallucinated a price
-  // The ACCEPT instruction explicitly says "Do NOT include any prices"
-  if (intent.action === 'ACCEPT') {
+  // Step 5: For ACCEPT action, reject if LLM hallucinated a price.
+  if (action === "ACCEPT") {
     const detectedPrices = extractPrices(sanitized);
     if (detectedPrices.length > 0) {
-      throw new ValidationError(
-        `ACCEPT response contains hallucinated price(s): ${detectedPrices.join(', ')}. ACCEPT should not mention specific prices.`,
-        'accept_has_price'
-      );
+      throw new ValidationError("accept_has_price", "accept_has_price");
     }
   }
 
-  // Step 6: For MESO action, verify MESO prices are present and no rogue prices
-  if (intent.action === 'MESO' && intent.offerVariants && intent.offerVariants.length > 0) {
+  // Step 6: For MESO action, verify MESO prices are present and no rogue prices.
+  if (
+    action === "MESO" &&
+    intent.offerVariants &&
+    intent.offerVariants.length > 0
+  ) {
     const detectedPrices = extractPrices(sanitized);
-    const mesoAllowedPrices = intent.offerVariants.map(v => v.price);
-
+    const mesoAllowedPrices = intent.offerVariants.map((v) => v.price);
     if (detectedPrices.length > 0) {
-      // Any detected price must match a MESO variant (fuzzy)
-      const roguePrices = detectedPrices.filter(detected =>
-        !mesoAllowedPrices.some(allowed => isPriceMatch(detected, allowed))
+      const roguePrices = detectedPrices.filter(
+        (detected) =>
+          !mesoAllowedPrices.some((allowed) => isPriceMatch(detected, allowed)),
       );
-
       if (roguePrices.length > 0) {
         throw new ValidationError(
-          `MESO response contains price(s) not in offer variants: ${roguePrices.join(', ')}`,
-          'meso_unauthorized_price'
+          "meso_unauthorized_price",
+          "meso_unauthorized_price",
         );
       }
     }

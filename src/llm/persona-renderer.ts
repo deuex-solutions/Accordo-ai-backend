@@ -13,10 +13,10 @@
  * - Temperature: 0.5 for controlled, consistent output.
  */
 
-import { generateCompletion } from '../services/openai.service.js';
-import { getFallbackResponse } from './fallback-templates.js';
-import logger from '../config/logger.js';
-import type { NegotiationIntent } from '../negotiation/intent/build-negotiation-intent.js';
+import { generateCompletion } from "../services/openai.service.js";
+import { getFallbackResponse } from "./fallback-templates.js";
+import logger from "../config/logger.js";
+import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Non-commercial context (safe to pass to LLM)
@@ -36,96 +36,229 @@ export interface PersonaContext {
 // ─────────────────────────────────────────────
 
 function buildSystemPrompt(context: PersonaContext): string {
-  const dealLine = context.dealTitle ? `\nDeal: ${context.dealTitle}` : '';
-  const vendorLine = context.vendorName ? `\nVendor: ${context.vendorName}` : '';
-  const categoryLine = context.productCategory ? `\nProduct Category: ${context.productCategory}` : '';
+  const dealLine = context.dealTitle ? `\nDeal: ${context.dealTitle}` : "";
+  const vendorLine = context.vendorName
+    ? `\nVendor: ${context.vendorName}`
+    : "";
+  const categoryLine = context.productCategory
+    ? `\nProduct Category: ${context.productCategory}`
+    : "";
 
   return `You are Accordo, a professional procurement manager.${dealLine}${vendorLine}${categoryLine}
 
-Your role is to express a negotiation decision in natural, human language.
+Your job: express the negotiation decision you are given, in natural human business chat.
 
-Strict rules:
-1. Express ONLY the decision given to you — do not invent, modify, or infer any commercial terms.
-2. Never mention utility, algorithm, score, calculation, threshold, model, AI, automated system, or any internal tool.
-3. Keep your response under 120 words.
-4. Sound like a real person — warm but professional.
-5. Never invent prices, dates, or terms not explicitly provided to you.
-6. If a price is given to you, use it exactly as provided — do not round, change, or omit it.
-7. Mirror the vendor's tone as instructed.`;
+Hard rules — never break these:
+1. Express ONLY the decision provided. Never invent, modify, or infer commercial terms.
+2. Never mention utility, algorithms, scores, calculations, thresholds, models, AI, automated systems, or any internal tooling.
+3. If a price is provided, use it exactly — no rounding, no omitting, no rephrasing as ranges.
+4. Never invent prices, dates, payment terms, or delivery details that weren't given to you.
+
+Voice rules — sound like a real person:
+5. Use contractions (we're, I'd, can't). Brief acknowledgments before the substance are good ("appreciate the quick turnaround" / "thanks for breaking that down").
+6. Soft hedges and light empathy are OK ("honestly", "I hear you on the margins") — but NEVER weak apologies ("sorry to push back", "I hate to ask") and NEVER fake personal anecdotes ("my boss said…").
+7. NO emojis, NO exclamation marks, NO slang or regional idioms.
+8. Mirror the vendor's formality (how casual / formal they are) — but NEVER mirror hostility, rudeness, or sarcasm. If the vendor is hostile, stay calm and professional.
+9. If the vendor's message is in another language and you're told they're confident in it, reply in that language. Otherwise reply in English.
+10. Greetings only when told this is round 1. After round 1, jump straight in like a real ongoing chat — no "Hi <vendor>".
+
+Structure rules:
+11. If the vendor asked a direct question AND stated a price, address the price first, the question second.
+12. If the vendor asked questions previously that weren't answered, address those briefly before the negotiation thread.
+13. If the vendor is just making smalltalk, give a short warm reply and redirect to the deal.
+14. Adapt length to the vendor: short message → short reply, longer message → longer reply. Stay within the bounds you'll be given.
+15. Single message only. No bullet points unless presenting MESO options.`;
 }
 
 // ─────────────────────────────────────────────
 // Instruction builder (structured, safe fields only)
 // ─────────────────────────────────────────────
 
-function buildInstruction(intent: NegotiationIntent, vendorMessage: string): string {
-  const toneInstruction = `Mirror the vendor's ${intent.vendorTone} tone.`;
-  const firmnessInstruction = intent.firmness >= 0.75
-    ? 'Be firm and clear. Hold your position.'
-    : intent.firmness >= 0.55
-      ? 'Be moderate — polite but direct.'
-      : 'Be warm and collaborative.';
+// Map language codes to natural-language names for the LLM prompt.
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  es: "Spanish",
+  hi: "Hindi",
+  fr: "French",
+  de: "German",
+  pt: "Portuguese",
+};
 
-  const concernsText = intent.acknowledgeConcerns.length > 0
-    ? `Acknowledge these vendor concerns naturally: ${intent.acknowledgeConcerns.join(', ')}.`
-    : '';
+// Length guidance the LLM aims for; the validator enforces hard bounds.
+function lengthHintForAction(action: string, vendorWordCount: number): string {
+  // Adapt to vendor: short vendor message → shorter reply, but never below per-action floor.
+  switch (action) {
+    case "COUNTER":
+    case "MESO":
+      return vendorWordCount < 15
+        ? "Aim for ~30–50 words."
+        : "Aim for ~50–80 words.";
+    case "WALK_AWAY":
+    case "ESCALATE":
+      return "Aim for ~30–60 words.";
+    case "ACCEPT":
+      return vendorWordCount < 8
+        ? "Aim for ~10–25 words."
+        : "Aim for ~20–45 words.";
+    case "ASK_CLARIFY":
+      return "Aim for ~15–35 words.";
+    default:
+      return "Aim for ~30–60 words.";
+  }
+}
 
-  let actionInstruction = '';
+function buildInstruction(
+  intent: NegotiationIntent,
+  vendorMessage: string,
+): string {
+  const style = intent.vendorStyle;
+  const round = intent.roundNumber ?? 1;
+  const isFirstRound = round <= 1;
+
+  // Tone mirroring — formality only, never hostility.
+  const formalityHint = style
+    ? style.formality >= 0.7
+      ? "The vendor writes formally — match their formal register."
+      : style.formality <= 0.3
+        ? "The vendor writes casually — match that with contractions and a relaxed register."
+        : "The vendor's tone is neutral — keep yours warm and professional."
+    : `Mirror the vendor's ${intent.vendorTone} tone in formality only.`;
+
+  const hostilityHint = style?.hostility
+    ? "The vendor is being hostile or rude. Do NOT mirror that. Stay calm, neutral-professional. Acknowledge their frustration in one short clause if natural, then move to the substance."
+    : "";
+
+  const languageHint =
+    style &&
+    style.languageConfidence >= 0.6 &&
+    style.language !== "en" &&
+    style.language !== "und"
+      ? `Reply in ${LANGUAGE_NAMES[style.language] ?? "the vendor's language"}. Currency symbols and prices stay in the format given to you (do not localize numbers).`
+      : "Reply in English.";
+
+  const greetingHint = isFirstRound
+    ? "This is the first round — a brief greeting is appropriate."
+    : "This is an ongoing chat — do NOT greet, just continue the conversation.";
+
+  const firmnessInstruction =
+    intent.firmness >= 0.75
+      ? "Be firm and clear. Hold your position."
+      : intent.firmness >= 0.55
+        ? "Be moderate — polite but direct."
+        : "Be warm and collaborative.";
+
+  const concernsText =
+    intent.acknowledgeConcerns.length > 0
+      ? `Acknowledge these vendor concerns naturally: ${intent.acknowledgeConcerns.join(", ")}.`
+      : "";
+
+  // Price-before-question ordering when both present.
+  const orderingHint =
+    style?.hasQuestion && style.lastVendorPrice != null
+      ? "The vendor stated both a price and a question. Address the price/counter first, then briefly answer the question."
+      : style?.hasQuestion
+        ? "The vendor asked a question — answer it directly before continuing the negotiation."
+        : "";
+
+  // Smalltalk redirect.
+  const smalltalkHint =
+    style &&
+    style.length > 0 &&
+    style.length < 6 &&
+    !style.lastVendorPrice &&
+    !style.hasQuestion
+      ? "The vendor's message reads like smalltalk. Reply with a brief warm acknowledgment, then redirect to the deal."
+      : "";
+
+  // Open questions list.
+  const openQuestionsHint =
+    intent.openQuestions && intent.openQuestions.length > 0
+      ? `These vendor questions from earlier rounds were not yet answered — address them briefly first: ${intent.openQuestions.map((q) => `"${q.question}"`).join("; ")}.`
+      : "";
+
+  // Phrasing-history avoidance — coarse hint, no actual phrases revealed.
+  const phrasingHint =
+    intent.phrasingHistory && intent.phrasingHistory.length > 0
+      ? `Vary your opener — you have already used these patterns in this deal: ${intent.phrasingHistory.slice(-6).join(" | ")}. Do not start with the same opening words.`
+      : "";
+
+  const lengthHint = lengthHintForAction(intent.action, style?.length ?? 0);
+
+  let actionInstruction = "";
 
   switch (intent.action) {
-    case 'ACCEPT':
+    case "ACCEPT":
       actionInstruction = `Accept the vendor's offer. Express genuine appreciation. Confirm the deal is agreed and mention next steps briefly. Do NOT include any prices or numbers — just confirm acceptance warmly.`;
       break;
 
-    case 'COUNTER':
+    case "COUNTER":
       if (intent.allowedPrice != null) {
-        const termsText = intent.allowedPaymentTerms ? `, payment terms: ${intent.allowedPaymentTerms}` : '';
-        const deliveryText = intent.allowedDelivery ? `, delivery: ${intent.allowedDelivery}` : '';
+        const termsText = intent.allowedPaymentTerms
+          ? `, payment terms: ${intent.allowedPaymentTerms}`
+          : "";
+        const deliveryText = intent.allowedDelivery
+          ? `, delivery: ${intent.allowedDelivery}`
+          : "";
         actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${intent.allowedPrice.toLocaleString()}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Provide a brief, natural business reason (budget constraints, project requirements, or similar). Keep it conversational.`;
       } else {
-        actionInstruction = 'Indicate that the current offer needs improvement and ask the vendor to reconsider their terms. Be polite but clear.';
+        actionInstruction =
+          "Indicate that the current offer needs improvement and ask the vendor to reconsider their terms. Be polite but clear.";
       }
       break;
 
-    case 'WALK_AWAY':
+    case "WALK_AWAY":
       actionInstruction = `Professionally end the negotiation. Thank the vendor for their time. Leave the door open for future opportunities. Do NOT include any prices.`;
       break;
 
-    case 'ESCALATE':
+    case "ESCALATE":
       actionInstruction = `Inform the vendor that this negotiation requires senior team review. A colleague will follow up within 2 business days. Be reassuring and professional.`;
       break;
 
-    case 'MESO':
+    case "MESO":
       if (intent.offerVariants && intent.offerVariants.length > 0) {
         const options = intent.offerVariants
-          .map((v, i) => `Option ${i + 1} — ${v.label}: ${intent.currencySymbol}${v.price.toLocaleString()}, ${v.paymentTerms}. ${v.description}`)
-          .join('\n');
+          .map(
+            (v, i) =>
+              `Option ${i + 1} — ${v.label}: ${intent.currencySymbol}${v.price.toLocaleString()}, ${v.paymentTerms}. ${v.description}`,
+          )
+          .join("\n");
         actionInstruction = `Present these options to the vendor. You MUST present all options with EXACT prices as given:\n${options}\nAsk the vendor which works best for them. Present them as fair alternatives.`;
       } else {
-        actionInstruction = 'Ask the vendor to consider alternative arrangements and suggest discussing different combinations of price and terms.';
+        actionInstruction =
+          "Ask the vendor to consider alternative arrangements and suggest discussing different combinations of price and terms.";
       }
       break;
 
-    case 'ASK_CLARIFY':
+    case "ASK_CLARIFY":
       actionInstruction = `The vendor's message was unclear or incomplete. Naturally ask them to provide the missing information (total price and/or payment terms). Keep it brief and friendly.`;
       break;
 
     default:
-      actionInstruction = 'Respond professionally and continue the negotiation.';
+      actionInstruction =
+        "Respond professionally and continue the negotiation.";
   }
 
   return [
     `Vendor's message: "${vendorMessage}"`,
-    '',
+    "",
     `Your action: ${actionInstruction}`,
-    '',
-    toneInstruction,
+    "",
+    formalityHint,
+    languageHint,
+    greetingHint,
+    hostilityHint,
+    orderingHint,
+    smalltalkHint,
+    openQuestionsHint,
+    phrasingHint,
     firmnessInstruction,
     concernsText,
     `Position context: ${intent.commercialPosition}`,
-    '',
-    'Respond in a single paragraph, under 120 words. Do not use bullet points.',
-  ].filter(Boolean).join('\n');
+    "",
+    `${lengthHint} Single message, no bullet points (except for MESO options).`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ─────────────────────────────────────────────
@@ -151,18 +284,18 @@ export interface RenderResult {
 export async function renderNegotiationMessage(
   intent: NegotiationIntent,
   vendorMessage: string,
-  context: PersonaContext = {}
+  context: PersonaContext = {},
 ): Promise<RenderResult> {
   try {
     const systemPrompt = buildSystemPrompt(context);
     const userInstruction = buildInstruction(intent, vendorMessage);
 
     const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: userInstruction },
+      { role: "system" as const, content: systemPrompt },
+      { role: "user" as const, content: userInstruction },
     ];
 
-    logger.info('[PersonaRenderer] Rendering message', {
+    logger.info("[PersonaRenderer] Rendering message", {
       action: intent.action,
       tone: intent.vendorTone,
       firmness: intent.firmness,
@@ -170,11 +303,13 @@ export async function renderNegotiationMessage(
     });
 
     const response = await generateCompletion(messages, {
-      temperature: 0.5,
-      maxTokens: 200, // ~120 words + buffer
+      // Slight bump from 0.5 → 0.7 for natural variation across rounds.
+      temperature: 0.7,
+      // ~140 words ceiling (MESO max) plus formatting buffer.
+      maxTokens: 260,
     });
 
-    logger.info('[PersonaRenderer] LLM response received', {
+    logger.info("[PersonaRenderer] LLM response received", {
       action: intent.action,
       length: response.content.length,
       model: response.model,
@@ -186,7 +321,7 @@ export async function renderNegotiationMessage(
       fromLlm: true,
     };
   } catch (error) {
-    logger.warn('[PersonaRenderer] LLM call failed, using fallback template', {
+    logger.warn("[PersonaRenderer] LLM call failed, using fallback template", {
       action: intent.action,
       error: error instanceof Error ? error.message : String(error),
     });
