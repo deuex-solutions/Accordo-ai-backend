@@ -118,6 +118,19 @@ const WEAK_APOLOGY_PHRASES: RegExp[] = [
   /\bsorry for being difficult\b/gi,
 ];
 
+// AI-tell phrases — performative-helpful filler that reads as LLM output.
+// Stripped silently; the surrounding sentence usually reads fine without them.
+const AI_TELL_PHRASES: RegExp[] = [
+  /\bwe('| a)?d love to\b/gi,
+  /\bI('| a)?d love to\b/gi,
+  /\bthis better aligns with our needs\b/gi,
+  /\blet us know your thoughts\b/gi,
+  /\bfeel free to\b/gi,
+  /\bI hope this helps\b/gi,
+  /\bI'?m happy to discuss\b/gi,
+  /\blooking forward to hearing\b/gi,
+];
+
 // ─────────────────────────────────────────────
 // Price extraction (fuzzy)
 // ─────────────────────────────────────────────
@@ -219,6 +232,34 @@ function stripSoftPhrases(text: string): string {
   return cleaned.replace(/\s{2,}/g, " ").trim();
 }
 
+/**
+ * Apply all silent text scrubbers — soft phrases, weak apologies, AI-tells,
+ * em-dashes, exclamation marks. Used by both the LLM-output validator and
+ * the fallback-template renderer so vendor-facing text is consistently clean
+ * regardless of source.
+ *
+ * Exported so callers (like fallback-templates.ts) can apply the same scrub
+ * pass without re-implementing the rules.
+ */
+export function sanitizeText(text: string): string {
+  let s = stripSoftPhrases(text);
+  for (const pattern of WEAK_APOLOGY_PHRASES) s = s.replace(pattern, "");
+  for (const pattern of AI_TELL_PHRASES) s = s.replace(pattern, "");
+  // Em-dashes → comma. Hyphens / en-dashes preserved.
+  s = s.replace(/\s*—\s*/g, ", ");
+  // Exclamation marks → period.
+  s = s.replace(/!/g, ".");
+  // Collapse strip artifacts.
+  s = s
+    .replace(/,\s*,/g, ",")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*\./g, ".")
+    .replace(/\.\s*\./g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return s;
+}
+
 // ─────────────────────────────────────────────
 // Main validator
 // ─────────────────────────────────────────────
@@ -239,12 +280,9 @@ export function validateLlmOutput(
     throw new ValidationError("empty_response", "empty_response");
   }
 
-  // Step 1: Strip soft filler + weak-apology phrases (silent, no reject).
-  let sanitized = stripSoftPhrases(response);
-  for (const pattern of WEAK_APOLOGY_PHRASES) {
-    sanitized = sanitized.replace(pattern, "");
-  }
-  sanitized = sanitized.replace(/\s{2,}/g, " ").trim();
+  // Step 1: Apply all silent scrubs (soft phrases, weak apologies, AI-tells,
+  // em-dashes, exclamation marks). Same pass used for fallback templates.
+  let sanitized = sanitizeText(response);
 
   // Step 2a: Hard bans — always reject (AI/system identifiers).
   for (const pattern of HARD_BANS_ALWAYS) {

@@ -13,16 +13,20 @@
  * the matching structured-input mode.
  */
 
-import { formatCurrency, type SupportedCurrency } from '../../services/currency.service.js';
+import {
+  formatCurrency,
+  type SupportedCurrency,
+} from "../../services/currency.service.js";
+import { sanitizeText } from "../../llm/validate-llm-output.js";
 
 // ============================================================================
 // Shared types
 // ============================================================================
 
-export type StructuredPromptType = 'discount_percent' | 'payment_terms';
+export type StructuredPromptType = "discount_percent" | "payment_terms";
 
 export interface DiscountPendingPrompt {
-  type: 'discount_percent';
+  type: "discount_percent";
   discount: {
     originalTotal: number;
     currency: SupportedCurrency;
@@ -30,7 +34,7 @@ export interface DiscountPendingPrompt {
 }
 
 export interface PaymentTermsPendingPrompt {
-  type: 'payment_terms';
+  type: "payment_terms";
   paymentTerms: {
     presets: number[]; // [0, 30, 60, 90]
   };
@@ -57,7 +61,7 @@ function pickRandom<T>(variations: readonly T[]): T {
  */
 export function buildInitialDiscountPromptMessage(
   grandTotal: number,
-  currency: SupportedCurrency
+  currency: SupportedCurrency,
 ): { content: string; pendingPrompt: DiscountPendingPrompt } {
   const totalText = formatCurrency(grandTotal, currency);
   const variations = [
@@ -71,9 +75,9 @@ export function buildInitialDiscountPromptMessage(
       `Before we dive into the details, would you consider offering an initial discount as a gesture of partnership? It would really help us align quickly.`,
   ];
   return {
-    content: pickRandom(variations),
+    content: sanitizeText(pickRandom(variations)),
     pendingPrompt: {
-      type: 'discount_percent',
+      type: "discount_percent",
       discount: { originalTotal: grandTotal, currency },
     },
   };
@@ -109,12 +113,20 @@ export function buildDiscountAcknowledgement(
   percent: number,
   originalTotal: number,
   discountedTotal: number,
-  currency: SupportedCurrency
+  currency: SupportedCurrency,
 ): string {
   if (percent === 0) {
-    return `Thank you — we'll work with the current offer of ${formatCurrency(originalTotal, currency)}. `;
+    return (
+      sanitizeText(
+        `Thank you, we'll work with the current offer of ${formatCurrency(originalTotal, currency)}.`,
+      ) + " "
+    );
   }
-  return `Thank you for offering a ${percent}% discount — that brings your offer to ${formatCurrency(discountedTotal, currency)}. `;
+  return (
+    sanitizeText(
+      `Thank you for offering a ${percent}% discount, that brings your offer to ${formatCurrency(discountedTotal, currency)}.`,
+    ) + " "
+  );
 }
 
 // ============================================================================
@@ -131,13 +143,13 @@ export function buildPaymentTermsPromptMessage(): {
 } {
   const variations = [
     `Thanks for the price. Could you share your preferred payment terms?`,
-    `Great — one more thing. What payment terms work best for you?`,
+    `Great, one more thing. What payment terms work best for you?`,
     `Noted on the price. Please select the payment terms you can offer.`,
   ];
   return {
-    content: pickRandom(variations),
+    content: sanitizeText(pickRandom(variations)),
     pendingPrompt: {
-      type: 'payment_terms',
+      type: "payment_terms",
       paymentTerms: { presets: [0, 30, 60, 90] },
     },
   };
@@ -160,6 +172,6 @@ export function buildVendorPaymentTermsBubble(days: number): string {
  * offer-parser elsewhere in the codebase.
  */
 export function formatPaymentTermsLabel(days: number): string {
-  if (days === 0) return 'Immediate';
+  if (days === 0) return "Immediate";
   return `Net ${days}`;
 }

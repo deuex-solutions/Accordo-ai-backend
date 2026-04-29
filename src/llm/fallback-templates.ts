@@ -7,7 +7,7 @@
  * Rules:
  * - 5+ variations per action type so responses never feel robotic.
  * - Tone-aware variants (formal, casual, urgent, firm, friendly).
- * - All price/terms injected from NegotiationIntent — never hardcoded.
+ * - All price/terms injected from NegotiationIntent, never hardcoded.
  * - No utility, algorithm, score, threshold or internal system words.
  */
 
@@ -16,6 +16,7 @@ import type {
   VendorTone,
 } from "../negotiation/intent/build-negotiation-intent.js";
 import { buildFingerprint } from "./phrasing-history.js";
+import { sanitizeText } from "./validate-llm-output.js";
 
 // ─────────────────────────────────────────────
 // Template pools by action + tone
@@ -34,7 +35,7 @@ const ACCEPT_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
       `We are happy to confirm acceptance of the terms as discussed. We will proceed with the necessary documentation.`,
   ],
   casual: [
-    (i) => `We're in — great offer! We'll get the paperwork moving right away.`,
+    (i) => `We're in, great offer! We'll get the paperwork moving right away.`,
     (i) =>
       `Deal! Really appreciate the flexibility. Let's get this wrapped up.`,
     (i) => `Works for us. Looking forward to getting started together.`,
@@ -43,7 +44,7 @@ const ACCEPT_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Accepted. Moving quickly on our end to get everything finalized promptly.`,
     (i) =>
-      `We're good to go — accepted. We'll expedite our side to meet the timeline.`,
+      `We're good to go, accepted. We'll expedite our side to meet the timeline.`,
     (i) =>
       `Agreed. We'll prioritize the next steps to keep things on schedule.`,
   ],
@@ -57,8 +58,8 @@ const ACCEPT_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   ],
   friendly: [
     (i) =>
-      `Wonderful — we're happy to accept! It's been a pleasure working through this with you.`,
-    (i) => `Great news — we're in! Really looking forward to this partnership.`,
+      `Wonderful, we're happy to accept! It's been a pleasure working through this with you.`,
+    (i) => `Great news, we're in! Really looking forward to this partnership.`,
     (i) =>
       `We're delighted to accept. This has been a genuinely collaborative process and we appreciate it.`,
   ],
@@ -68,7 +69,7 @@ const ACCEPT_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Your offer has been accepted. We will be in touch to finalize the details.`,
     (i) =>
-      `Accepted — thank you for your time and flexibility through this process.`,
+      `Accepted, thank you for your time and flexibility through this process.`,
     (i) => `We're happy to confirm acceptance. Let's move to next steps.`,
     (i) => `Your proposal meets our requirements and we are ready to proceed.`,
   ],
@@ -88,7 +89,7 @@ const COUNTER_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Thanks for coming back to us! Here's what we can work with: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()} total${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Think we can make that work?`,
     (i) =>
-      `Appreciate the offer — our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. Let us know what you think!`,
+      `Appreciate the offer, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. Let us know what you think!`,
     (i) =>
       `Good to hear from you. We'd like to propose ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Does that work for you?`,
   ],
@@ -98,7 +99,7 @@ const COUNTER_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `To keep things on track, here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / delivery ${i.allowedDelivery}` : ""}. We'd appreciate a fast turnaround.`,
     (i) =>
-      `We're working against a deadline — our offer is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Please let us know as soon as possible.`,
+      `We're working against a deadline, our offer is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Please let us know as soon as possible.`,
   ],
   firm: [
     (i) =>
@@ -110,9 +111,9 @@ const COUNTER_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   ],
   friendly: [
     (i) =>
-      `Really appreciate your proposal! We'd love to meet somewhere in the middle — our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. What do you think?`,
+      `Really appreciate your proposal! We'd love to meet somewhere in the middle, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. What do you think?`,
     (i) =>
-      `Thanks so much for the offer — we're making progress! Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Hoping we can find the right fit.`,
+      `Thanks so much for the offer, we're making progress! Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Hoping we can find the right fit.`,
     (i) =>
       `We value this partnership and want to find terms that work for everyone. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Happy to discuss further!`,
   ],
@@ -124,7 +125,7 @@ const COUNTER_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `I appreciate your offer and want to keep this moving. Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Open to your thoughts.`,
     (i) =>
-      `Thanks for the proposal — here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Let's see if we can land on this.`,
+      `Thanks for the proposal, here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Let's see if we can land on this.`,
     (i) =>
       `We've reviewed your offer carefully. Our counter position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` with delivery ${i.allowedDelivery}` : ""}. Looking forward to your response.`,
   ],
@@ -142,7 +143,7 @@ const WALK_AWAY_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   ],
   casual: [
     (i) =>
-      `We've thought it over and unfortunately this one isn't going to work for us. No hard feelings — we genuinely appreciate the time you've put in.`,
+      `We've thought it over and unfortunately this one isn't going to work for us. No hard feelings, we genuinely appreciate the time you've put in.`,
     (i) =>
       `Sorry to say, but we're going to have to pass on this one. The terms just aren't a fit right now, but we wish you the best.`,
     (i) =>
@@ -152,7 +153,7 @@ const WALK_AWAY_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Given our constraints, we are unable to proceed with the current offer. We need to move in a different direction. Thank you for your time.`,
     (i) =>
-      `Unfortunately, the terms don't fit within our current requirements and we need to close this out. We appreciate the effort — thank you.`,
+      `Unfortunately, the terms don't fit within our current requirements and we need to close this out. We appreciate the effort, thank you.`,
     (i) =>
       `We have to close this negotiation as the terms don't meet our needs. Thank you for your responsiveness throughout.`,
   ],
@@ -178,7 +179,7 @@ const WALK_AWAY_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `We appreciate your offer and your efforts throughout this process. The terms as they stand don't align with what we need, so we'll be concluding the negotiation here. Thank you.`,
     (i) =>
-      `After careful consideration, we're not in a position to move forward with this offer. Thank you sincerely for the engagement — we genuinely hope our paths cross again.`,
+      `After careful consideration, we're not in a position to move forward with this offer. Thank you sincerely for the engagement, we genuinely hope our paths cross again.`,
     (i) =>
       `I appreciate the discussions we've had. Unfortunately, we've reached a point where the terms aren't workable for us and we need to close this negotiation. Thank you for your time.`,
     (i) =>
@@ -198,7 +199,7 @@ const ESCALATE_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   ],
   casual: [
     (i) =>
-      `I need to loop in a colleague on this one — they'll be better placed to take it from here. Expect to hear from them in a couple of days.`,
+      `I need to loop in a colleague on this one, they'll be better placed to take it from here. Expect to hear from them in a couple of days.`,
     (i) =>
       `This needs a senior pair of eyes. I'll get someone on my team to follow up with you shortly.`,
     (i) =>
@@ -224,7 +225,7 @@ const ESCALATE_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `I want to make sure you get the best response possible on this, so I'm passing it along to a senior colleague who can give it proper attention. They'll be in touch very soon!`,
     (i) =>
-      `You deserve a more thorough look at this than I can provide right now — I'm escalating to someone who can really dig in. They'll reach out shortly!`,
+      `You deserve a more thorough look at this than I can provide right now, I'm escalating to someone who can really dig in. They'll reach out shortly!`,
     (i) =>
       `To do this justice, I'm bringing in a senior team member. They'll be in contact with you in the next couple of days. Thanks for your patience!`,
   ],
@@ -248,23 +249,23 @@ const ASK_CLARIFY_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Thank you for your message. To proceed with our evaluation, could you please provide the complete offer including total price and payment terms?`,
     (i) =>
-      `We appreciate your response. We would require the full offer details — specifically the total price and payment terms — before we can move forward.`,
+      `We appreciate your response. We would require the full offer details, specifically the total price and payment terms, before we can move forward.`,
   ],
   casual: [
     (i) =>
-      `Thanks for that! Just need a couple more details — can you share the total price and payment terms so we can keep things moving?`,
+      `Thanks for that! Just need a couple more details, can you share the total price and payment terms so we can keep things moving?`,
     (i) =>
-      `Good to hear from you! Could you fill in the blanks for us — total price and payment terms? Then we're good to go.`,
+      `Good to hear from you! Could you fill in the blanks for us, total price and payment terms? Then we're good to go.`,
   ],
   urgent: [
     (i) =>
-      `To keep things on track, we need the complete offer — total price and payment terms — as soon as possible.`,
+      `To keep things on track, we need the complete offer, total price and payment terms, as soon as possible.`,
     (i) =>
       `We're working against a deadline. Could you send over the total price and payment terms right away so we can move ahead?`,
   ],
   firm: [
     (i) =>
-      `We need the complete offer — including total price and payment terms — before we can respond. Please provide these details.`,
+      `We need the complete offer, including total price and payment terms, before we can respond. Please provide these details.`,
     (i) =>
       `Without the total price and payment terms, we cannot proceed. Please share the complete offer.`,
   ],
@@ -272,30 +273,30 @@ const ASK_CLARIFY_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Almost there! Just need the total price and payment terms from you and we'll be able to take the next step.`,
     (i) =>
-      `Thanks for reaching out! We'd love to move forward — could you share the total price and your preferred payment terms?`,
+      `Thanks for reaching out! We'd love to move forward, could you share the total price and your preferred payment terms?`,
   ],
   default: [
     (i) =>
       `Thank you for your message. Could you share the complete offer including total price and payment terms so we can give you a proper response?`,
     (i) =>
-      `To move forward, we'll need the full offer details — total price and payment terms. Could you provide those?`,
+      `To move forward, we'll need the full offer details, total price and payment terms. Could you provide those?`,
     (i) =>
       `We'd like to keep this moving. Could you confirm the total price and payment terms for us?`,
     (i) =>
-      `Almost ready to respond — we just need your total price and payment terms to complete the picture.`,
+      `Almost ready to respond, we just need your total price and payment terms to complete the picture.`,
     (i) =>
       `Thanks for that context. To evaluate properly, could you share the total price and payment terms as well?`,
   ],
 };
 
-// MESO templates (structural — LLM presents the options)
+// MESO templates (structural, LLM presents the options)
 const MESO_TEMPLATES: TemplatePool = [
   (i) =>
-    `We've put together a few options that could work well for both of us. Each one reflects slightly different priorities — happy to discuss whichever direction suits you best.`,
+    `We've put together a few options that could work well for both of us. Each one reflects slightly different priorities, happy to discuss whichever direction suits you best.`,
   (i) =>
     `To help us find the right fit, we've prepared several alternatives with equivalent overall value. Take a look and let us know which works best for your situation.`,
   (i) =>
-    `We want to make this work for you, so we've outlined a few different paths forward. All options are structured to be fair — it just depends on what matters most to you.`,
+    `We want to make this work for you, so we've outlined a few different paths forward. All options are structured to be fair, it just depends on what matters most to you.`,
   (i) =>
     `Here are a few options we've prepared. Each takes a different approach to the terms, so you can choose the one that best fits your needs.`,
   (i) =>
@@ -382,5 +383,9 @@ export function getFallbackResponse(intent: NegotiationIntent): string {
   }
 
   const idx = pickVariantIndex(pool, intent, intent.action);
-  return pool[idx](intent);
+  // Apply the same scrubs the validator runs on LLM output: removes
+  // exclamation marks, em-dashes, and AI-tell phrases (e.g. "we'd love to")
+  // that may exist in the literal templates. Keeps templates readable while
+  // ensuring the vendor-facing text is consistent regardless of source.
+  return sanitizeText(pool[idx](intent));
 }
