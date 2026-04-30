@@ -381,6 +381,10 @@ export function generateMesoOptions(
       ...finalUtilities.map((u) => Math.abs(u - finalAvg)),
     );
 
+    // Re-render labels with FINAL prices (Apr 2026): variance adjustment
+    // can mutate offer.total_price after the original description was set.
+    renderMesoDescriptions(options, currency);
+
     return {
       options,
       targetUtility: finalAvg,
@@ -435,30 +439,33 @@ function calculateBasePrice(
     priority === "HIGH" ? 0.25 : priority === "LOW" ? 0.45 : 0.35;
   const roundAdjustment = Math.min(0.1, round * 0.02);
 
-  // Convergence-band path (Apr 2026): when the vendor's offer is already
-  // within our acceptable range AND we've made a prior counter, anchor the
-  // base price INSIDE [lastAccordoCounter, vendorOffer]. Bracketing the
+  // Convergence-band path (Apr 2026, tolerance updated): when the vendor's
+  // offer is already within our acceptable range (with ~1.5% tolerance to
+  // handle small drift / rounding) AND we've made a prior counter, anchor
+  // the base price INSIDE [lastAccordoCounter, vendorOffer]. Bracketing the
   // convergence zone — instead of restarting from config target — prevents
   // MESO from offering options below where the negotiation already settled.
+  //
+  // Tolerance reason: when our last counter sits at e.g. £418,999.99 and
+  // maxAcceptable is £418,900, a strict `<= maxAcceptable` check disables
+  // the floor entirely. A 1.5% tolerance keeps the convergence anchor live
+  // even when prices drift fractionally above the configured ceiling.
+  const TOLERANCE = 0.015;
+  const ceilingWithTol = maxAcceptablePrice * (1 + TOLERANCE);
   const vendorPrice = vendorOffer.total_price ?? null;
   const hasFloor =
     lastAccordoCounterPrice != null &&
     lastAccordoCounterPrice > 0 &&
-    lastAccordoCounterPrice <= maxAcceptablePrice;
+    lastAccordoCounterPrice <= ceilingWithTol;
   const vendorWithinBand =
     vendorPrice != null &&
     vendorPrice >= targetPrice &&
-    vendorPrice <= maxAcceptablePrice;
+    vendorPrice <= ceilingWithTol;
 
   if (hasFloor && vendorWithinBand) {
-    // Both bounds known: anchor at a moderate point inside the band.
-    // Aggressiveness still controls how close to vendor we go (lower
-    // aggressiveness = closer to vendor, faster close).
     const floor = lastAccordoCounterPrice as number;
     const ceiling = vendorPrice as number;
     const span = Math.max(0, ceiling - floor);
-    // 0.6 of the span by default — sits between floor (counter) and ceiling
-    // (vendor's offer), nudged slightly toward the vendor to encourage close.
     const innerProgress = 0.55 + Math.min(0.15, round * 0.03);
     let basePrice = floor + span * innerProgress;
     basePrice = Math.min(basePrice, ceiling);
@@ -479,6 +486,67 @@ function calculateBasePrice(
   }
 
   return Math.round(basePrice * 100) / 100;
+}
+
+/**
+ * Re-render MESO descriptions with the FINAL prices/terms (Apr 2026).
+ * Variance normalization can change offer prices after the initial
+ * description was written, leaving "Best price (£365,527.50)" while the
+ * actual offer is £365,159. Calling this after adjustOffersForVariance
+ * rewrites the labels so they always match the actual offer.
+ */
+export function renderMesoDescriptions(
+  options: MesoOption[],
+  currency: SupportedCurrency,
+): void {
+  if (options[0]) {
+    const o = options[0].offer;
+    options[0].description = `Best price (${formatMesoPrice(o.total_price, currency)}) with fast ${o.delivery_days}-day delivery`;
+    options[0].tradeoffs = [
+      `${o.warranty_months || 0} months warranty`,
+      `Net ${o.payment_terms_days} payment`,
+    ];
+  }
+  if (options[1]) {
+    const o = options[1].offer;
+    options[1].description = `Extended Net ${o.payment_terms_days} payment terms with ${o.warranty_months} months warranty`;
+    options[1].tradeoffs = [
+      `${formatMesoPrice(o.total_price, currency)} price`,
+      `${o.delivery_days}-day delivery`,
+    ];
+  }
+  if (options[2]) {
+    const o = options[2].offer;
+    options[2].description = `Fast ${o.delivery_days}-day delivery with extended ${o.warranty_months} months warranty`;
+    options[2].tradeoffs = [
+      `${formatMesoPrice(o.total_price, currency)} price`,
+      `Net ${o.payment_terms_days} payment`,
+    ];
+  }
+}
+
+/**
+ * Shared convergence floor (Apr 2026): once we've made a counter, no MESO
+ * option price may regress below it. Used by both generateMesoOptions and
+ * generateDynamicMesoOptions paths so the floor is consistent.
+ *
+ * Applies a 1.5% tolerance against maxAcceptablePrice so the floor stays
+ * active even when our last counter has drifted fractionally above ceiling
+ * (e.g. £418,999.99 vs £418,900).
+ */
+export function applyConvergenceFloor(
+  basePrice: number,
+  config: ResolvedNegotiationConfig,
+  lastAccordoCounterPrice?: number | null,
+): number {
+  if (lastAccordoCounterPrice == null || lastAccordoCounterPrice <= 0) {
+    return basePrice;
+  }
+  const TOLERANCE = 0.015;
+  if (lastAccordoCounterPrice > config.maxAcceptablePrice * (1 + TOLERANCE)) {
+    return basePrice;
+  }
+  return Math.max(basePrice, lastAccordoCounterPrice);
 }
 
 /**
@@ -936,6 +1004,7 @@ export function generateDynamicMesoOptions(
   previousMeso: PreviousMesoRound | null = null,
   targetUtility: number = 0.65,
   currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const options: MesoOption[] = [];
   const variance_target = 0.03; // 3% variance for dynamic MESO
@@ -974,6 +1043,7 @@ export function generateDynamicMesoOptions(
       primaryConcession,
       priceEmphasis,
       prevOffer1Price,
+      lastAccordoCounterPrice,
     );
     const offer1Utility = calculateWeightedUtilityFromResolved(offer1, config);
 
@@ -998,6 +1068,7 @@ export function generateDynamicMesoOptions(
       primaryConcession,
       termsEmphasis,
       prevOffer2Price,
+      lastAccordoCounterPrice,
     );
     const offer2Utility = calculateWeightedUtilityFromResolved(offer2, config);
 
@@ -1021,6 +1092,7 @@ export function generateDynamicMesoOptions(
       round,
       secondaryConcession,
       prevOffer3Price,
+      lastAccordoCounterPrice,
     );
     const offer3Utility = calculateWeightedUtilityFromResolved(offer3, config);
 
@@ -1055,6 +1127,10 @@ export function generateDynamicMesoOptions(
     const finalVariance = Math.max(
       ...finalUtilities.map((u) => Math.abs(u - finalAvg)),
     );
+
+    // Re-render labels with FINAL prices (Apr 2026): variance adjustment
+    // can mutate offer.total_price after the original description was set.
+    renderMesoDescriptions(options, currency);
 
     return {
       options,
@@ -1101,6 +1177,7 @@ function generateDynamicPriceFocusedOffer(
   concessionRate: number,
   priceEmphasis: number,
   previousPrice: number | null | undefined,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
@@ -1130,8 +1207,13 @@ function generateDynamicPriceFocusedOffer(
   }
   basePrice = Math.min(basePrice, maxAcceptablePrice);
 
+  // Convergence floor (Apr 2026): never regress below our last counter.
+  basePrice = applyConvergenceFloor(basePrice, config, lastAccordoCounterPrice);
+
   // BEST price: 2.5% discount from base
   let bestPrice = basePrice * 0.975;
+  // Floor at convergence too (so the 2.5% discount doesn't drop us below it)
+  bestPrice = applyConvergenceFloor(bestPrice, config, lastAccordoCounterPrice);
   bestPrice = Math.max(config.targetPrice, bestPrice);
   bestPrice = Math.round(bestPrice * 100) / 100;
 
@@ -1166,6 +1248,7 @@ function generateDynamicTermsFocusedOffer(
   concessionRate: number,
   termsEmphasis: number,
   previousPrice: number | null | undefined,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
@@ -1193,6 +1276,11 @@ function generateDynamicTermsFocusedOffer(
     mediumPrice = Math.min(mediumPrice, vendorOffer.total_price);
   }
   mediumPrice = Math.min(mediumPrice, maxAcceptablePrice);
+  mediumPrice = applyConvergenceFloor(
+    mediumPrice,
+    config,
+    lastAccordoCounterPrice,
+  );
   mediumPrice = Math.round(mediumPrice * 100) / 100;
 
   // BEST payment terms (longest)
@@ -1225,6 +1313,7 @@ function generateDynamicBalancedOffer(
   round: number,
   concessionRate: number,
   previousPrice: number | null | undefined,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
@@ -1250,6 +1339,11 @@ function generateDynamicBalancedOffer(
     mediumPrice = Math.min(mediumPrice, vendorOffer.total_price);
   }
   mediumPrice = Math.min(mediumPrice, maxAcceptablePrice);
+  mediumPrice = applyConvergenceFloor(
+    mediumPrice,
+    config,
+    lastAccordoCounterPrice,
+  );
   mediumPrice = Math.round(mediumPrice * 100) / 100;
 
   // MEDIUM payment terms
@@ -1304,6 +1398,7 @@ export function generateFinalMesoOptions(
   round: number,
   currentUtility: number,
   currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const options: MesoOption[] = [];
 
@@ -1328,7 +1423,11 @@ export function generateFinalMesoOptions(
     const minWarranty = Math.max(0, config.warrantyPeriodMonths - 6);
 
     const finalOffer1: ExtendedOffer = {
-      total_price: Math.max(targetPrice, finalPrice1),
+      total_price: applyConvergenceFloor(
+        Math.max(targetPrice, finalPrice1),
+        config,
+        lastAccordoCounterPrice,
+      ),
       payment_terms: `Net ${mediumTerms}`,
       payment_terms_days: mediumTerms,
       delivery_days: bestDelivery,
@@ -1363,7 +1462,11 @@ export function generateFinalMesoOptions(
     const standardWarranty = config.warrantyPeriodMonths;
 
     const finalOffer2: ExtendedOffer = {
-      total_price: Math.round(vendorPrice * 100) / 100,
+      total_price: applyConvergenceFloor(
+        Math.round(vendorPrice * 100) / 100,
+        config,
+        lastAccordoCounterPrice,
+      ),
       payment_terms: `Net ${bestTerms}`,
       payment_terms_days: bestTerms,
       delivery_days: mediumDelivery,
@@ -1396,7 +1499,11 @@ export function generateFinalMesoOptions(
     const extendedWarranty = config.warrantyPeriodMonths + 6;
 
     const finalOffer3: ExtendedOffer = {
-      total_price: Math.round(vendorPrice * 100) / 100,
+      total_price: applyConvergenceFloor(
+        Math.round(vendorPrice * 100) / 100,
+        config,
+        lastAccordoCounterPrice,
+      ),
       payment_terms: `Net ${mediumTerms}`,
       payment_terms_days: mediumTerms,
       delivery_days: bestDelivery,
@@ -1609,6 +1716,7 @@ export function generateMesoFromVendorPrice(
   vendorPrice: number,
   round: number,
   currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const { maxAcceptablePrice, targetPrice } = config;
 
@@ -1621,6 +1729,9 @@ export function generateMesoFromVendorPrice(
     basePrice = maxAcceptablePrice;
     priceAdjusted = true;
   }
+
+  // Convergence floor (Apr 2026): never regress below our last counter.
+  basePrice = applyConvergenceFloor(basePrice, config, lastAccordoCounterPrice);
 
   // Generate 3 offers based on the base price
   const offer1Price = Math.round(basePrice * 0.97 * 100) / 100; // 3% below

@@ -249,6 +249,11 @@ export function sanitizeText(text: string): string {
   s = s.replace(/\s*—\s*/g, ", ");
   // Exclamation marks → period.
   s = s.replace(/!/g, ".");
+  // Duplicate prepositions / conjunctions glitch (e.g. "delivery by by 2026...")
+  // — usually a template-concat bug where the value already starts with the
+  // preposition that the template also injects. Catches "by by", "on on",
+  // "with with", "at at", "in in", "for for", "to to", "of of".
+  s = s.replace(/\b(by|on|with|at|in|for|to|of)\s+\1\b/gi, (_, w) => w);
   // Collapse strip artifacts.
   s = s
     .replace(/,\s*,/g, ",")

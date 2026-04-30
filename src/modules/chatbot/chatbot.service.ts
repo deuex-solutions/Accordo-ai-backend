@@ -2522,11 +2522,19 @@ export const generatePMResponseAsyncService = async (
     const previousVendorPrice =
       (previousVendorOffer as any)?.total_price ?? null;
     const currentVendorPrice = extractedOffer?.total_price ?? null;
+    // ACCEPT tolerance (Apr 2026 follow-up): vendor's offer within ~1.5%
+    // above maxAcceptable still counts as "within ceiling" if they're
+    // converging. Catches the "£420,500 vs £418,900 ceiling" failure mode
+    // where £1,600 (0.4%) above kept us countering forever instead of
+    // closing.
+    const ACCEPT_TOLERANCE = 0.015;
+    const effectiveCeiling =
+      maxAcceptable != null ? maxAcceptable * (1 + ACCEPT_TOLERANCE) : null;
     const isVendorConverging =
       !isVendorAffirmative &&
       currentVendorPrice != null &&
-      maxAcceptable != null &&
-      currentVendorPrice <= maxAcceptable &&
+      effectiveCeiling != null &&
+      currentVendorPrice <= effectiveCeiling &&
       previousVendorPrice != null &&
       currentVendorPrice < previousVendorPrice;
     if (isVendorConverging) {
@@ -2619,92 +2627,129 @@ export const generatePMResponseAsyncService = async (
       }
     }
 
-    // Vendor terms-request override (Apr 2026):
-    // When the vendor asks "what's your best offer for Net 60?" we must
-    // honor the requested terms in our counter. Without this, the engine
-    // freely picks any terms within config and ignores the vendor's ask
-    // (e.g. vendor says "for Net 60" → engine counters at Net 75).
+    // Vendor sticky-terms override (Apr 2026):
+    //
+    // Track the vendor's last explicitly-mentioned payment terms on the
+    // convo state. Refresh whenever the vendor mentions Net X (in a
+    // question, a statement, or an offer). Honor the preference in our
+    // next 3 counters; after that the engine can pick its own terms again.
+    //
+    // Sources of "vendor mentioned Net X" (in priority order):
+    //   1. detectTermsRequest() — question form: "what for Net 60?"
+    //   2. extractedOffer.payment_terms_days — statement/offer form:
+    //      "lets do 420500 net 60", "I propose Net 75"
     //
     // Price adjustment per requested vs. previously-offered terms:
-    //  - same terms          → keep last counter price (no random movement)
-    //  - longer terms (us++) → hold or slight increase (we got a better deal)
-    //  - shorter terms (us--) → small concession between last counter and
-    //                           vendor's last price (move part-way back)
-    if (decision.action === "COUNTER" && decision.counterOffer != null) {
-      const termsAsk = detectTermsRequest(vendorMessage.content);
-      if (termsAsk != null) {
-        const requestedDays = termsAsk.requestedDays;
-        const requestedTerms = `Net ${requestedDays}`;
-        const previousPmTermsDays =
-          (previousPmOffer as any)?.payment_terms_days ??
-          (typeof (previousPmOffer as any)?.terms === "string"
-            ? Number(
-                ((previousPmOffer as any).terms.match(/(\d+)/) ?? [])[1],
-              ) || null
-            : null);
-        const previousPmPrice =
-          (previousPmOffer as any)?.price ??
-          (previousPmOffer as any)?.total_price ??
-          null;
-        const currentCounterPrice = decision.counterOffer.total_price ?? null;
-        const vendorLastPrice = extractedOffer?.total_price ?? null;
+    //   - same terms          → keep last counter price (no movement)
+    //   - longer terms (us++) → hold price (favorable to us, no reward)
+    //   - shorter terms (us--) → small concession (~33% of gap toward vendor)
+    const STICKY_TERMS_WINDOW_ROUNDS = 3;
+    const currentRoundNum = deal.round + 1;
 
-        let adjustedPrice = currentCounterPrice;
+    // 1. Detect vendor's mentioned terms this round.
+    const termsAsk = detectTermsRequest(vendorMessage.content);
+    const vendorMentionedDays =
+      termsAsk?.requestedDays ?? extractedOffer?.payment_terms_days ?? null;
 
-        if (previousPmTermsDays != null && currentCounterPrice != null) {
-          if (requestedDays === previousPmTermsDays) {
-            // Same terms → keep previous counter price unchanged.
-            if (previousPmPrice != null && previousPmPrice > 0) {
-              adjustedPrice = previousPmPrice;
-            }
-          } else if (requestedDays > previousPmTermsDays) {
-            // Longer terms favor us — hold price (don't reward the vendor by
-            // dropping). If engine moved DOWN, snap back up to previous PM
-            // price.
-            if (
-              previousPmPrice != null &&
-              currentCounterPrice < previousPmPrice
-            ) {
-              adjustedPrice = previousPmPrice;
-            }
-          } else if (requestedDays < previousPmTermsDays) {
-            // Shorter terms favor the vendor — give a small concession.
-            // Move part-way (~33%) from previous counter toward vendor's
-            // last price, but never above vendor's price.
-            if (
-              previousPmPrice != null &&
-              vendorLastPrice != null &&
-              vendorLastPrice > previousPmPrice
-            ) {
-              const concession = (vendorLastPrice - previousPmPrice) * 0.33;
-              adjustedPrice = Math.min(
-                previousPmPrice + concession,
-                vendorLastPrice,
-              );
-              adjustedPrice = Math.round(adjustedPrice * 100) / 100;
-            }
+    // 2. Read sticky preference from convo state.
+    const stickyPref = (negotiationState as any)?.preferredVendorTerms as
+      | { days: number; setAtRound: number }
+      | undefined;
+
+    // 3. Update sticky preference if vendor mentioned terms this round.
+    if (vendorMentionedDays != null) {
+      (negotiationState as any).preferredVendorTerms = {
+        days: vendorMentionedDays,
+        setAtRound: currentRoundNum,
+      };
+    }
+
+    // 4. Determine the effective sticky terms for THIS counter:
+    //    - Vendor mentioned terms this round → use those
+    //    - Previously sticky and still within window → use those
+    //    - Otherwise → no override
+    let effectiveStickyDays: number | null = null;
+    let stickySource: "current" | "carried" | null = null;
+    if (vendorMentionedDays != null) {
+      effectiveStickyDays = vendorMentionedDays;
+      stickySource = "current";
+    } else if (
+      stickyPref != null &&
+      currentRoundNum - stickyPref.setAtRound < STICKY_TERMS_WINDOW_ROUNDS
+    ) {
+      effectiveStickyDays = stickyPref.days;
+      stickySource = "carried";
+    }
+
+    if (
+      decision.action === "COUNTER" &&
+      decision.counterOffer != null &&
+      effectiveStickyDays != null
+    ) {
+      const requestedDays = effectiveStickyDays;
+      const requestedTerms = `Net ${requestedDays}`;
+      const previousPmTermsDays =
+        (previousPmOffer as any)?.payment_terms_days ??
+        (typeof (previousPmOffer as any)?.terms === "string"
+          ? Number(((previousPmOffer as any).terms.match(/(\d+)/) ?? [])[1]) ||
+            null
+          : null);
+      const previousPmPrice =
+        (previousPmOffer as any)?.price ??
+        (previousPmOffer as any)?.total_price ??
+        null;
+      const currentCounterPrice = decision.counterOffer.total_price ?? null;
+      const vendorLastPrice = extractedOffer?.total_price ?? null;
+
+      let adjustedPrice = currentCounterPrice;
+
+      if (previousPmTermsDays != null && currentCounterPrice != null) {
+        if (requestedDays === previousPmTermsDays) {
+          if (previousPmPrice != null && previousPmPrice > 0) {
+            adjustedPrice = previousPmPrice;
+          }
+        } else if (requestedDays > previousPmTermsDays) {
+          if (
+            previousPmPrice != null &&
+            currentCounterPrice < previousPmPrice
+          ) {
+            adjustedPrice = previousPmPrice;
+          }
+        } else if (requestedDays < previousPmTermsDays) {
+          if (
+            previousPmPrice != null &&
+            vendorLastPrice != null &&
+            vendorLastPrice > previousPmPrice
+          ) {
+            const concession = (vendorLastPrice - previousPmPrice) * 0.33;
+            adjustedPrice = Math.min(
+              previousPmPrice + concession,
+              vendorLastPrice,
+            );
+            adjustedPrice = Math.round(adjustedPrice * 100) / 100;
           }
         }
-
-        logger.info(
-          `[TermsRequest] Honoring vendor's terms request "${termsAsk.matchedText}"`,
-          {
-            dealId: input.dealId,
-            previousPmTermsDays,
-            requestedDays,
-            previousPmPrice,
-            engineCounterPrice: currentCounterPrice,
-            adjustedPrice,
-          },
-        );
-
-        decision.counterOffer = {
-          ...decision.counterOffer,
-          payment_terms: requestedTerms,
-          payment_terms_days: requestedDays,
-          ...(adjustedPrice != null ? { total_price: adjustedPrice } : {}),
-        };
       }
+
+      logger.info(
+        `[StickyTerms] Honoring vendor terms preference Net ${requestedDays} (${stickySource})`,
+        {
+          dealId: input.dealId,
+          previousPmTermsDays,
+          requestedDays,
+          previousPmPrice,
+          engineCounterPrice: currentCounterPrice,
+          adjustedPrice,
+          source: stickySource,
+        },
+      );
+
+      decision.counterOffer = {
+        ...decision.counterOffer,
+        payment_terms: requestedTerms,
+        payment_terms_days: requestedDays,
+        ...(adjustedPrice != null ? { total_price: adjustedPrice } : {}),
+      };
     }
 
     // Compute explainability
@@ -2953,6 +2998,7 @@ export const generatePMResponseAsyncService = async (
             currentRoundForMeso,
             decision.utilityScore,
             dealCurrency,
+            (deal.latestOfferJson as any)?.total_price ?? null,
           );
 
           if (mesoResult.success) {
@@ -2983,6 +3029,7 @@ export const generatePMResponseAsyncService = async (
             previousMeso,
             decision.utilityScore + 0.05, // Target slightly higher utility than current
             dealCurrency,
+            (deal.latestOfferJson as any)?.total_price ?? null,
           );
 
           if (mesoResult.success) {
@@ -7446,6 +7493,7 @@ export const processFinalOfferConfirmationService = async (
       stalledPrice,
       deal.round + 1,
       dealCurrency,
+      (deal.latestOfferJson as any)?.total_price ?? null,
     );
 
     if (mesoResult.success && mesoResult.options.length > 0) {
