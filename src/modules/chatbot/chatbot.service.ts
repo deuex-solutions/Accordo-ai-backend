@@ -8,6 +8,7 @@ import sequelize from "../../config/database.js";
 import {
   parseOfferRegex,
   parseOfferWithDelivery,
+  detectTermsRequest,
 } from "./engine/parse-offer.js";
 import {
   generateHumanLikeResponse,
@@ -2614,6 +2615,94 @@ export const generatePMResponseAsyncService = async (
             ...decision.reasons,
             "Overridden: vendor expressed rejection — cannot accept",
           ],
+        };
+      }
+    }
+
+    // Vendor terms-request override (Apr 2026):
+    // When the vendor asks "what's your best offer for Net 60?" we must
+    // honor the requested terms in our counter. Without this, the engine
+    // freely picks any terms within config and ignores the vendor's ask
+    // (e.g. vendor says "for Net 60" → engine counters at Net 75).
+    //
+    // Price adjustment per requested vs. previously-offered terms:
+    //  - same terms          → keep last counter price (no random movement)
+    //  - longer terms (us++) → hold or slight increase (we got a better deal)
+    //  - shorter terms (us--) → small concession between last counter and
+    //                           vendor's last price (move part-way back)
+    if (decision.action === "COUNTER" && decision.counterOffer != null) {
+      const termsAsk = detectTermsRequest(vendorMessage.content);
+      if (termsAsk != null) {
+        const requestedDays = termsAsk.requestedDays;
+        const requestedTerms = `Net ${requestedDays}`;
+        const previousPmTermsDays =
+          (previousPmOffer as any)?.payment_terms_days ??
+          (typeof (previousPmOffer as any)?.terms === "string"
+            ? Number(
+                ((previousPmOffer as any).terms.match(/(\d+)/) ?? [])[1],
+              ) || null
+            : null);
+        const previousPmPrice =
+          (previousPmOffer as any)?.price ??
+          (previousPmOffer as any)?.total_price ??
+          null;
+        const currentCounterPrice = decision.counterOffer.total_price ?? null;
+        const vendorLastPrice = extractedOffer?.total_price ?? null;
+
+        let adjustedPrice = currentCounterPrice;
+
+        if (previousPmTermsDays != null && currentCounterPrice != null) {
+          if (requestedDays === previousPmTermsDays) {
+            // Same terms → keep previous counter price unchanged.
+            if (previousPmPrice != null && previousPmPrice > 0) {
+              adjustedPrice = previousPmPrice;
+            }
+          } else if (requestedDays > previousPmTermsDays) {
+            // Longer terms favor us — hold price (don't reward the vendor by
+            // dropping). If engine moved DOWN, snap back up to previous PM
+            // price.
+            if (
+              previousPmPrice != null &&
+              currentCounterPrice < previousPmPrice
+            ) {
+              adjustedPrice = previousPmPrice;
+            }
+          } else if (requestedDays < previousPmTermsDays) {
+            // Shorter terms favor the vendor — give a small concession.
+            // Move part-way (~33%) from previous counter toward vendor's
+            // last price, but never above vendor's price.
+            if (
+              previousPmPrice != null &&
+              vendorLastPrice != null &&
+              vendorLastPrice > previousPmPrice
+            ) {
+              const concession = (vendorLastPrice - previousPmPrice) * 0.33;
+              adjustedPrice = Math.min(
+                previousPmPrice + concession,
+                vendorLastPrice,
+              );
+              adjustedPrice = Math.round(adjustedPrice * 100) / 100;
+            }
+          }
+        }
+
+        logger.info(
+          `[TermsRequest] Honoring vendor's terms request "${termsAsk.matchedText}"`,
+          {
+            dealId: input.dealId,
+            previousPmTermsDays,
+            requestedDays,
+            previousPmPrice,
+            engineCounterPrice: currentCounterPrice,
+            adjustedPrice,
+          },
+        );
+
+        decision.counterOffer = {
+          ...decision.counterOffer,
+          payment_terms: requestedTerms,
+          payment_terms_days: requestedDays,
+          ...(adjustedPrice != null ? { total_price: adjustedPrice } : {}),
         };
       }
     }

@@ -1,5 +1,8 @@
 import type { Offer } from "./types.js";
-import { parseDeliveryDate, calculateDeliveryDays } from "./delivery-utility.js";
+import {
+  parseDeliveryDate,
+  calculateDeliveryDays,
+} from "./delivery-utility.js";
 import {
   detectCurrency,
   convertCurrencySync,
@@ -31,7 +34,12 @@ import {
 function parseDeliveryFromText(text: string): {
   delivery_date: string | null;
   delivery_days: number | null;
-  delivery_source: 'explicit_date' | 'relative_days' | 'timeframe' | 'asap' | undefined;
+  delivery_source:
+    | "explicit_date"
+    | "relative_days"
+    | "timeframe"
+    | "asap"
+    | undefined;
   raw_delivery_text: string | undefined;
 } {
   const t = text.toLowerCase();
@@ -46,10 +54,10 @@ function parseDeliveryFromText(text: string): {
       const deliveryDate = new Date();
       deliveryDate.setDate(deliveryDate.getDate() + 2); // ASAP = 2 days
       return {
-        delivery_date: deliveryDate.toISOString().split('T')[0],
+        delivery_date: deliveryDate.toISOString().split("T")[0],
         delivery_days: 2,
-        delivery_source: 'asap',
-        raw_delivery_text: match[0]
+        delivery_source: "asap",
+        raw_delivery_text: match[0],
       };
     }
   }
@@ -57,9 +65,9 @@ function parseDeliveryFromText(text: string): {
   // Pattern 1: Explicit dates - "by March 15", "delivery March 15th 2026", "deliver by 2026-03-15"
   const explicitDatePatterns = [
     /(?:deliver(?:y|ed)?|ship(?:ping)?|by|before|on)\s+(?:by\s+)?(\w+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)/i,
-    /(\d{4}-\d{2}-\d{2})/,  // ISO format
-    /(\d{1,2}\/\d{1,2}\/\d{2,4})/,  // MM/DD/YYYY or DD/MM/YYYY
-    /(\d{1,2}-\d{1,2}-\d{2,4})/,  // DD-MM-YYYY format
+    /(\d{4}-\d{2}-\d{2})/, // ISO format
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})/, // MM/DD/YYYY or DD/MM/YYYY
+    /(\d{1,2}-\d{1,2}-\d{2,4})/, // DD-MM-YYYY format
     /(\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+\d{4})?)/i,
   ];
 
@@ -70,10 +78,10 @@ function parseDeliveryFromText(text: string): {
       if (parsedDate) {
         const days = calculateDeliveryDays(parsedDate);
         return {
-          delivery_date: parsedDate.toISOString().split('T')[0],
+          delivery_date: parsedDate.toISOString().split("T")[0],
           delivery_days: days,
-          delivery_source: 'explicit_date',
-          raw_delivery_text: match[0]
+          delivery_source: "explicit_date",
+          raw_delivery_text: match[0],
         };
       }
     }
@@ -84,8 +92,8 @@ function parseDeliveryFromText(text: string): {
     /(?:within|in|next)\s+(\d+)\s*(?:days?|business\s+days?)/i,
     /(\d+)\s*(?:days?|weeks?)\s*(?:delivery|shipping|lead\s*time)/i,
     /(?:delivery|shipping|lead\s*time)\s*(?:in|of|within)?\s*(\d+)\s*(?:days?|weeks?)/i,
-    /\b(\d+)\s*days?\b(?!\s*(?:net|payment|terms))/i,  // Standalone "X days" not followed by payment terms
-    /(?:within\s+)?(?:a|one)\s+(week|month)/i,  // "a week", "one month", "within a week"
+    /\b(\d+)\s*days?\b(?!\s*(?:net|payment|terms))/i, // Standalone "X days" not followed by payment terms
+    /(?:within\s+)?(?:a|one)\s+(week|month)/i, // "a week", "one month", "within a week"
   ];
 
   for (const pattern of relativeDaysPatterns) {
@@ -114,7 +122,10 @@ function parseDeliveryFromText(text: string): {
       }
 
       // Skip if this looks like payment terms (30, 45, 60, 90 days without delivery context)
-      if ([30, 45, 60, 90].includes(days) && !/deliver|ship|within/i.test(match[0])) {
+      if (
+        [30, 45, 60, 90].includes(days) &&
+        !/deliver|ship|within/i.test(match[0])
+      ) {
         continue;
       }
 
@@ -122,26 +133,27 @@ function parseDeliveryFromText(text: string): {
       deliveryDate.setDate(deliveryDate.getDate() + days);
 
       return {
-        delivery_date: deliveryDate.toISOString().split('T')[0],
+        delivery_date: deliveryDate.toISOString().split("T")[0],
         delivery_days: days,
-        delivery_source: 'relative_days',
-        raw_delivery_text: match[0]
+        delivery_source: "relative_days",
+        raw_delivery_text: match[0],
       };
     }
   }
 
   // Pattern 3: Timeframes - "early March", "mid February", "end of March", "by end of April"
-  const timeframePattern = /(?:by\s+)?(?:early|mid|late|end\s+of)\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?/i;
+  const timeframePattern =
+    /(?:by\s+)?(?:early|mid|late|end\s+of)\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?/i;
   const timeframeMatch = text.match(timeframePattern);
   if (timeframeMatch) {
     const parsedDate = parseDeliveryDate(timeframeMatch[0]);
     if (parsedDate) {
       const days = calculateDeliveryDays(parsedDate);
       return {
-        delivery_date: parsedDate.toISOString().split('T')[0],
+        delivery_date: parsedDate.toISOString().split("T")[0],
         delivery_days: days,
-        delivery_source: 'timeframe',
-        raw_delivery_text: timeframeMatch[0]
+        delivery_source: "timeframe",
+        raw_delivery_text: timeframeMatch[0],
       };
     }
   }
@@ -150,7 +162,7 @@ function parseDeliveryFromText(text: string): {
     delivery_date: null,
     delivery_days: null,
     delivery_source: undefined,
-    raw_delivery_text: undefined
+    raw_delivery_text: undefined,
   };
 }
 
@@ -172,13 +184,13 @@ function parseNumber(text: string): number | null {
   let t = text.trim();
 
   // Remove currency symbols and codes
-  t = t.replace(/[$€£₹]|rs\.?|inr|usd|eur|gbp|aud/gi, '').trim();
+  t = t.replace(/[$€£₹]|rs\.?|inr|usd|eur|gbp|aud/gi, "").trim();
 
   // Handle K/M shorthand
   const shorthandMatch = t.match(/^([0-9]+(?:[.,][0-9]+)?)\s*([kmKM])$/);
   if (shorthandMatch) {
-    const baseNum = parseFloat(shorthandMatch[1].replace(',', '.'));
-    const multiplier = shorthandMatch[2].toLowerCase() === 'k' ? 1000 : 1000000;
+    const baseNum = parseFloat(shorthandMatch[1].replace(",", "."));
+    const multiplier = shorthandMatch[2].toLowerCase() === "k" ? 1000 : 1000000;
     return baseNum * multiplier;
   }
 
@@ -188,36 +200,36 @@ function parseNumber(text: string): number | null {
   // Pattern: digits, then groups of 2 digits separated by commas
   if (/^\d{1,2}(?:,\d{2})*,\d{3}$/.test(t)) {
     // Indian lakhs format: 1,50,000 → 150000
-    t = t.replace(/,/g, '');
+    t = t.replace(/,/g, "");
   }
   // European format with decimal: 1.234,56 (period thousands, comma decimal)
   else if (/^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(t)) {
     // EU format: 1.234,56 → 1234.56
-    t = t.replace(/\./g, '').replace(',', '.');
+    t = t.replace(/\./g, "").replace(",", ".");
   }
   // European format without decimal: 1.234 or 29.000 (period thousands only)
   else if (/^\d{1,3}(?:\.\d{3})+$/.test(t)) {
     // EU format: 29.000 → 29000
-    t = t.replace(/\./g, '');
+    t = t.replace(/\./g, "");
   }
   // US format with decimal: 1,234.56 (comma thousands, period decimal)
   else if (/^\d{1,3}(?:,\d{3})+\.\d+$/.test(t)) {
     // US format: 1,234.56 → 1234.56
-    t = t.replace(/,/g, '');
+    t = t.replace(/,/g, "");
   }
   // US format without decimal: 1,234 or 29,000 (comma thousands only)
   else if (/^\d{1,3}(?:,\d{3})+$/.test(t)) {
     // US format: 29,000 → 29000
-    t = t.replace(/,/g, '');
+    t = t.replace(/,/g, "");
   }
   // Simple comma as decimal: 1234,56 (no thousands separator)
   else if (/^\d+,\d{1,2}$/.test(t)) {
     // Simple EU decimal: 1234,56 → 1234.56
-    t = t.replace(',', '.');
+    t = t.replace(",", ".");
   }
   // Fallback: remove all commas (treat as thousands separators)
   else {
-    t = t.replace(/,/g, '');
+    t = t.replace(/,/g, "");
   }
 
   const num = parseFloat(t);
@@ -231,12 +243,13 @@ function parseNumber(text: string): number | null {
  * - EU: 29.000 or 1.234,56
  * - Indian: 1,50,000 or 12,34,567
  */
-const REGIONAL_NUMBER_PATTERN = '(?:' +
-  '[0-9]{1,2}(?:,[0-9]{2})*,[0-9]{3}' +  // Indian: 1,50,000
-  '|[0-9]{1,3}(?:\\.[0-9]{3})+(?:,[0-9]{1,2})?' +  // EU: 29.000 or 1.234,56
-  '|[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]+)?' +  // US: 29,000 or 1,234.56
-  '|[0-9]+(?:[.,][0-9]+)?' +  // Plain: 29000 or 1500.50
-  ')';
+const REGIONAL_NUMBER_PATTERN =
+  "(?:" +
+  "[0-9]{1,2}(?:,[0-9]{2})*,[0-9]{3}" + // Indian: 1,50,000
+  "|[0-9]{1,3}(?:\\.[0-9]{3})+(?:,[0-9]{1,2})?" + // EU: 29.000 or 1.234,56
+  "|[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]+)?" + // US: 29,000 or 1,234.56
+  "|[0-9]+(?:[.,][0-9]+)?" + // Plain: 29000 or 1500.50
+  ")";
 
 /**
  * Parse price from text with enhanced pattern matching
@@ -261,8 +274,10 @@ function parsePriceFromText(text: string): {
   // Pattern 0: "Total:" or "Grand Total:" label — prefer this over individual line items
   // This handles multi-product vendor messages where individual prices appear before the total
   const totalLabelPattern = new RegExp(
-    '(?:grand\\s+)?total\\s*:?\\s*(?:[$€£₹]|rs\\.?|inr|usd|eur|gbp|aud)?\\s*(' + REGIONAL_NUMBER_PATTERN + ')',
-    'im'
+    "(?:grand\\s+)?total\\s*:?\\s*(?:[$€£₹]|rs\\.?|inr|usd|eur|gbp|aud)?\\s*(" +
+      REGIONAL_NUMBER_PATTERN +
+      ")",
+    "im",
   );
   priceMatch = t.match(totalLabelPattern);
   if (priceMatch) {
@@ -282,12 +297,12 @@ function parsePriceFromText(text: string): {
     if (match) {
       const numMatch = match[0].match(/([0-9]+(?:[.,][0-9]+)?)\s*([kmKM])/i);
       if (numMatch) {
-        const baseNum = parseFloat(numMatch[1].replace(',', '.'));
-        const multiplier = numMatch[2].toLowerCase() === 'k' ? 1000 : 1000000;
+        const baseNum = parseFloat(numMatch[1].replace(",", "."));
+        const multiplier = numMatch[2].toLowerCase() === "k" ? 1000 : 1000000;
         return {
           price: baseNum * multiplier,
           currency,
-          raw_price_text: match[0]
+          raw_price_text: match[0],
         };
       }
     }
@@ -296,8 +311,10 @@ function parsePriceFromText(text: string): {
   // Pattern 2: Currency symbol + regional number format
   // Handles: ₹1,50,000, €29.000, $29,000, £1,234.56
   const currencyWithRegionalPattern = new RegExp(
-    '(?:[$€£₹]|rs\\.?|inr|usd|eur|gbp|aud)\\s*(' + REGIONAL_NUMBER_PATTERN + ')',
-    'i'
+    "(?:[$€£₹]|rs\\.?|inr|usd|eur|gbp|aud)\\s*(" +
+      REGIONAL_NUMBER_PATTERN +
+      ")",
+    "i",
   );
   priceMatch = t.match(currencyWithRegionalPattern);
   if (priceMatch) {
@@ -309,8 +326,10 @@ function parsePriceFromText(text: string): {
 
   // Pattern 2b: Regional number + currency symbol (e.g., "29,000 USD", "1,50,000₹")
   const regionalWithCurrencyPattern = new RegExp(
-    '(' + REGIONAL_NUMBER_PATTERN + ')\\s*(?:[$€£₹]|rs\\.?|inr|usd|eur|gbp|aud)',
-    'i'
+    "(" +
+      REGIONAL_NUMBER_PATTERN +
+      ")\\s*(?:[$€£₹]|rs\\.?|inr|usd|eur|gbp|aud)",
+    "i",
   );
   priceMatch = t.match(regionalWithCurrencyPattern);
   if (priceMatch) {
@@ -321,7 +340,10 @@ function parsePriceFromText(text: string): {
   }
 
   // Pattern 3: "X per unit" or "X/unit"
-  const perUnitPattern = new RegExp('(' + REGIONAL_NUMBER_PATTERN + ')\\s*(?:per\\s+unit|\\/unit)', 'i');
+  const perUnitPattern = new RegExp(
+    "(" + REGIONAL_NUMBER_PATTERN + ")\\s*(?:per\\s+unit|\\/unit)",
+    "i",
+  );
   priceMatch = t.match(perUnitPattern);
   if (priceMatch) {
     const price = parseNumber(priceMatch[1]);
@@ -331,10 +353,14 @@ function parsePriceFromText(text: string): {
   }
 
   // Pattern 4: "X Net Y" format (e.g., "29000 Net 60", "1,50,000 net45")
-  const netPatternMatch = t.match(new RegExp(
-    '\\b(' + REGIONAL_NUMBER_PATTERN + ')\\s+n(?:et)?\\s*[-]?\\s*(\\d+)(?:\\s*days?)?\\b',
-    'i'
-  ));
+  const netPatternMatch = t.match(
+    new RegExp(
+      "\\b(" +
+        REGIONAL_NUMBER_PATTERN +
+        ")\\s+n(?:et)?\\s*[-]?\\s*(\\d+)(?:\\s*days?)?\\b",
+      "i",
+    ),
+  );
   if (netPatternMatch) {
     const price = parseNumber(netPatternMatch[1]);
     if (price !== null && price > 100) {
@@ -363,7 +389,9 @@ function parsePriceFromText(text: string): {
         // Check if this number appears to be net terms
         const beforeNum = t.slice(0, match.index || 0);
         const afterNum = t.slice((match.index || 0) + match[0].length);
-        const looksLikeTerms = /n(?:et)?$/i.test(beforeNum.trim()) || /^(?:\s*days?)/i.test(afterNum);
+        const looksLikeTerms =
+          /n(?:et)?$/i.test(beforeNum.trim()) ||
+          /^(?:\s*days?)/i.test(afterNum);
 
         if (!looksLikeTerms) {
           return { price, currency, raw_price_text: match[0] };
@@ -408,13 +436,15 @@ function parsePaymentTermsFromText(text: string): {
         payment_terms_days: days,
         raw_terms_days: days,
         non_standard_terms: days !== 30 && days !== 60 && days !== 90,
-        raw_terms_text: termsMatch[0]
+        raw_terms_text: termsMatch[0],
       };
     }
   }
 
   // Pattern 2: "payment terms X", "terms X", "payment X days"
-  termsMatch = t.match(/\b(?:payment\s+)?terms?\s*(?:of\s+)?(\d+)\s*(?:days?)?\b/i);
+  termsMatch = t.match(
+    /\b(?:payment\s+)?terms?\s*(?:of\s+)?(\d+)\s*(?:days?)?\b/i,
+  );
   if (termsMatch) {
     const days = Number(termsMatch[1]);
     if (days >= 1 && days <= 120) {
@@ -423,7 +453,7 @@ function parsePaymentTermsFromText(text: string): {
         payment_terms_days: days,
         raw_terms_days: days,
         non_standard_terms: days !== 30 && days !== 60 && days !== 90,
-        raw_terms_text: termsMatch[0]
+        raw_terms_text: termsMatch[0],
       };
     }
   }
@@ -438,7 +468,7 @@ function parsePaymentTermsFromText(text: string): {
         payment_terms_days: days,
         raw_terms_days: days,
         non_standard_terms: days !== 30 && days !== 60 && days !== 90,
-        raw_terms_text: termsMatch[0]
+        raw_terms_text: termsMatch[0],
       };
     }
   }
@@ -453,14 +483,16 @@ function parsePaymentTermsFromText(text: string): {
         payment_terms_days: days,
         raw_terms_days: days,
         non_standard_terms: days !== 30 && days !== 60 && days !== 90,
-        raw_terms_text: termsMatch[0]
+        raw_terms_text: termsMatch[0],
       };
     }
   }
 
   // Pattern 5: Standalone "X days" - only if X is in typical payment range (15-120)
   // and NOT associated with delivery context
-  termsMatch = t.match(/\b(\d+)\s*days?\b(?!\s*(?:delivery|shipping|lead|within|by|before))/i);
+  termsMatch = t.match(
+    /\b(\d+)\s*days?\b(?!\s*(?:delivery|shipping|lead|within|by|before))/i,
+  );
   if (termsMatch) {
     const days = Number(termsMatch[1]);
     // Only consider as payment terms if in typical range and not clearly delivery
@@ -470,7 +502,7 @@ function parsePaymentTermsFromText(text: string): {
         payment_terms_days: days,
         raw_terms_days: days,
         non_standard_terms: days !== 30 && days !== 60 && days !== 90,
-        raw_terms_text: termsMatch[0]
+        raw_terms_text: termsMatch[0],
       };
     }
   }
@@ -480,7 +512,76 @@ function parsePaymentTermsFromText(text: string): {
     payment_terms_days: null,
     raw_terms_days: null,
     non_standard_terms: false,
-    raw_terms_text: undefined
+    raw_terms_text: undefined,
+  };
+}
+
+/**
+ * Detect when a vendor is asking about a specific payment-terms scenario
+ * rather than stating an offer. Examples:
+ *
+ *   "what's your best offer for net 60?"
+ *   "can you do net 30?"
+ *   "what price for net 90?"
+ *   "do you have a price for net 45?"
+ *
+ * Returns the requested days when both:
+ *   (a) the message reads as a question about price/offer, AND
+ *   (b) a parseable "Net X" reference is present.
+ *
+ * Reuses parsePaymentTermsFromText so all the same Net-X patterns are
+ * supported (n45, net-45, payment in 45 days, etc.).
+ *
+ * Returns null when the message is a regular offer (with terms) or has
+ * no terms reference. The caller (chatbot.service.ts) then knows whether
+ * to honor the requested terms in its counter.
+ */
+export function detectTermsRequest(text: string): {
+  requestedDays: number;
+  matchedText: string;
+} | null {
+  if (!text) return null;
+
+  // Exclude acceptance/offer-statement messages — these mention "Net X" but
+  // aren't asking about it (e.g. "ok, deal at net 60" or "final offer: $X
+  // with net 30"). Honoring terms-requests here would hijack the accept
+  // flow. Only applies to non-question messages: "do you accept n60?" is a
+  // legitimate question that happens to contain "accept".
+  const hasQuestionMarkRaw = /\?/.test(text);
+  const isAcceptanceOrFinalOffer =
+    !hasQuestionMarkRaw &&
+    /\b(ok|okay|deal|agreed|accept|accepted|final\s+(offer|price|terms)|sold|done)\b/i.test(
+      text,
+    );
+  if (isAcceptanceOrFinalOffer) {
+    return null;
+  }
+
+  // Question-form heuristic: must contain a question mark OR start with a
+  // common request verb. Catches "?" forms and "can you do net 60", "what
+  // is your best price for net 30", etc.
+  const hasQuestionMark = /\?/.test(text);
+  const startsAsQuestion =
+    /^\s*(can|could|would|will|do|does|what|how|any|is\s+there|is\s+it\s+possible|please|kindly)\b/i.test(
+      text,
+    );
+  // Or contains a "for net X" / "on net X" / "under net X" prepositional ask
+  // (intentionally excludes "with" and "at" which more often appear in
+  // offer statements like "$5000 with Net 30" or "deal at Net 60").
+  const hasPrepositionalAsk =
+    /\b(for|on|under)\s+(?:net|n)\s*[-]?\s*\d+\b/i.test(text);
+
+  if (!hasQuestionMark && !startsAsQuestion && !hasPrepositionalAsk) {
+    return null;
+  }
+
+  const termsInfo = parsePaymentTermsFromText(text);
+  if (termsInfo.payment_terms_days == null) return null;
+
+  return {
+    requestedDays: termsInfo.payment_terms_days,
+    matchedText:
+      termsInfo.raw_terms_text ?? `Net ${termsInfo.payment_terms_days}`,
   };
 }
 
@@ -491,7 +592,10 @@ function parsePaymentTermsFromText(text: string): {
  * @param requisitionCurrency - Currency of the requisition (for conversion)
  * @returns Parsed offer
  */
-export function parseOfferRegex(text: string, requisitionCurrency?: SupportedCurrency): Offer {
+export function parseOfferRegex(
+  text: string,
+  requisitionCurrency?: SupportedCurrency,
+): Offer {
   // Parse price
   const priceInfo = parsePriceFromText(text);
   let total_price = priceInfo.price;
@@ -501,10 +605,19 @@ export function parseOfferRegex(text: string, requisitionCurrency?: SupportedCur
   let originalCurrency: SupportedCurrency | null = null;
   let originalPrice: number | null = null;
 
-  if (total_price !== null && priceInfo.currency && requisitionCurrency && priceInfo.currency !== requisitionCurrency) {
+  if (
+    total_price !== null &&
+    priceInfo.currency &&
+    requisitionCurrency &&
+    priceInfo.currency !== requisitionCurrency
+  ) {
     originalCurrency = priceInfo.currency;
     originalPrice = total_price;
-    total_price = convertCurrencySync(total_price, priceInfo.currency, requisitionCurrency);
+    total_price = convertCurrencySync(
+      total_price,
+      priceInfo.currency,
+      requisitionCurrency,
+    );
     currencyConverted = true;
   }
 
@@ -518,7 +631,7 @@ export function parseOfferRegex(text: string, requisitionCurrency?: SupportedCur
   const meta: {
     raw_terms_days?: number;
     non_standard_terms?: boolean;
-    delivery_source?: 'explicit_date' | 'relative_days' | 'timeframe' | 'asap';
+    delivery_source?: "explicit_date" | "relative_days" | "timeframe" | "asap";
     raw_delivery_text?: string;
     raw_price_text?: string;
     raw_terms_text?: string;
@@ -565,7 +678,7 @@ export function parseOfferRegex(text: string, requisitionCurrency?: SupportedCur
     payment_terms_days: termsInfo.payment_terms_days,
     delivery_date: deliveryInfo.delivery_date,
     delivery_days: deliveryInfo.delivery_days,
-    meta: Object.keys(meta).length > 0 ? meta : undefined
+    meta: Object.keys(meta).length > 0 ? meta : undefined,
   };
 }
 
@@ -573,7 +686,10 @@ export function parseOfferRegex(text: string, requisitionCurrency?: SupportedCur
  * Enhanced parseOffer that includes delivery parsing
  * Alias for parseOfferRegex with full delivery support
  */
-export function parseOfferWithDelivery(text: string, requisitionCurrency?: SupportedCurrency): Offer {
+export function parseOfferWithDelivery(
+  text: string,
+  requisitionCurrency?: SupportedCurrency,
+): Offer {
   return parseOfferRegex(text, requisitionCurrency);
 }
 
@@ -585,7 +701,10 @@ export function parseOfferWithDelivery(text: string, requisitionCurrency?: Suppo
  * @param requisitionCurrency - Currency for conversion
  * @returns Parsed offer
  */
-export function parseShorthandOffer(text: string, requisitionCurrency?: SupportedCurrency): Offer {
+export function parseShorthandOffer(
+  text: string,
+  requisitionCurrency?: SupportedCurrency,
+): Offer {
   // For shorthand, use the same parser - it handles these cases
   return parseOfferRegex(text, requisitionCurrency);
 }
