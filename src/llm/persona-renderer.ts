@@ -9,8 +9,8 @@
  *   config objects, scoring formulas, or MESO reasoning.
  * - The LLM may ONLY express a decision — not make one.
  * - Injects allowedPrice explicitly when action is COUNTER.
- * - Limits responses to ~120 words.
- * - Temperature: 0.5 for controlled, consistent output.
+ * - Response length adapts per action type (8–140 words).
+ * - Temperature: 0.7 for natural variation across rounds.
  */
 
 import { generateCompletion } from "../services/openai.service.js";
@@ -29,6 +29,8 @@ export interface PersonaContext {
   vendorName?: string;
   /** Product category — e.g. "Industrial Equipment" */
   productCategory?: string;
+  /** Compact negotiation arc summary (deterministic, safe fields only) */
+  arcSummary?: string;
 }
 
 // ─────────────────────────────────────────────
@@ -86,6 +88,26 @@ const LANGUAGE_NAMES: Record<string, string> = {
   pt: "Portuguese",
 };
 
+// ─────────────────────────────────────────────
+// Counter reasoning variety (rotates by round)
+// ─────────────────────────────────────────────
+
+const COUNTER_REASONING_HINTS: string[] = [
+  "budget constraints",
+  "market benchmarks we're seeing",
+  "the scope of this project",
+  "our volume expectations",
+  "comparable pricing from other vendors",
+  "internal procurement guidelines",
+  "the project's overall financial parameters",
+];
+
+function getCounterReasoningHint(round: number): string {
+  const safeRound = Math.max(1, round);
+  const idx = (safeRound - 1) % COUNTER_REASONING_HINTS.length;
+  return COUNTER_REASONING_HINTS[idx];
+}
+
 // Length guidance the LLM aims for; the validator enforces hard bounds.
 function lengthHintForAction(action: string, vendorWordCount: number): string {
   // Adapt to vendor: short vendor message → shorter reply, but never below per-action floor.
@@ -112,6 +134,7 @@ function lengthHintForAction(action: string, vendorWordCount: number): string {
 function buildInstruction(
   intent: NegotiationIntent,
   vendorMessage: string,
+  context?: PersonaContext,
 ): string {
   const style = intent.vendorStyle;
   const round = intent.roundNumber ?? 1;
@@ -125,6 +148,14 @@ function buildInstruction(
         ? "The vendor writes casually — match that with contractions and a relaxed register."
         : "The vendor's tone is neutral — keep yours warm and professional."
     : `Mirror the vendor's ${intent.vendorTone} tone in formality only.`;
+
+  const movementHint = intent.vendorMovement
+    ? intent.vendorMovement === "significant"
+      ? "The vendor has made a significant price concession since last round. Briefly acknowledge this positively before stating your counter."
+      : intent.vendorMovement === "moderate"
+        ? "The vendor moved their price down moderately. A brief positive acknowledgment is appropriate."
+        : "The vendor made a small price adjustment. A subtle nod to their flexibility is fine but not required."
+    : "";
 
   const hostilityHint = style?.hostility
     ? "The vendor is being hostile or rude. Do NOT mirror that. Stay calm, neutral-professional. Acknowledge their frustration in one short clause if natural, then move to the substance."
@@ -143,11 +174,15 @@ function buildInstruction(
     : "This is an ongoing chat — do NOT greet, just continue the conversation.";
 
   const firmnessInstruction =
-    intent.firmness >= 0.75
-      ? "Be firm and clear. Hold your position."
-      : intent.firmness >= 0.55
-        ? "Be moderate — polite but direct."
-        : "Be warm and collaborative.";
+    intent.firmness >= 0.85
+      ? "Be very firm. This is close to a final position."
+      : intent.firmness >= 0.7
+        ? "Be firm and clear. Hold your position."
+        : intent.firmness >= 0.5
+          ? "Be moderate — polite but direct."
+          : intent.firmness >= 0.3
+            ? "Be warm and collaborative. Show flexibility."
+            : "Be very warm and accommodating. We're close to agreement.";
 
   const concernsText =
     intent.acknowledgeConcerns.length > 0
@@ -201,7 +236,8 @@ function buildInstruction(
         const deliveryText = intent.allowedDelivery
           ? `, delivery: ${intent.allowedDelivery}`
           : "";
-        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${intent.allowedPrice.toLocaleString()}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Provide a brief, natural business reason (budget constraints, project requirements, or similar). Keep it conversational.`;
+        const reasonHint = getCounterReasoningHint(intent.roundNumber ?? 1);
+        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${intent.allowedPrice.toLocaleString("en-US")}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Provide a brief, natural business reason (${reasonHint}). Keep it conversational.`;
       } else {
         actionInstruction =
           "Indicate that the current offer needs improvement and ask the vendor to reconsider their terms. Be polite but clear.";
@@ -221,7 +257,7 @@ function buildInstruction(
         const options = intent.offerVariants
           .map(
             (v, i) =>
-              `Option ${i + 1} — ${v.label}: ${intent.currencySymbol}${v.price.toLocaleString()}, ${v.paymentTerms}. ${v.description}`,
+              `Option ${i + 1} — ${v.label}: ${intent.currencySymbol}${v.price.toLocaleString("en-US")}, ${v.paymentTerms}. ${v.description}`,
           )
           .join("\n");
         actionInstruction = `Present these options to the vendor. You MUST present all options with EXACT prices as given:\n${options}\nAsk the vendor which works best for them. Present them as fair alternatives.`;
@@ -241,6 +277,9 @@ function buildInstruction(
   }
 
   return [
+    ...(context?.arcSummary
+      ? [`Negotiation context:\n${context.arcSummary}`, ""]
+      : []),
     `Vendor's message: "${vendorMessage}"`,
     "",
     `Your action: ${actionInstruction}`,
@@ -249,6 +288,7 @@ function buildInstruction(
     languageHint,
     greetingHint,
     hostilityHint,
+    movementHint,
     orderingHint,
     smalltalkHint,
     openQuestionsHint,
@@ -290,7 +330,7 @@ export async function renderNegotiationMessage(
 ): Promise<RenderResult> {
   try {
     const systemPrompt = buildSystemPrompt(context);
-    const userInstruction = buildInstruction(intent, vendorMessage);
+    const userInstruction = buildInstruction(intent, vendorMessage, context);
 
     const messages = [
       { role: "system" as const, content: systemPrompt },

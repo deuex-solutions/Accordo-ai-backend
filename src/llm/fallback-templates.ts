@@ -75,59 +75,103 @@ const ACCEPT_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   ],
 };
 
-// COUNTER templates
+// COUNTER templates — 7 per tone for sufficient variety across multi-round negotiations
 const COUNTER_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   formal: [
     (i) =>
-      `Thank you for your proposal. After careful review, we would like to respectfully counter with a total price of ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, with ${i.allowedPaymentTerms} payment terms` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. We believe these terms represent a fair path forward.`,
+      `Thank you for your proposal. After careful review, we would like to counter with a total price of ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, with ${i.allowedPaymentTerms} payment terms` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. We believe these terms represent a fair path forward.`,
     (i) =>
-      `We appreciate the offer and wish to propose the following counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()} total${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We trust this aligns with both parties' objectives.`,
+      `We appreciate the offer and wish to propose the following: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")} total${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We trust this aligns with both parties' objectives.`,
     (i) =>
-      `Following our review, we propose ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` and delivery by ${i.allowedDelivery}` : ""} as our counter. We remain open to discussion.`,
+      `Following our review, we propose ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` and delivery ${i.allowedDelivery}` : ""} as our counter. We remain open to discussion.`,
+    (i) =>
+      `Having considered your proposal, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We are confident this reflects market conditions fairly.`,
+    (i) =>
+      `We have given your offer careful consideration. Our position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, with delivery ${i.allowedDelivery}` : ""}. We look forward to your response.`,
+    (i) =>
+      `Your proposal is noted. Based on our requirements, we are countering at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We value this relationship and hope we can align.`,
+    (i) =>
+      `We acknowledge your offer with appreciation. Our counter stands at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` and delivery ${i.allowedDelivery}` : ""}. We believe this represents workable terms for both sides.`,
   ],
   casual: [
     (i) =>
-      `Thanks for coming back to us! Here's what we can work with: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()} total${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Think we can make that work?`,
+      `Thanks for coming back to us. Here's what we can work with: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")} total${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Think we can make that work?`,
     (i) =>
-      `Appreciate the offer, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. Let us know what you think!`,
+      `Appreciate the offer, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. Let us know what you think.`,
     (i) =>
-      `Good to hear from you. We'd like to propose ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Does that work for you?`,
+      `Good to hear from you. We're looking at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Does that work on your end?`,
+    (i) =>
+      `Thanks for that. On our side, we're at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Hoping we can land somewhere close to this.`,
+    (i) =>
+      `Noted, thanks. We can do ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Let me know if that's in the right ballpark.`,
+    (i) =>
+      `Alright, here's where we are: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")} total${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Think there's room to meet here?`,
+    (i) =>
+      `Got it. From our end, ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""} is where we need to be. Can we work with that?`,
   ],
   urgent: [
     (i) =>
-      `Given our timeline, we need to move quickly. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Can we confirm this today?`,
+      `Given our timeline, we need to move quickly. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Can we confirm this today?`,
     (i) =>
-      `To keep things on track, here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / delivery ${i.allowedDelivery}` : ""}. We'd appreciate a fast turnaround.`,
+      `To keep things on track, here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / delivery ${i.allowedDelivery}` : ""}. We'd appreciate a fast turnaround.`,
     (i) =>
-      `We're working against a deadline, our offer is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Please let us know as soon as possible.`,
+      `We're working against a deadline. Our offer is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Please let us know as soon as possible.`,
+    (i) =>
+      `Time-sensitive on our end. We're at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Need a response by end of day if possible.`,
+    (i) =>
+      `Hoping to wrap this up quickly: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Our team needs an answer to proceed with scheduling.`,
+    (i) =>
+      `We're pressed for time, so being direct: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Can you confirm?`,
+    (i) =>
+      `Need to move this along. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Hoping for a quick resolution.`,
   ],
   firm: [
     (i) =>
-      `We have reviewed the offer and our counter stands at ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. This reflects our firm position given current constraints.`,
+      `We have reviewed the offer and our counter stands at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. This reflects our firm position given current constraints.`,
     (i) =>
-      `Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. We have limited flexibility beyond this.`,
+      `Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. We have limited flexibility beyond this.`,
     (i) =>
-      `After internal review, our position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / delivery ${i.allowedDelivery}` : ""}. We hope we can reach agreement on these terms.`,
+      `After internal review, our position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / delivery ${i.allowedDelivery}` : ""}. We hope we can reach agreement on these terms.`,
+    (i) =>
+      `To be direct: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""} is where we are. This is based on firm budget constraints.`,
+    (i) =>
+      `We're holding at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We've reviewed internally and this is our best position.`,
+    (i) =>
+      `Our counter remains ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. The budget on this one is tight and we don't have much room.`,
+    (i) =>
+      `${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. That's our position. We're constrained on this and can't go higher.`,
   ],
   friendly: [
     (i) =>
-      `Really appreciate your proposal! We'd love to meet somewhere in the middle, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. What do you think?`,
+      `Really appreciate your proposal. We think there's a fair middle ground here, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. What do you think?`,
     (i) =>
-      `Thanks so much for the offer, we're making progress! Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Hoping we can find the right fit.`,
+      `Thanks so much for the offer, we're making progress. Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Hoping we can find the right fit.`,
     (i) =>
-      `We value this partnership and want to find terms that work for everyone. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Happy to discuss further!`,
+      `We value this partnership and want to find terms that work for everyone. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Happy to discuss further.`,
+    (i) =>
+      `This is going well. From our end, ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""} feels fair for both sides. Thoughts?`,
+    (i) =>
+      `Appreciate you working through this with us. We're at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Think we're getting close.`,
+    (i) =>
+      `Thanks for the flexibility so far. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We're optimistic we can land this.`,
+    (i) =>
+      `Good progress. We can work with ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Looking forward to wrapping this up together.`,
   ],
   default: [
     (i) =>
-      `Thank you for your offer. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()} total${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We believe this is a fair step forward.`,
+      `Thank you for your offer. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")} total${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We believe this is a fair step forward.`,
     (i) =>
-      `We appreciate your proposal. After consideration, we're countering with ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / ${i.allowedDelivery}` : ""}. Can we find common ground here?`,
+      `We appreciate your proposal. After consideration, we're countering with ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` / ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` / ${i.allowedDelivery}` : ""}. Can we find common ground here?`,
     (i) =>
-      `I appreciate your offer and want to keep this moving. Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Open to your thoughts.`,
+      `I appreciate your offer and want to keep this moving. Our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Open to your thoughts.`,
     (i) =>
-      `Thanks for the proposal, here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Let's see if we can land on this.`,
+      `Thanks for the proposal, here's our counter: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, ${i.allowedDelivery} delivery` : ""}. Let's see if we can land on this.`,
     (i) =>
-      `We've reviewed your offer carefully. Our counter position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString()}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` with delivery ${i.allowedDelivery}` : ""}. Looking forward to your response.`,
+      `We've reviewed your offer carefully. Our counter position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` with delivery ${i.allowedDelivery}` : ""}. Looking forward to your response.`,
+    (i) =>
+      `Noted, thank you. We're at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We think this gives both sides room to move.`,
+    (i) =>
+      `Thanks for sharing that. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We believe these terms work for both parties.`,
   ],
 };
 
@@ -273,7 +317,7 @@ const ASK_CLARIFY_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
     (i) =>
       `Almost there! Just need the total price and payment terms from you and we'll be able to take the next step.`,
     (i) =>
-      `Thanks for reaching out! We'd love to move forward, could you share the total price and your preferred payment terms?`,
+      `Thanks for reaching out. We'd like to move forward, could you share the total price and your preferred payment terms?`,
   ],
   default: [
     (i) =>

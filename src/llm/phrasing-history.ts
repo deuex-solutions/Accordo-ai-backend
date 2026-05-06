@@ -13,13 +13,14 @@
  *   without changing the public API.
  * - Bounded: TTL evicts stale deals; max-entries cap protects memory.
  *
- * Fingerprint format: first 3 words (lowercased, punctuation-stripped) joined
- * by ":" with the action type prefixed — e.g. "COUNTER|appreciate:the:quick".
- * Coarse on purpose so a one-word change still trips the de-dup check.
+ * Fingerprint format: first 5 words (lowercased, punctuation-stripped) joined
+ * by ":" with the action type prefixed — e.g. "COUNTER|appreciate:the:quick:turnaround:on".
+ * Balanced: specific enough to avoid false collisions, coarse enough that
+ * minor rephrasing still trips the de-dup check.
  */
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
-const MAX_PHRASINGS_PER_DEAL = 12;
+const MAX_PHRASINGS_PER_DEAL = 20;
 const MAX_DEALS = 5000;
 
 interface DealEntry {
@@ -56,7 +57,9 @@ function evictOldestIfFull(): void {
 
 /**
  * Build a fingerprint from a rendered message + action type.
- * First 3 meaningful words, lowercased, punctuation-stripped.
+ * First 5 meaningful words, lowercased, punctuation-stripped.
+ * 5 words distinguishes "Thank you for your proposal" from "Thank you for
+ * coming back" while remaining coarse enough that minor rephrasing still de-dups.
  */
 export function buildFingerprint(action: string, message: string): string {
   const words = (message || "")
@@ -64,7 +67,7 @@ export function buildFingerprint(action: string, message: string): string {
     .replace(/[^\p{L}\p{N}\s']/gu, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, 5);
   return `${action}|${words.join(":")}`;
 }
 

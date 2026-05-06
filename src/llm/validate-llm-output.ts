@@ -6,7 +6,7 @@
  *
  * Rules enforced:
  * 1. No banned internal words (utility, algorithm, score, threshold, model, etc.)
- * 2. Response must be ≤ 160 words.
+ * 2. Response length checked per-action (ACCEPT 8–60, COUNTER 25–110, MESO 25–140, etc.).
  * 3. For COUNTER action with allowedPrice:
  *    - A price must be present in the response.
  *    - The price must be within [targetPrice, maxAcceptablePrice] (fuzzy match).
@@ -121,14 +121,19 @@ const WEAK_APOLOGY_PHRASES: RegExp[] = [
 // AI-tell phrases — performative-helpful filler that reads as LLM output.
 // Stripped silently; the surrounding sentence usually reads fine without them.
 const AI_TELL_PHRASES: RegExp[] = [
-  /\bwe('| a)?d love to\b/gi,
-  /\bI('| a)?d love to\b/gi,
+  /\bwe('d| would) love to\b/gi,
+  /\bI('d| would) love to\b/gi,
   /\bthis better aligns with our needs\b/gi,
   /\blet us know your thoughts\b/gi,
   /\bfeel free to\b/gi,
   /\bI hope this helps\b/gi,
   /\bI'?m happy to discuss\b/gi,
   /\blooking forward to hearing\b/gi,
+  /\bdon'?t hesitate to\b/gi,
+  /\bwe appreciate your understanding\b/gi,
+  /\bplease don'?t hesitate\b/gi,
+  /\bwe'?re confident (that |this )?(will|can)\b/gi,
+  /\bthank you for your patience\b/gi,
 ];
 
 // ─────────────────────────────────────────────
@@ -144,19 +149,21 @@ const AI_TELL_PHRASES: RegExp[] = [
 function extractPrices(text: string): number[] {
   const prices: number[] = [];
 
-  // Match patterns like $98,000 | $98,000.00 | $98000
-  const dollarPattern = /\$\s*([\d,]+(?:\.\d{1,2})?)/g;
+  // Currency symbol pattern — covers $, £, €, ₹, and A$ (Australian dollar)
+  const SYM = `(?:A\\$|\\$|£|€|₹)`;
+
+  // Match patterns like $98,000 | £98,000.00 | €98000 | ₹1,50,000
+  const basePattern = new RegExp(`${SYM}\\s*([\\d,]+(?:\\.\\d{1,2})?)`, "g");
   let match;
-  while ((match = dollarPattern.exec(text)) !== null) {
+  while ((match = basePattern.exec(text)) !== null) {
     const value = parseFloat(match[1].replace(/,/g, ""));
     if (!isNaN(value) && value > 100) {
-      // ignore trivially small numbers
       prices.push(value);
     }
   }
 
-  // Match patterns like $98K | $98.5k | $98.5K
-  const kPattern = /\$\s*([\d.]+)\s*[kK]\b/g;
+  // Match patterns like $98K | £98.5k | ₹98.5K
+  const kPattern = new RegExp(`${SYM}\\s*([\\d.]+)\\s*[kK]\\b`, "g");
   while ((match = kPattern.exec(text)) !== null) {
     const value = parseFloat(match[1]) * 1000;
     if (!isNaN(value) && value > 100) {
@@ -164,8 +171,8 @@ function extractPrices(text: string): number[] {
     }
   }
 
-  // Match patterns like $1.5M | $2M
-  const mPattern = /\$\s*([\d.]+)\s*[mM]\b/g;
+  // Match patterns like $1.5M | £2M | €1.2M
+  const mPattern = new RegExp(`${SYM}\\s*([\\d.]+)\\s*[mM]\\b`, "g");
   while ((match = mPattern.exec(text)) !== null) {
     const value = parseFloat(match[1]) * 1_000_000;
     if (!isNaN(value) && value > 100) {
@@ -173,7 +180,7 @@ function extractPrices(text: string): number[] {
     }
   }
 
-  // Match "98 thousand" or "1.5 million"
+  // Match "98 thousand" or "1.5 million" (currency-agnostic)
   const wordPattern = /([\d.]+)\s+thousand\b/gi;
   while ((match = wordPattern.exec(text)) !== null) {
     const value = parseFloat(match[1]) * 1000;
@@ -189,7 +196,22 @@ function extractPrices(text: string): number[] {
     }
   }
 
-  // Deduplicate
+  // Indian numbering: lakh (100,000) and crore (10,000,000)
+  const lakhPattern = /([\d.]+)\s+lakh\b/gi;
+  while ((match = lakhPattern.exec(text)) !== null) {
+    const value = parseFloat(match[1]) * 100_000;
+    if (!isNaN(value) && value > 100) {
+      prices.push(value);
+    }
+  }
+  const crorePattern = /([\d.]+)\s+crore\b/gi;
+  while ((match = crorePattern.exec(text)) !== null) {
+    const value = parseFloat(match[1]) * 10_000_000;
+    if (!isNaN(value) && value > 100) {
+      prices.push(value);
+    }
+  }
+
   return [...new Set(prices)];
 }
 

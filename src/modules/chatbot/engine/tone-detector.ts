@@ -696,10 +696,75 @@ export function detectVendorStyle(
   };
 }
 
+// ─────────────────────────────────────────────
+// Vendor Concern Extraction (deterministic, no LLM)
+// ─────────────────────────────────────────────
+
+/**
+ * Extract concrete vendor concerns from their message.
+ * ONLY returns concerns the vendor explicitly mentioned — never fabricates.
+ * Returns an array of short, normalized concern labels safe to pass to the LLM.
+ */
+const CONCERN_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  {
+    pattern: /\b(timeline|deadline|time.?sensitive|urgent|asap|rush)\b/i,
+    label: "timeline pressure",
+  },
+  {
+    pattern: /\b(budget|cash.?flow|liquidity|payment.?cycle|fiscal)\b/i,
+    label: "budget constraints",
+  },
+  {
+    pattern: /\b(margin|margins|thin.?margins?|tight.?margins?)\b/i,
+    label: "margin pressure",
+  },
+  {
+    pattern:
+      /\b(supply.?chain|raw.?material|shortage|availability|back.?order)\b/i,
+    label: "supply chain",
+  },
+  {
+    pattern: /\b(volume|bulk|large.?order|quantity.?discount|long.?term)\b/i,
+    label: "volume commitment",
+  },
+  {
+    pattern:
+      /\b(quality|compliance|certification|standard|spec|specification)\b/i,
+    label: "quality requirements",
+  },
+  {
+    pattern:
+      /\b(relationship|partnership|long.?standing|repeat.?business|loyal)\b/i,
+    label: "relationship value",
+  },
+  {
+    pattern:
+      /\b(competitor|alternative|other.?vendor|other.?supplier|market.?rate|going.?rate)\b/i,
+    label: "competitive alternatives",
+  },
+  {
+    pattern: /\b(risk|warranty|guarantee|liability|insurance)\b/i,
+    label: "risk concerns",
+  },
+];
+
+export function extractVendorConcerns(vendorMessage: string): string[] {
+  if (!vendorMessage || vendorMessage.trim().length < 10) return [];
+
+  const concerns: string[] = [];
+  for (const { pattern, label } of CONCERN_PATTERNS) {
+    if (pattern.test(vendorMessage) && !concerns.includes(label)) {
+      concerns.push(label);
+    }
+  }
+  return concerns.slice(0, 3);
+}
+
 export default {
   detectVendorTone,
   getToneDescription,
   getResponseStyleRecommendation,
   detectStrictFirmness,
   detectVendorStyle,
+  extractVendorConcerns,
 };

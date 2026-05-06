@@ -33,6 +33,78 @@ export function getCurrencySymbol(code?: string): string {
   return CURRENCY_SYMBOL_MAP[(code || "USD").toUpperCase()] || "$";
 }
 
+/**
+ * Round a price to a clean, human-sounding number.
+ * Procurement managers don't quote to the penny.
+ *
+ * Rules:
+ * - < $1,000:      round to nearest $10
+ * - $1,000–$9,999: round to nearest $50
+ * - $10K–$99,999:  round to nearest $500
+ * - $100K–$999K:   round to nearest $1,000
+ * - $1M+:          round to nearest $5,000
+ *
+ * Always rounds UP (ceil) to avoid accidentally going below target.
+ */
+export function humanRoundPrice(price: number): number {
+  if (price <= 0) return price;
+
+  let step: number;
+  if (price < 1_000) step = 10;
+  else if (price < 10_000) step = 50;
+  else if (price < 100_000) step = 500;
+  else if (price < 1_000_000) step = 1_000;
+  else step = 5_000;
+
+  return Math.ceil(price / step) * step;
+}
+
+/**
+ * Convert ISO-style dates to human-readable format for vendor-facing messages.
+ * "2026-03-15" → "March 15, 2026"
+ * "2026-03-15T00:00:00Z" → "March 15, 2026"
+ * Anything else passes through unchanged.
+ */
+function humanizeDeliveryDate(delivery: string): string {
+  const isoMatch = delivery.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    const monthName = months[parseInt(month, 10) - 1];
+    const dayNum = parseInt(day, 10);
+    return `${monthName} ${dayNum}, ${year}`;
+  }
+  return delivery;
+}
+
+/**
+ * Normalize delivery strings: humanize ISO dates, strip leading prepositions
+ * to prevent "by by" or "on on" when templates prepend their own preposition.
+ */
+function normalizeDelivery(
+  delivery: string | null | undefined,
+): string | undefined {
+  if (!delivery) return undefined;
+  let normalized = humanizeDeliveryDate(delivery.trim());
+  normalized = normalized
+    .replace(/^\s*(by|on|within|before|after)\s+/i, "")
+    .trim();
+  return normalized || undefined;
+}
+
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -65,7 +137,7 @@ export interface NegotiationIntent {
   /**
    * Firmness level derived from utility gap (0 = soft, 1 = hard).
    * Tells the LLM how assertive to sound.
-   * Utility ≥70% → 0.25 | 50–70% → 0.55 | 30–50% → 0.75 | <30% → 0.90
+   * Utility ≥80% → 0.15 | 65–80% → 0.35 | 50–65% → 0.55 | 35–50% → 0.75 | <35% → 0.90
    */
   firmness: number;
 
@@ -142,6 +214,14 @@ export interface NegotiationIntent {
    * to address these before continuing the negotiation thread.
    */
   openQuestions?: Array<{ question: string; askedAtRound: number }>;
+
+  /**
+   * Indicates the vendor moved their price toward our position since last round.
+   * 'significant' (>=5% drop), 'moderate' (2–5%), 'minor' (<2%), or undefined
+   * (no movement, increase, or first round). Used by the persona-renderer to
+   * acknowledge concessions naturally.
+   */
+  vendorMovement?: "significant" | "moderate" | "minor";
 }
 
 /**
@@ -169,73 +249,111 @@ export interface VendorStyleSignals {
 
 const COMMERCIAL_POSITIONS: Record<
   NegotiationAction,
-  Record<string, string>
+  Record<string, string[]>
 > = {
   ACCEPT: {
-    default:
+    default: [
       "We are pleased to accept this offer as it meets our procurement requirements.",
-    friendly: "This offer works well for us and we are happy to proceed.",
-    formal: "We confirm formal acceptance of the terms as presented.",
+      "This offer aligns with what we need and we are ready to move forward.",
+      "The terms work for us and we are confirming our acceptance.",
+    ],
+    friendly: [
+      "This offer works well for us and we are happy to proceed.",
+      "We're glad we could reach an agreement that works for both sides.",
+    ],
+    formal: [
+      "We confirm formal acceptance of the terms as presented.",
+      "We hereby accept the terms under the conditions discussed.",
+    ],
   },
   COUNTER: {
-    high_firmness:
+    high_firmness: [
       "Our budget constraints require us to maintain firm terms for this procurement.",
-    medium_firmness:
+      "We have limited room to move on this and need to hold our position.",
+      "Our internal guidelines require us to stay within these parameters.",
+    ],
+    medium_firmness: [
       "We are working toward mutually beneficial terms that align with our requirements.",
-    low_firmness:
+      "We think there is a fair middle ground and are proposing terms we can both work with.",
+      "We are looking for an arrangement that reflects the value of this engagement for both parties.",
+    ],
+    low_firmness: [
       "We remain flexible and are committed to finding an arrangement that works for both parties.",
-    urgent:
+      "We see room for collaboration here and are proposing terms in that spirit.",
+      "We value this relationship and are approaching this with flexibility.",
+    ],
+    urgent: [
       "Given our project timeline, we need to reach an agreement on these terms promptly.",
+      "We are on a tight schedule and need to finalize terms soon.",
+    ],
   },
   WALK_AWAY: {
-    default:
+    default: [
       "After careful consideration, the current terms do not align with our procurement requirements.",
-    firm: "We have reached the limit of what is workable within our constraints.",
+      "We have evaluated the offer thoroughly and are unable to proceed under these conditions.",
+    ],
+    firm: [
+      "We have reached the limit of what is workable within our constraints.",
+      "The gap between our positions is too wide for us to bridge at this time.",
+    ],
   },
   ESCALATE: {
-    default:
+    default: [
       "This negotiation requires senior review before we can proceed further.",
+      "We would like to bring in our procurement leadership to continue this discussion.",
+    ],
   },
   MESO: {
-    default: "We have prepared several options that may work for both parties.",
+    default: [
+      "We have prepared several options that may work for both parties.",
+      "We are presenting a few alternatives to find the best fit.",
+    ],
   },
   ASK_CLARIFY: {
-    default: "We need a few more details to move this negotiation forward.",
+    default: [
+      "We need a few more details to move this negotiation forward.",
+      "Some information is missing before we can respond with a complete offer.",
+    ],
   },
 };
 
 /**
  * Select a commercial position phrase deterministically.
+ * Rotates through available phrases by round number to avoid repetition.
  * No LLM involved — purely a lookup.
  */
 function selectCommercialPosition(
   action: NegotiationAction,
   firmness: number,
   tone: VendorTone,
+  roundNumber?: number,
 ): string {
   const pool = COMMERCIAL_POSITIONS[action];
+  const round = roundNumber ?? 1;
+
+  let phrases: string[];
 
   if (action === "COUNTER") {
-    if (firmness >= 0.75) return pool["high_firmness"];
-    if (firmness >= 0.55) return pool["medium_firmness"];
-    if (tone === "urgent") return pool["urgent"];
-    return pool["low_firmness"];
+    if (firmness >= 0.7) phrases = pool["high_firmness"];
+    else if (firmness >= 0.5) phrases = pool["medium_firmness"];
+    else if (tone === "urgent") phrases = pool["urgent"];
+    else phrases = pool["low_firmness"];
+  } else if (action === "ACCEPT") {
+    if (tone === "friendly") phrases = pool["friendly"];
+    else if (tone === "formal") phrases = pool["formal"];
+    else phrases = pool["default"];
+  } else if (action === "WALK_AWAY") {
+    if (tone === "firm") phrases = pool["firm"];
+    else phrases = pool["default"];
+  } else {
+    phrases = pool["default"] ?? [
+      "We are working toward a mutually beneficial agreement.",
+    ];
   }
 
-  if (action === "ACCEPT") {
-    if (tone === "friendly") return pool["friendly"];
-    if (tone === "formal") return pool["formal"];
-    return pool["default"];
-  }
-
-  if (action === "WALK_AWAY") {
-    if (tone === "firm") return pool["firm"];
-    return pool["default"];
-  }
-
-  return (
-    pool["default"] ?? "We are working toward a mutually beneficial agreement."
-  );
+  const safeRound = Math.max(1, round);
+  const idx = (safeRound - 1) % phrases.length;
+  return phrases[idx];
 }
 
 // ─────────────────────────────────────────────
@@ -246,15 +364,17 @@ function selectCommercialPosition(
  * Map a utility score (0–1) to a firmness value (0–1).
  * Higher firmness = more assertive LLM tone.
  *
- * Utility ≥ 70%  → firmness 0.25  (near acceptance, stay soft)
- * Utility 50–70% → firmness 0.55  (negotiating zone, moderate)
- * Utility 30–50% → firmness 0.75  (escalation zone, firm)
- * Utility < 30%  → firmness 0.90  (walk-away zone, very firm)
+ * Utility ≥ 80%  → firmness 0.15  (near acceptance, very soft)
+ * Utility 65–80% → firmness 0.35  (comfortable zone, warm)
+ * Utility 50–65% → firmness 0.55  (negotiating zone, moderate)
+ * Utility 35–50% → firmness 0.75  (escalation zone, firm)
+ * Utility < 35%  → firmness 0.90  (walk-away zone, very firm)
  */
 export function mapUtilityToFirmness(utilityScore: number): number {
-  if (utilityScore >= 0.7) return 0.25;
+  if (utilityScore >= 0.8) return 0.15;
+  if (utilityScore >= 0.65) return 0.35;
   if (utilityScore >= 0.5) return 0.55;
-  if (utilityScore >= 0.3) return 0.75;
+  if (utilityScore >= 0.35) return 0.75;
   return 0.9;
 }
 
@@ -325,6 +445,8 @@ export interface BuildIntentInput {
   phrasingHistory?: string[];
   /** Vendor questions previously asked but not yet answered. */
   openQuestions?: Array<{ question: string; askedAtRound: number }>;
+  /** Vendor price-movement signal: 'significant', 'moderate', 'minor', or undefined. */
+  vendorMovement?: "significant" | "moderate" | "minor";
 }
 
 /**
@@ -364,6 +486,7 @@ export function buildNegotiationIntent(
     finalAction,
     firmness,
     tone,
+    input.roundNumber,
   );
 
   const intent: NegotiationIntent = {
@@ -383,6 +506,7 @@ export function buildNegotiationIntent(
     intent.phrasingHistory = phrasingHistory;
   if (openQuestions && openQuestions.length > 0)
     intent.openQuestions = openQuestions;
+  if (input.vendorMovement) intent.vendorMovement = input.vendorMovement;
 
   // Only COUNTER gets pricing fields and weakest parameter signal
   if (finalAction === "COUNTER" && counterPrice != null) {
@@ -395,12 +519,18 @@ export function buildNegotiationIntent(
     if (resolved != null && resolved <= 0 && targetPrice && targetPrice > 0) {
       resolved = targetPrice;
     }
-    intent.allowedPrice = resolved;
+    if (resolved != null) {
+      let humanPrice = humanRoundPrice(resolved);
+      if (maxAcceptablePrice != null && humanPrice > maxAcceptablePrice) {
+        humanPrice = maxAcceptablePrice;
+      }
+      intent.allowedPrice = humanPrice;
+    }
     if (counterPaymentTerms) {
       intent.allowedPaymentTerms = counterPaymentTerms;
     }
     if (counterDelivery) {
-      intent.allowedDelivery = counterDelivery;
+      intent.allowedDelivery = normalizeDelivery(counterDelivery);
     }
     // Pass weakest primary parameter only for COUNTER — helps LLM focus the response.
     // Only 'price', 'terms', 'delivery' can appear here — warranty/quality are never surfaced.

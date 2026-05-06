@@ -20,7 +20,7 @@ import { Op } from "sequelize";
 import { CustomError } from "../../../utils/custom-error.js";
 import logger from "../../../config/logger.js";
 import models from "../../../models/index.js";
-import { parseOfferRegex } from "../engine/parse-offer.js";
+import { parseOfferRegex, detectTermsRequest } from "../engine/parse-offer.js";
 import {
   decideNextMove,
   extractVendorMaxTermsDays,
@@ -60,10 +60,15 @@ import {
   detectVendorTone,
   detectStrictFirmness,
   detectVendorStyle,
+  extractVendorConcerns,
   type VendorStyle,
 } from "../engine/tone-detector.js";
 import { recordPhrasing, getPhrasings } from "../../../llm/phrasing-history.js";
-import { buildNegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
+import {
+  buildNegotiationIntent,
+  getCurrencySymbol,
+} from "../../../negotiation/intent/build-negotiation-intent.js";
+import { buildArcSummary } from "../../../llm/arc-summary.js";
 import { renderNegotiationMessage } from "../../../llm/persona-renderer.js";
 import {
   validateLlmOutput,
@@ -401,7 +406,7 @@ export async function processConversationMessage(
         counterPrice: null,
         counterPaymentTerms: null,
         counterDelivery: null,
-        concerns: [],
+        concerns: extractVendorConcerns(vendorMessage),
         tone: "formal",
         currencyCode: (config.currency as string) || "USD",
       });
@@ -482,6 +487,23 @@ export async function processConversationMessage(
       conversationState.lastVendorOffer,
     );
 
+    // 6b. Compute vendor price movement (for LLM acknowledgment signal).
+    //     Only downward movement counts as a concession.
+    let vendorMovement: "significant" | "moderate" | "minor" | undefined;
+    const previousVendorPrice = conversationState.lastVendorOffer?.total_price;
+    if (
+      previousVendorPrice != null &&
+      previousVendorPrice > 0 &&
+      vendorOffer.total_price != null &&
+      vendorOffer.total_price < previousVendorPrice
+    ) {
+      const dropPercent =
+        (previousVendorPrice - vendorOffer.total_price) / previousVendorPrice;
+      if (dropPercent >= 0.05) vendorMovement = "significant";
+      else if (dropPercent >= 0.02) vendorMovement = "moderate";
+      else if (dropPercent > 0) vendorMovement = "minor";
+    }
+
     // 7. Get decision from engine (if we have a complete offer)
     let decision: Decision;
     let explainability: Explainability | null = null;
@@ -507,6 +529,64 @@ export async function processConversationMessage(
           ],
         };
         explainability = computeExplainability(config, vendorOffer, decision);
+      }
+
+      // 7-pre-B. Proximity-accept: if vendor's price is within 2% of our
+      // max_acceptable after round 5+, close the deal. A human PM wouldn't
+      // keep countering over a trivial gap after that many rounds. Strategy
+      // lives here (conversation-service), never in the engine or LLM.
+      const maxAcceptableForProximity =
+        config.parameters?.total_price?.max_acceptable ??
+        ((config.parameters as any)?.unit_price?.max_acceptable as
+          | number
+          | undefined);
+      if (
+        decision.action === "COUNTER" &&
+        !isVendorAffirmative &&
+        deal.round >= 5 &&
+        vendorOffer.total_price != null &&
+        maxAcceptableForProximity != null &&
+        maxAcceptableForProximity > 0 &&
+        vendorOffer.total_price <= maxAcceptableForProximity
+      ) {
+        const gap = Math.abs(
+          vendorOffer.total_price - maxAcceptableForProximity,
+        );
+        const gapPercent = gap / maxAcceptableForProximity;
+
+        if (gapPercent <= 0.02) {
+          // Verify payment terms acceptable (no terms specified → fine; else Net 30+)
+          const termsAcceptable =
+            vendorOffer.payment_terms_days == null ||
+            vendorOffer.payment_terms_days >= 30;
+
+          if (termsAcceptable) {
+            logger.info(
+              "[ConversationService] Proximity-accept: vendor within 2% of max_acceptable after round 5+",
+              {
+                dealId,
+                vendorPrice: vendorOffer.total_price,
+                maxAcceptable: maxAcceptableForProximity,
+                gapPercent: (gapPercent * 100).toFixed(2) + "%",
+                round: deal.round + 1,
+              },
+            );
+            decision = {
+              action: "ACCEPT",
+              utilityScore: decision.utilityScore,
+              counterOffer: null,
+              reasons: [
+                ...decision.reasons,
+                `Proximity-accept: vendor at ${vendorOffer.total_price} is within 2% of max_acceptable ${maxAcceptableForProximity} after round ${deal.round + 1}.`,
+              ],
+            };
+            explainability = computeExplainability(
+              config,
+              vendorOffer,
+              decision,
+            );
+          }
+        }
       }
 
       // 7-pre-A. Firmness handling — vendor signals "this is final / best price / non-negotiable"
@@ -980,6 +1060,21 @@ export async function processConversationMessage(
       toneHistory,
     );
 
+    // 10c. Detect vendor term requests (e.g. "can you do Net 30?").
+    //      If vendor asks about specific terms, surface to openQuestions so
+    //      the LLM addresses it naturally. Does NOT override engine decision.
+    const termsRequest = detectTermsRequest(vendorMessage);
+    if (termsRequest) {
+      logger.info("[ConversationService] Vendor term request detected", {
+        dealId,
+        requestedDays: termsRequest.requestedDays,
+        matchedText: termsRequest.matchedText,
+      });
+    }
+
+    // 10d. Extract real vendor concerns (deterministic — never fabricated).
+    const vendorConcerns = extractVendorConcerns(vendorMessage);
+
     // 11. Resolve price boundaries for intent builder (used to clamp allowedPrice)
     const storedConfig = deal.negotiationConfigJson as any;
     const targetPrice: number | undefined =
@@ -1053,6 +1148,16 @@ export async function processConversationMessage(
         question: string;
         askedAtRound: number;
       }>) ?? [];
+    // Merge stored open questions with any fresh term request from this round
+    const freshQuestions: Array<{ question: string; askedAtRound: number }> =
+      [];
+    if (termsRequest) {
+      freshQuestions.push({
+        question: `Vendor asked about ${termsRequest.matchedText} terms`,
+        askedAtRound: deal.round + 1,
+      });
+    }
+    const mergedOpenQuestions = [...openQuestions, ...freshQuestions];
     const negotiationIntent = buildNegotiationIntent({
       action: decision.action as
         | "ACCEPT"
@@ -1068,7 +1173,7 @@ export async function processConversationMessage(
         : decision.counterOffer?.delivery_days
           ? `within ${decision.counterOffer.delivery_days} days`
           : null,
-      concerns: [],
+      concerns: vendorConcerns,
       tone: toneResult.primaryTone,
       targetPrice,
       maxAcceptablePrice,
@@ -1077,14 +1182,28 @@ export async function processConversationMessage(
       vendorStyle,
       roundNumber: deal.round + 1,
       phrasingHistory,
-      openQuestions,
+      openQuestions: mergedOpenQuestions,
+      vendorMovement,
     });
 
-    // 13. Get non-commercial context for persona (safe to pass to LLM)
+    // 13. Build conversation arc summary for the LLM (deterministic, safe fields only)
+    const arcSummary = buildArcSummary(
+      allMessages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+        extractedOffer: msg.extractedOffer,
+        counterOffer: msg.counterOffer,
+        decisionAction: msg.decisionAction,
+      })),
+      getCurrencySymbol(storedConfig?.currency || "USD"),
+    );
+
+    // 14. Get non-commercial context for persona (safe to pass to LLM)
     const personaContext = {
       dealTitle: deal.title ?? undefined,
       vendorName: (deal as any).Vendor?.name ?? undefined,
       productCategory: (deal as any).Requisition?.title ?? undefined,
+      arcSummary: arcSummary || undefined,
     };
 
     // 14. Render response via LLM persona renderer
