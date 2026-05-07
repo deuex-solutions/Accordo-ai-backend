@@ -296,7 +296,7 @@ export function generateMesoOptions(
       offer: offer1,
       utility: offer1Utility.totalUtility,
       label: "Offer 1",
-      description: `Best price (${formatMesoPrice(offer1.total_price, currency)}) with fast ${offer1.delivery_days}-day delivery`,
+      description: `${formatMesoPrice(offer1.total_price, currency)}, ${offer1.delivery_days}-day delivery, Net ${offer1.payment_terms_days}`,
       emphasis: ["price", "delivery"],
       tradeoffs: [
         `${offer1.warranty_months || 0} months warranty`,
@@ -323,7 +323,7 @@ export function generateMesoOptions(
       offer: offer2,
       utility: offer2Utility.totalUtility,
       label: "Offer 2",
-      description: `Extended Net ${offer2.payment_terms_days} payment terms with ${offer2.warranty_months} months warranty`,
+      description: `${formatMesoPrice(offer2.total_price, currency)}, Net ${offer2.payment_terms_days}, ${offer2.warranty_months}-month warranty`,
       emphasis: ["payment_terms"],
       tradeoffs: [
         `${formatMesoPrice(offer2.total_price, currency)} price`,
@@ -350,7 +350,7 @@ export function generateMesoOptions(
       offer: offer3,
       utility: offer3Utility.totalUtility,
       label: "Offer 3",
-      description: `Fast ${offer3.delivery_days}-day delivery with extended ${offer3.warranty_months} months warranty`,
+      description: `${formatMesoPrice(offer3.total_price, currency)}, ${offer3.delivery_days}-day delivery, ${offer3.warranty_months}-month warranty`,
       emphasis: ["delivery", "warranty"],
       tradeoffs: [
         `${formatMesoPrice(offer3.total_price, currency)} price`,
@@ -1060,7 +1060,7 @@ export function generateDynamicMesoOptions(
       offer: offer1,
       utility: offer1Utility.totalUtility,
       label: "Offer 1",
-      description: "",
+      description: `${formatMesoPrice(offer1.total_price, currency)}, ${offer1.delivery_days}-day delivery, Net ${offer1.payment_terms_days}`,
       emphasis: ["price"],
       tradeoffs: [],
     });
@@ -1085,7 +1085,7 @@ export function generateDynamicMesoOptions(
       offer: offer2,
       utility: offer2Utility.totalUtility,
       label: "Offer 2",
-      description: "",
+      description: `${formatMesoPrice(offer2.total_price, currency)}, Net ${offer2.payment_terms_days}, ${offer2.warranty_months}-month warranty`,
       emphasis: ["payment_terms"],
       tradeoffs: [],
     });
@@ -1109,7 +1109,7 @@ export function generateDynamicMesoOptions(
       offer: offer3,
       utility: offer3Utility.totalUtility,
       label: "Offer 3",
-      description: "",
+      description: `${formatMesoPrice(offer3.total_price, currency)}, ${offer3.delivery_days}-day delivery, ${offer3.warranty_months}-month warranty`,
       emphasis: ["delivery", "warranty"],
       tradeoffs: [],
     });
@@ -1452,7 +1452,7 @@ export function generateFinalMesoOptions(
       offer: finalOffer1,
       utility: finalUtility1.totalUtility,
       label: "Offer 1",
-      description: `Best price (${formatMesoPrice(finalOffer1.total_price, currency)}) with ${bestDelivery}-day delivery`,
+      description: `${formatMesoPrice(finalOffer1.total_price, currency)}, ${bestDelivery}-day delivery, Net ${mediumTerms}`,
       emphasis: ["price", "delivery"],
       tradeoffs: [
         `${minWarranty} months warranty`,
@@ -1491,7 +1491,7 @@ export function generateFinalMesoOptions(
       offer: finalOffer2,
       utility: finalUtility2.totalUtility,
       label: "Offer 2",
-      description: `Extended Net ${bestTerms} payment terms with ${standardWarranty} months warranty`,
+      description: `${formatMesoPrice(finalOffer2.total_price, currency)}, Net ${bestTerms}, ${standardWarranty}-month warranty`,
       emphasis: ["payment_terms"],
       tradeoffs: [
         `${formatMesoPrice(finalOffer2.total_price, currency)} price`,
@@ -1528,7 +1528,7 @@ export function generateFinalMesoOptions(
       offer: finalOffer3,
       utility: finalUtility3.totalUtility,
       label: "Offer 3",
-      description: `Fast ${bestDelivery}-day delivery with extended ${extendedWarranty} months warranty`,
+      description: `${formatMesoPrice(finalOffer3.total_price, currency)}, ${bestDelivery}-day delivery, ${extendedWarranty}-month warranty`,
       emphasis: ["delivery", "warranty"],
       tradeoffs: [
         `${formatMesoPrice(finalOffer3.total_price, currency)} price`,
@@ -1768,7 +1768,7 @@ export function generateMesoFromVendorPrice(
       },
       utility: 0.8,
       label: "Offer 1",
-      description: `Best price (${formatMesoPrice(Math.max(targetPrice, offer1Price), currency)}) with ${bestDelivery}-day delivery`,
+      description: `${formatMesoPrice(Math.max(targetPrice, offer1Price), currency)}, ${bestDelivery}-day delivery, Net ${mediumTerms}`,
       emphasis: ["price", "delivery"],
       tradeoffs: [
         `${minWarranty} months warranty`,
@@ -1786,7 +1786,7 @@ export function generateMesoFromVendorPrice(
       },
       utility: 0.8,
       label: "Offer 2",
-      description: `Extended Net ${bestTerms} payment terms with ${standardWarranty} months warranty`,
+      description: `${formatMesoPrice(offer2Price, currency)}, Net ${bestTerms}, ${standardWarranty}-month warranty`,
       emphasis: ["payment_terms"],
       tradeoffs: [
         `${formatMesoPrice(offer2Price, currency)} price`,
@@ -1804,7 +1804,7 @@ export function generateMesoFromVendorPrice(
       },
       utility: 0.8,
       label: "Offer 3",
-      description: `Fast ${bestDelivery}-day delivery with extended ${extendedWarranty} months warranty`,
+      description: `${formatMesoPrice(Math.min(offer3Price, maxAcceptablePrice), currency)}, ${bestDelivery}-day delivery, ${extendedWarranty}-month warranty`,
       emphasis: ["delivery", "warranty"],
       tradeoffs: [
         `${formatMesoPrice(Math.min(offer3Price, maxAcceptablePrice), currency)} price`,

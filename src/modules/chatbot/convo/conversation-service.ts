@@ -1175,7 +1175,7 @@ export async function processConversationMessage(
       | null = null;
 
     if (
-      vendorStyle.repeatedOfferCount >= 3 &&
+      vendorStyle.repeatedOfferCount >= 2 &&
       vendorStyle.lastVendorPrice != null
     ) {
       if (lastWasCeilingMeso) {

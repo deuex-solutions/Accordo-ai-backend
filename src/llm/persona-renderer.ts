@@ -229,7 +229,7 @@ function buildInstruction(
 
   switch (intent.action) {
     case "ACCEPT":
-      actionInstruction = `Accept the vendor's offer. Express genuine appreciation. Confirm the deal is agreed and mention next steps briefly. Do NOT include any prices or numbers — just confirm acceptance warmly.`;
+      actionInstruction = `Accept the vendor's offer. Express genuine appreciation. Confirm the deal is agreed and mention next steps briefly. Do NOT include any prices or numbers, just confirm acceptance. Keep the same tone and register you've been using throughout this conversation, do not suddenly become more formal or more casual than the chat has been.`;
       break;
 
     case "COUNTER":
@@ -249,7 +249,7 @@ function buildInstruction(
       break;
 
     case "WALK_AWAY":
-      actionInstruction = `Professionally end the negotiation. Thank the vendor for their time. Leave the door open for future opportunities. Do NOT include any prices.`;
+      actionInstruction = `Professionally end the negotiation. Thank the vendor for their time. Leave the door open for future opportunities. Do NOT include any prices. Keep the same tone you've been using in this conversation.`;
       break;
 
     case "ESCALATE":
