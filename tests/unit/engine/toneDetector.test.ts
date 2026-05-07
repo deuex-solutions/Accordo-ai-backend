@@ -16,7 +16,7 @@ import {
   getResponseStyleRecommendation,
   type ToneMessage,
   type VendorTone,
-} from '../../../src/modules/chatbot/engine/toneDetector.js';
+} from '../../../src/modules/chatbot/engine/tone-detector.js';
 
 // ─────────────────────────────────────────────
 // Helpers

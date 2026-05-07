@@ -274,6 +274,13 @@ export async function getExchangeRate(
  * @returns Formatted string
  */
 export function formatCurrency(amount: number, currency: SupportedCurrency): string {
+  // Locale-aware formatting (May 2026):
+  // - INR uses 'en-IN' for Indian comma grouping (X,XX,XXX)
+  // - All others use 'en-US' for Western grouping (XXX,XXX)
+  // - Strip .00 decimals for whole numbers (human-natural)
+  const locale = currency === 'INR' ? 'en-IN' : 'en-US';
+  const isWholeNumber = amount === Math.floor(amount);
+
   const symbols: Record<SupportedCurrency, string> = {
     USD: '$',
     INR: '₹',
@@ -283,9 +290,9 @@ export function formatCurrency(amount: number, currency: SupportedCurrency): str
   };
 
   const symbol = symbols[currency] || currency;
-  const formatted = amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const formatted = amount.toLocaleString(locale, {
+    minimumFractionDigits: isWholeNumber ? 0 : 2,
+    maximumFractionDigits: isWholeNumber ? 0 : 2,
   });
 
   return `${symbol}${formatted}`;

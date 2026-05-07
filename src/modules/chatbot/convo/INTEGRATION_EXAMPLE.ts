@@ -8,11 +8,11 @@
  * Use it as a reference for integrating into your actual service layer.
  */
 
-import { processConversationTurn } from './processConversationTurn.js';
-import { ChatbotDeal } from '../../../models/chatbotDeal.js';
-import { ChatbotMessage } from '../../../models/chatbotMessage.js';
+import { processConversationTurn } from './process-conversation-turn.js';
+import { ChatbotDeal } from '../../../models/chatbot-deal.js';
+import { ChatbotMessage } from '../../../models/chatbot-message.js';
 import logger from '../../../config/logger.js';
-import type { ConvoState } from './enhancedConvoRouter.js';
+import type { ConvoState } from './enhanced-convo-router.js';
 
 /**
  * Example: Processing a vendor message in conversation mode
@@ -115,7 +115,7 @@ export async function exampleTestTemplateSelection(): Promise<void> {
   const {
     selectTemplate,
     generateConversationMessage,
-  } = await import('./conversationTemplates.js');
+  } = await import('./conversation-templates.js');
 
   const dealId = 'test-deal-123';
 
@@ -205,7 +205,7 @@ export async function exampleMonitorConversationState(
  * Shows how to create a test deal with initialized conversation state
  */
 export async function exampleInitializeTestDeal(): Promise<string> {
-  const { initializeConvoState } = await import('./enhancedConvoRouter.js');
+  const { initializeConvoState } = await import('./enhanced-convo-router.js');
 
   // Create test deal
   const deal = await ChatbotDeal.create({
@@ -370,7 +370,7 @@ export async function exampleDecisionEngineIntegration(
 
   // Check if we should invoke decision engine
   const { shouldInvokeDecisionEngine } = await import(
-    './processConversationTurn.js'
+    './process-conversation-turn.js'
   );
 
   if (
@@ -466,7 +466,7 @@ export async function exampleUnitTests(): Promise<void> {
     classifyVendorIntent,
     initializeConvoState,
     handleRefusal,
-  } = await import('./enhancedConvoRouter.js');
+  } = await import('./enhanced-convo-router.js');
 
   // Test 1: Intent classification
   console.log('Test 1: Vendor Intent Classification');

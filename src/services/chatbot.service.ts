@@ -8,7 +8,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import models from '../models/index.js';
 import logger from '../config/logger.js';
-import type { ChatbotDeal } from '../models/chatbotDeal.js';
+import type { ChatbotDeal } from '../models/chatbot-deal.js';
 
 /**
  * Create a chatbot deal when vendor is attached to contract

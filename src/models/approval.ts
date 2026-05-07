@@ -11,7 +11,7 @@ import {
 } from 'sequelize';
 import type { User } from './user.js';
 import type { Requisition } from './requisition.js';
-import type { EmailLog } from './emailLog.js';
+import type { EmailLog } from './email-log.js';
 
 const approvalLevelEnum = ['L1', 'L2', 'L3'] as const;
 export type ApprovalLevelType = (typeof approvalLevelEnum)[number];

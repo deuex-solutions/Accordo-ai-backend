@@ -41,7 +41,7 @@ export const getVendor = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const vendorId = getNumericParam(req.params.vendorid);
+    const vendorId = getNumericParam(req.params.vendorId);
     const data = await getVendorService({ id: vendorId });
     res.status(200).json({ message: 'Vendor', data });
   } catch (error) {
@@ -81,7 +81,7 @@ export const updateVendor = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await updateVendorService(getParam(req.params.vendorid), req.body);
+    const data = await updateVendorService(getParam(req.params.vendorId), req.body);
     res.status(200).json({ message: 'Vendor updated successfully', data });
   } catch (error) {
     next(error);
@@ -97,7 +97,7 @@ export const deleteVendor = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await deleteVendorService(getParam(req.params.vendorid));
+    const data = await deleteVendorService(getParam(req.params.vendorId));
     res.status(200).json({ message: 'Vendor deleted successfully', data });
   } catch (error) {
     next(error);

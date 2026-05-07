@@ -53,7 +53,7 @@ export const updateCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await updateUserService(Number(req.params.customerid), req.body);
+    const data = await updateUserService(Number(req.params.customerId), req.body);
     res.status(201).json({ message: 'Customer updated successfully', data });
   } catch (error) {
     next(error);

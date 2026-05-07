@@ -14,7 +14,7 @@ import {
   checkScopeGuard,
   type ScopeGuardResult,
   type OffTopicCategory,
-} from '../../../src/modules/chatbot/engine/scopeGuard.js';
+} from '../../../src/modules/chatbot/engine/scope-guard.js';
 
 // ─────────────────────────────────────────────
 // Helpers

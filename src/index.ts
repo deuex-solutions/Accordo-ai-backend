@@ -3,7 +3,7 @@ import logger from './config/logger.js';
 import { connectDatabase } from './config/database.js';
 import createExpressApp from './loaders/express.js';
 import './models/index.js';
-import { startDeadlineScheduler, stopDeadlineScheduler } from './modules/bidComparison/scheduler/deadlineChecker.js';
+import { startDeadlineScheduler, stopDeadlineScheduler } from './modules/bid-comparison/scheduler/deadline-checker.js';
 
 interface ErrorWithStack extends Error {
   stack?: string;

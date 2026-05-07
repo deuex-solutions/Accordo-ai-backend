@@ -4,8 +4,8 @@
  * Data access layer for negotiation template CRUD operations.
  */
 
-import { ChatbotTemplate } from '../../models/chatbotTemplate.js';
-import { ChatbotTemplateParameter } from '../../models/chatbotTemplateParameter.js';
+import { ChatbotTemplate } from '../../models/chatbot-template.js';
+import { ChatbotTemplateParameter } from '../../models/chatbot-template-parameter.js';
 import { CustomError } from '../../utils/custom-error.js';
 
 export interface CreateTemplateData {

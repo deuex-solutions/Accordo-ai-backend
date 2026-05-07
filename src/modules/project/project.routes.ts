@@ -12,35 +12,35 @@ const projectRouter = Router();
 const moduleId = 1;
 
 projectRouter.post(
-  '/create',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   createProject
 );
 
 projectRouter.get(
-  '/get-all',
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getAllProjects
 );
 
 projectRouter.get(
-  '/get/:projectid',
+  '/:projectId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   getProject
 );
 
 projectRouter.put(
-  '/update/:projectid',
+  '/:projectId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 2),
   updateProject
 );
 
 projectRouter.delete(
-  '/delete/:projectid',
+  '/:projectId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   deleteProject

@@ -29,7 +29,7 @@ export const getPo = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await getPoService(Number(req.params.poid));
+    const data = await getPoService(Number(req.params.poId));
     res.status(200).json({ message: 'Po', data });
   } catch (error) {
     next(error);
@@ -42,7 +42,7 @@ export const downloadPo = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const buffer = await downloadPoService(Number(req.params.poid));
+    const buffer = await downloadPoService(Number(req.params.poId));
     res.contentType('application/pdf');
     res.send(buffer);
   } catch (error) {
@@ -76,7 +76,7 @@ export const cancelPo = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await cancelPoService(Number(req.params.poid));
+    const data = await cancelPoService(Number(req.params.poId));
     res.status(200).json({ message: 'Po cancelled successfully', data });
   } catch (error) {
     next(error);

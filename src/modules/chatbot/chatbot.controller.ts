@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
-import * as chatbotService from './chatbot.service.js';
-import { CustomError } from '../../utils/custom-error.js';
-import logger from '../../config/logger.js';
-import { getParam, getNumericParam } from '../../types/index.js';
+import { Request, Response, NextFunction } from "express";
+import * as chatbotService from "./chatbot.service.js";
+import { CustomError } from "../../utils/custom-error.js";
+import logger from "../../config/logger.js";
+import { getParam, getNumericParam } from "../../types/index.js";
 
 /**
  * Chatbot Controller
@@ -16,13 +16,21 @@ import { getParam, getNumericParam } from '../../types/index.js';
 export const createDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
-    const { title, counterparty, mode, templateId, requisitionId, contractId, vendorId } = req.body;
+    const {
+      title,
+      counterparty,
+      mode,
+      templateId,
+      requisitionId,
+      contractId,
+      vendorId,
+    } = req.body;
 
     if (!title) {
-      throw new CustomError('Title is required', 400);
+      throw new CustomError("Title is required", 400);
     }
 
     const deal = await chatbotService.createDealService({
@@ -37,7 +45,7 @@ export const createDeal = async (
     });
 
     logger.info(`Deal created: ${deal.id} by user ${req.context.userId}`);
-    res.status(201).json({ message: 'Deal created successfully', data: deal });
+    res.status(201).json({ message: "Deal created successfully", data: deal });
   } catch (error) {
     next(error);
   }
@@ -50,7 +58,7 @@ export const createDeal = async (
 export const createDealWithConfig = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await chatbotService.createDealWithConfigService({
@@ -58,15 +66,19 @@ export const createDealWithConfig = async (
       userId: req.context.userId,
     });
 
-    logger.info(`Deal with config created: ${result.id} by user ${req.context.userId}`);
+    logger.info(
+      `Deal with config created: ${result.id} by user ${req.context.userId}`,
+    );
 
     // Determine message based on email status
     const emailStatus = (result as any).emailStatus;
-    let message = 'Deal created successfully';
+    let message = "Deal created successfully";
     if (emailStatus && !emailStatus.success) {
-      message = 'Deal created successfully, but email notification to vendor failed';
+      message =
+        "Deal created successfully, but email notification to vendor failed";
     } else if (emailStatus && emailStatus.success) {
-      message = 'Deal created successfully and email notification sent to vendor';
+      message =
+        "Deal created successfully and email notification sent to vendor";
     }
 
     res.status(201).json({ message, data: result });
@@ -83,7 +95,7 @@ export const createDealWithConfig = async (
 export const getSmartDefaults = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     // Support both path params (new) and query params (legacy)
@@ -91,15 +103,20 @@ export const getSmartDefaults = async (
     const vendorIdParam = req.params.vendorId || req.query.vendorId;
 
     if (!rfqIdParam || !vendorIdParam) {
-      throw new CustomError('rfqId and vendorId are required', 400);
+      throw new CustomError("rfqId and vendorId are required", 400);
     }
 
     const defaults = await chatbotService.getSmartDefaultsService(
       getNumericParam(rfqIdParam as string),
-      getNumericParam(vendorIdParam as string)
+      getNumericParam(vendorIdParam as string),
     );
 
-    res.status(200).json({ message: 'Smart defaults retrieved successfully', data: defaults });
+    res
+      .status(200)
+      .json({
+        message: "Smart defaults retrieved successfully",
+        data: defaults,
+      });
   } catch (error) {
     next(error);
   }
@@ -119,7 +136,7 @@ export const getSmartDefaults = async (
 export const lookupDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -128,14 +145,14 @@ export const lookupDeal = async (
     // Validate that the deal has the required context values for nested URLs
     if (!result.deal.requisitionId || !result.deal.vendorId) {
       throw new CustomError(
-        'Deal is missing required requisitionId or vendorId. This deal cannot be used with the hierarchical API structure.',
-        400
+        "Deal is missing required requisitionId or vendorId. This deal cannot be used with the hierarchical API structure.",
+        400,
       );
     }
 
     // Return deal with context for frontend to use in subsequent calls
     res.status(200).json({
-      message: 'Deal lookup successful',
+      message: "Deal lookup successful",
       data: {
         deal: result.deal,
         messages: result.messages,
@@ -159,13 +176,15 @@ export const lookupDeal = async (
 export const getDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const result = await chatbotService.getDealService(dealId);
 
-    res.status(200).json({ message: 'Deal retrieved successfully', data: result });
+    res
+      .status(200)
+      .json({ message: "Deal retrieved successfully", data: result });
   } catch (error) {
     next(error);
   }
@@ -178,7 +197,7 @@ export const getDeal = async (
 export const listDeals = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const {
@@ -195,20 +214,25 @@ export const listDeals = async (
     const filters: chatbotService.ListDealsFilters = {};
     if (status) filters.status = status as any;
     if (mode) filters.mode = mode as any;
-    if (archived !== undefined) filters.archived = archived === 'true';
-    if (deleted !== undefined) filters.deleted = deleted === 'true';
+    if (archived !== undefined) filters.archived = archived === "true";
+    if (deleted !== undefined) filters.deleted = deleted === "true";
     if (userId) filters.userId = parseInt(userId as string, 10);
     if (vendorId) filters.vendorId = parseInt(vendorId as string, 10);
     // Super admin bypasses company isolation (sees all companies).
-    filters.companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
+    filters.companyId =
+      req.context?.userType === "super_admin"
+        ? null
+        : req.context?.companyId || null;
 
     const result = await chatbotService.listDealsService(
       filters,
       parseInt(page as string, 10),
-      parseInt(limit as string, 10)
+      parseInt(limit as string, 10),
     );
 
-    res.status(200).json({ message: 'Deals retrieved successfully', data: result });
+    res
+      .status(200)
+      .json({ message: "Deals retrieved successfully", data: result });
   } catch (error) {
     next(error);
   }
@@ -221,14 +245,14 @@ export const listDeals = async (
 export const processVendorMessage = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
-    const { content, role = 'VENDOR' } = req.body;
+    const { content, role = "VENDOR" } = req.body;
 
     if (!content) {
-      throw new CustomError('Message content is required', 400);
+      throw new CustomError("Message content is required", 400);
     }
 
     const result = await chatbotService.processVendorMessageService({
@@ -239,14 +263,14 @@ export const processVendorMessage = async (
     });
 
     logger.info(
-      `Vendor message processed for deal ${dealId}: ${result.decision.action}`
+      `Vendor message processed for deal ${dealId}: ${result.decision.action}`,
     );
 
     // Fetch updated deal and all messages to return to frontend
     const dealWithMessages = await chatbotService.getDealService(dealId);
 
     res.status(200).json({
-      message: 'Message processed successfully',
+      message: "Message processed successfully",
       data: {
         deal: dealWithMessages.deal,
         messages: dealWithMessages.messages,
@@ -267,7 +291,7 @@ export const processVendorMessage = async (
 export const resetDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -275,11 +299,11 @@ export const resetDeal = async (
 
     logger.info(`Deal reset: ${dealId} by user ${req.context.userId}`);
     res.status(200).json({
-      message: 'Deal reset successfully',
+      message: "Deal reset successfully",
       data: {
         deal,
         messages: [], // Messages are cleared on reset
-      }
+      },
     });
   } catch (error) {
     next(error);
@@ -293,13 +317,15 @@ export const resetDeal = async (
 export const getDealConfig = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const config = await chatbotService.getDealConfigService(dealId);
 
-    res.status(200).json({ message: 'Config retrieved successfully', data: { config } });
+    res
+      .status(200)
+      .json({ message: "Config retrieved successfully", data: { config } });
   } catch (error) {
     next(error);
   }
@@ -312,18 +338,19 @@ export const getDealConfig = async (
 export const getLastExplainability = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
-    const explainability = await chatbotService.getLastExplainabilityService(dealId);
+    const explainability =
+      await chatbotService.getLastExplainabilityService(dealId);
 
     if (!explainability) {
-      throw new CustomError('No explainability data found', 404);
+      throw new CustomError("No explainability data found", 404);
     }
 
     res.status(200).json({
-      message: 'Explainability retrieved successfully',
+      message: "Explainability retrieved successfully",
       data: explainability,
     });
   } catch (error) {
@@ -338,14 +365,14 @@ export const getLastExplainability = async (
 export const archiveDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const deal = await chatbotService.archiveDealService(dealId);
 
     logger.info(`Deal archived: ${dealId} by user ${req.context.userId}`);
-    res.status(200).json({ message: 'Deal archived successfully', data: deal });
+    res.status(200).json({ message: "Deal archived successfully", data: deal });
   } catch (error) {
     next(error);
   }
@@ -358,14 +385,16 @@ export const archiveDeal = async (
 export const unarchiveDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const deal = await chatbotService.unarchiveDealService(dealId);
 
     logger.info(`Deal unarchived: ${dealId} by user ${req.context.userId}`);
-    res.status(200).json({ message: 'Deal unarchived successfully', data: deal });
+    res
+      .status(200)
+      .json({ message: "Deal unarchived successfully", data: deal });
   } catch (error) {
     next(error);
   }
@@ -378,22 +407,24 @@ export const unarchiveDeal = async (
 export const retryDealEmail = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const result = await chatbotService.retryDealEmailService(dealId);
 
     if (result.success) {
-      logger.info(`Deal email retried successfully: ${dealId} by user ${req.context.userId}`);
+      logger.info(
+        `Deal email retried successfully: ${dealId} by user ${req.context.userId}`,
+      );
       res.status(200).json({
-        message: 'Email sent successfully',
+        message: "Email sent successfully",
         data: result,
       });
     } else {
       logger.warn(`Deal email retry failed: ${dealId} - ${result.error}`);
       res.status(200).json({
-        message: 'Email retry failed',
+        message: "Email retry failed",
         data: result,
       });
     }
@@ -409,19 +440,24 @@ export const retryDealEmail = async (
 export const createSystemMessage = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const { content } = req.body;
 
     if (!content) {
-      throw new CustomError('Message content is required', 400);
+      throw new CustomError("Message content is required", 400);
     }
 
-    const message = await chatbotService.createSystemMessageService(dealId, content);
+    const message = await chatbotService.createSystemMessageService(
+      dealId,
+      content,
+    );
 
-    res.status(201).json({ message: 'System message created successfully', data: message });
+    res
+      .status(201)
+      .json({ message: "System message created successfully", data: message });
   } catch (error) {
     next(error);
   }
@@ -438,13 +474,14 @@ export const createSystemMessage = async (
 export const startConversation = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const userId = req.context.userId;
 
-    const { startConversation } = await import('./convo/conversationService.js');
+    const { startConversation } =
+      await import("./convo/conversation-service.js");
     const result = await startConversation(dealId, userId);
 
     res.status(200).json(result);
@@ -460,7 +497,7 @@ export const startConversation = async (
 export const sendConversationMessage = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -468,10 +505,11 @@ export const sendConversationMessage = async (
     const userId = req.context.userId;
 
     if (!content) {
-      throw new CustomError('Message content is required', 400);
+      throw new CustomError("Message content is required", 400);
     }
 
-    const { processConversationMessage } = await import('./convo/conversationService.js');
+    const { processConversationMessage } =
+      await import("./convo/conversation-service.js");
     const result = await processConversationMessage({
       dealId,
       vendorMessage: content,
@@ -491,21 +529,29 @@ export const sendConversationMessage = async (
 export const getConversationExplainability = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const userId = req.context.userId;
 
-    const { getLastExplainability } = await import('./convo/conversationService.js');
+    const { getLastExplainability } =
+      await import("./convo/conversation-service.js");
     const explainability = await getLastExplainability(dealId, userId);
 
     if (!explainability) {
-      res.status(404).json({ message: 'No explainability available for this deal' });
+      res
+        .status(404)
+        .json({ message: "No explainability available for this deal" });
       return;
     }
 
-    res.status(200).json({ message: 'Explainability retrieved successfully', data: explainability });
+    res
+      .status(200)
+      .json({
+        message: "Explainability retrieved successfully",
+        data: explainability,
+      });
   } catch (error) {
     next(error);
   }
@@ -541,25 +587,29 @@ export const getConversationExplainability = async (
 export const runDemo = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const { scenario, maxRounds = 10 } = req.body;
 
     if (!scenario) {
-      throw new CustomError('Scenario is required', 400);
+      throw new CustomError("Scenario is required", 400);
     }
 
-    const validScenarios = ['HARD', 'MEDIUM', 'SOFT', 'WALK_AWAY'];
+    const validScenarios = ["HARD", "MEDIUM", "SOFT", "WALK_AWAY"];
     if (!validScenarios.includes(scenario)) {
       throw new CustomError(
-        `Invalid scenario: ${scenario}. Must be one of: ${validScenarios.join(', ')}`,
-        400
+        `Invalid scenario: ${scenario}. Must be one of: ${validScenarios.join(", ")}`,
+        400,
       );
     }
 
-    const result = await chatbotService.runDemoService(dealId, scenario, maxRounds);
+    const result = await chatbotService.runDemoService(
+      dealId,
+      scenario,
+      maxRounds,
+    );
 
     logger.info(`[RunDemo] Demo completed for deal ${dealId}`, {
       scenario,
@@ -569,7 +619,7 @@ export const runDemo = async (
     });
 
     res.status(200).json({
-      message: 'Demo completed successfully',
+      message: "Demo completed successfully",
       data: result,
     });
   } catch (error) {
@@ -590,7 +640,7 @@ export const runDemo = async (
 export const resumeDeal = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -601,7 +651,7 @@ export const resumeDeal = async (
     });
 
     res.status(200).json({
-      message: 'Deal resumed successfully',
+      message: "Deal resumed successfully",
       data: deal,
     });
   } catch (error) {
@@ -618,7 +668,7 @@ export const resumeDeal = async (
 export const getRequisitionsWithDeals = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const {
@@ -638,20 +688,23 @@ export const getRequisitionsWithDeals = async (
     if (dateFrom) filters.dateFrom = dateFrom as string;
     if (dateTo) filters.dateTo = dateTo as string;
     if (sortBy) filters.sortBy = sortBy as any;
-    if (archived) filters.archived = archived as 'active' | 'archived' | 'all';
+    if (archived) filters.archived = archived as "active" | "archived" | "all";
     // Super admin bypasses company isolation (sees all companies).
-    filters.companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
+    filters.companyId =
+      req.context?.userType === "super_admin"
+        ? null
+        : req.context?.companyId || null;
 
     const result = await chatbotService.getRequisitionsWithDealsService(
       filters,
       parseInt(page as string, 10),
-      parseInt(limit as string, 10)
+      parseInt(limit as string, 10),
     );
 
     // Transform response to match frontend expected structure
     // Frontend expects: { data: { requisitions: [...], total, page, totalPages } }
     res.status(200).json({
-      message: 'Requisitions retrieved successfully',
+      message: "Requisitions retrieved successfully",
       data: {
         requisitions: result.data,
         total: result.total,
@@ -671,7 +724,7 @@ export const getRequisitionsWithDeals = async (
 export const getRequisitionDeals = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     // Support both rfqId (new) and requisitionId (legacy) param names
@@ -679,20 +732,23 @@ export const getRequisitionDeals = async (
     const { status, sortBy, sortOrder, archived } = req.query;
 
     // Super admin bypasses company isolation (sees all companies).
-    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
+    const companyId =
+      req.context?.userType === "super_admin"
+        ? null
+        : req.context?.companyId || null;
     const result = await chatbotService.getRequisitionDealsService(
       getNumericParam(rfqIdParam),
       {
         status: status as string,
         sortBy: sortBy as string,
-        sortOrder: sortOrder as 'asc' | 'desc',
-        archived: archived as 'active' | 'archived' | 'all',
+        sortOrder: sortOrder as "asc" | "desc",
+        archived: archived as "active" | "archived" | "all",
       },
-      companyId
+      companyId,
     );
 
     res.status(200).json({
-      message: 'Requisition deals retrieved successfully',
+      message: "Requisition deals retrieved successfully",
       data: result,
     });
   } catch (error) {
@@ -707,14 +763,14 @@ export const getRequisitionDeals = async (
 export const getDealSummary = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const result = await chatbotService.getDealSummaryService(dealId);
 
     res.status(200).json({
-      message: 'Deal summary retrieved successfully',
+      message: "Deal summary retrieved successfully",
       data: result,
     });
   } catch (error) {
@@ -731,7 +787,7 @@ export const getDealSummary = async (
 export const exportDealPDF = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -739,9 +795,12 @@ export const exportDealPDF = async (
     const result = await chatbotService.exportDealPDFService(dealId, rfqId);
 
     // Set headers for PDF download
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
-    res.setHeader('Content-Length', result.data.length);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.filename}"`,
+    );
+    res.setHeader("Content-Length", result.data.length);
 
     res.send(result.data);
   } catch (error) {
@@ -758,16 +817,16 @@ export const exportDealPDF = async (
 export const emailDealPDF = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const rfqId = getNumericParam(req.params.rfqId);
     const { email } = req.body;
 
-    if (!email || typeof email !== 'string') {
+    if (!email || typeof email !== "string") {
       res.status(400).json({
-        message: 'Email address is required',
+        message: "Email address is required",
       });
       return;
     }
@@ -796,14 +855,14 @@ export const emailDealPDF = async (
 export const getDealUtility = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const result = await chatbotService.getDealUtilityService(dealId);
 
     res.status(200).json({
-      message: 'Utility calculated successfully',
+      message: "Utility calculated successfully",
       data: result,
     });
   } catch (error) {
@@ -821,14 +880,14 @@ export const getDealUtility = async (
 export const getVendorAddresses = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const vendorId = getNumericParam(req.params.vendorId);
     const addresses = await chatbotService.getVendorAddressesService(vendorId);
 
     res.status(200).json({
-      message: 'Vendor addresses retrieved successfully',
+      message: "Vendor addresses retrieved successfully",
       data: addresses,
     });
   } catch (error) {
@@ -843,14 +902,14 @@ export const getVendorAddresses = async (
 export const getBehavioralData = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const result = await chatbotService.getBehavioralDataService(dealId);
 
     res.status(200).json({
-      message: 'Behavioral data retrieved successfully',
+      message: "Behavioral data retrieved successfully",
       data: result,
     });
   } catch (error) {
@@ -869,15 +928,19 @@ export const getBehavioralData = async (
 export const getRequisitionsForNegotiation = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     // Super admin bypasses company isolation (sees all companies).
-    const companyId = req.context?.userType === 'super_admin' ? null : (req.context?.companyId || null);
-    const result = await chatbotService.getRequisitionsForNegotiationService(companyId);
+    const companyId =
+      req.context?.userType === "super_admin"
+        ? null
+        : req.context?.companyId || null;
+    const result =
+      await chatbotService.getRequisitionsForNegotiationService(companyId);
 
     res.status(200).json({
-      message: 'Requisitions for negotiation retrieved successfully',
+      message: "Requisitions for negotiation retrieved successfully",
       data: result,
     });
   } catch (error) {
@@ -892,14 +955,14 @@ export const getRequisitionsForNegotiation = async (
 export const getRequisitionVendors = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const rfqId = getNumericParam(req.params.rfqId);
     const result = await chatbotService.getRequisitionVendorsService(rfqId);
 
     res.status(200).json({
-      message: 'Requisition vendors retrieved successfully',
+      message: "Requisition vendors retrieved successfully",
       data: result,
     });
   } catch (error) {
@@ -915,20 +978,21 @@ export const getRequisitionVendors = async (
 export const sendMessage = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
-    const { content, role = 'VENDOR' } = req.body;
-    const { mode = 'CONVERSATION' } = req.query;
+    const { content, role = "VENDOR" } = req.body;
+    const { mode = "CONVERSATION" } = req.query;
 
     if (!content) {
-      throw new CustomError('Message content is required', 400);
+      throw new CustomError("Message content is required", 400);
     }
 
-    if (mode === 'CONVERSATION') {
+    if (mode === "CONVERSATION") {
       // Use CONVERSATION mode (LLM-driven)
-      const { processConversationMessage } = await import('./convo/conversationService.js');
+      const { processConversationMessage } =
+        await import("./convo/conversation-service.js");
       const result = await processConversationMessage({
         dealId,
         vendorMessage: content,
@@ -940,13 +1004,14 @@ export const sendMessage = async (
       const dealWithMessages = await chatbotService.getDealService(dealId);
 
       res.status(200).json({
-        message: 'Message processed successfully',
+        message: "Message processed successfully",
         data: {
           deal: dealWithMessages.deal,
           messages: dealWithMessages.messages,
           latestMessage: result.data?.accordoMessage,
           conversationState: result.data?.conversationState,
           dealStatus: result.data?.dealStatus,
+          meso: result.data?.meso ?? null,
         },
       });
     } else {
@@ -959,14 +1024,14 @@ export const sendMessage = async (
       });
 
       logger.info(
-        `Vendor message processed for deal ${dealId}: ${result.decision.action}`
+        `Vendor message processed for deal ${dealId}: ${result.decision.action}`,
       );
 
       // Fetch updated deal and all messages to return to frontend
       const dealWithMessages = await chatbotService.getDealService(dealId);
 
       res.status(200).json({
-        message: 'Message processed successfully',
+        message: "Message processed successfully",
         data: {
           deal: dealWithMessages.deal,
           messages: dealWithMessages.messages,
@@ -988,7 +1053,7 @@ export const sendMessage = async (
 export const saveDraft = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const rfqId = getNumericParam(req.params.rfqId);
@@ -1003,7 +1068,7 @@ export const saveDraft = async (
     });
 
     res.status(201).json({
-      message: 'Draft saved successfully',
+      message: "Draft saved successfully",
       data: draft,
     });
   } catch (error) {
@@ -1018,7 +1083,7 @@ export const saveDraft = async (
 export const listDrafts = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const rfqId = getNumericParam(req.params.rfqId);
@@ -1027,11 +1092,11 @@ export const listDrafts = async (
     const drafts = await chatbotService.listDraftsService(
       rfqId,
       vendorId,
-      req.context.userId
+      req.context.userId,
     );
 
     res.status(200).json({
-      message: 'Drafts retrieved successfully',
+      message: "Drafts retrieved successfully",
       data: drafts,
     });
   } catch (error) {
@@ -1046,7 +1111,7 @@ export const listDrafts = async (
 export const getDraft = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const draftId = getParam(req.params.draftId);
@@ -1054,7 +1119,7 @@ export const getDraft = async (
     const draft = await chatbotService.getDraftService(draftId);
 
     res.status(200).json({
-      message: 'Draft retrieved successfully',
+      message: "Draft retrieved successfully",
       data: draft,
     });
   } catch (error) {
@@ -1069,7 +1134,7 @@ export const getDraft = async (
 export const deleteDraft = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const draftId = getParam(req.params.draftId);
@@ -1077,7 +1142,7 @@ export const deleteDraft = async (
     await chatbotService.deleteDraftService(draftId);
 
     res.status(200).json({
-      message: 'Draft deleted successfully',
+      message: "Draft deleted successfully",
     });
   } catch (error) {
     next(error);
@@ -1095,16 +1160,18 @@ export const deleteDraft = async (
 export const startNegotiation = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
 
     const result = await chatbotService.startNegotiationService(dealId);
 
-    logger.info(`Negotiation started for deal ${dealId} with AI-PM opening offer`);
+    logger.info(
+      `Negotiation started for deal ${dealId} with AI-PM opening offer`,
+    );
     res.status(200).json({
-      message: 'Negotiation started successfully',
+      message: "Negotiation started successfully",
       data: result,
     });
   } catch (error) {
@@ -1119,7 +1186,7 @@ export const startNegotiation = async (
 export const getVendorScenarios = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1127,7 +1194,7 @@ export const getVendorScenarios = async (
     const scenarios = await chatbotService.getVendorScenariosService(dealId);
 
     res.status(200).json({
-      message: 'Vendor scenarios retrieved successfully',
+      message: "Vendor scenarios retrieved successfully",
       data: scenarios,
     });
   } catch (error) {
@@ -1142,25 +1209,27 @@ export const getVendorScenarios = async (
 export const vendorSendMessage = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
     const { content } = req.body;
 
     if (!content || !content.trim()) {
-      throw new CustomError('Message content is required', 400);
+      throw new CustomError("Message content is required", 400);
     }
 
     const result = await chatbotService.vendorSendMessageService(
       dealId,
       content,
-      req.context.userId
+      req.context.userId,
     );
 
-    logger.info(`Vendor message processed for deal ${dealId}: AI-PM responded with ${result.pmDecision.action}`);
+    logger.info(
+      `Vendor message processed for deal ${dealId}: AI-PM responded with ${result.pmDecision.action}`,
+    );
     res.status(200).json({
-      message: 'Message processed successfully',
+      message: "Message processed successfully",
       data: result,
     });
   } catch (error) {
@@ -1196,7 +1265,7 @@ export const vendorSendMessage = async (
 export const saveVendorMessageInstant = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1204,7 +1273,7 @@ export const saveVendorMessageInstant = async (
     const userId = req.context.userId;
 
     if (!content || !content.trim()) {
-      throw new CustomError('Message content is required', 400);
+      throw new CustomError("Message content is required", 400);
     }
 
     const result = await chatbotService.saveVendorMessageOnlyService({
@@ -1215,9 +1284,9 @@ export const saveVendorMessageInstant = async (
 
     logger.info(`[Phase1] Vendor message saved instantly for deal ${dealId}`);
     res.status(200).json({
-      message: 'Vendor message saved',
+      message: "Vendor message saved",
       data: {
-        vendorMessage: result.message,  // Named vendorMessage for frontend consistency
+        vendorMessage: result.message, // Named vendorMessage for frontend consistency
         deal: result.deal,
         extractedOffer: result.extractedOffer,
         pmProcessing: result.pmProcessing,
@@ -1254,7 +1323,7 @@ export const saveVendorMessageInstant = async (
 export const generatePMResponseAsync = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1262,7 +1331,7 @@ export const generatePMResponseAsync = async (
     const userId = req.context.userId;
 
     if (!vendorMessageId) {
-      throw new CustomError('vendorMessageId is required', 400);
+      throw new CustomError("vendorMessageId is required", 400);
     }
 
     const result = await chatbotService.generatePMResponseAsyncService({
@@ -1271,16 +1340,18 @@ export const generatePMResponseAsync = async (
       userId,
     });
 
-    logger.info(`[Phase2] PM response generated for deal ${dealId}: ${result.decision.action}`);
+    logger.info(
+      `[Phase2] PM response generated for deal ${dealId}: ${result.decision.action}`,
+    );
     res.status(200).json({
-      message: 'PM response generated',
+      message: "PM response generated",
       data: {
-        pmMessage: result.message,  // Named pmMessage for frontend consistency
+        pmMessage: result.message, // Named pmMessage for frontend consistency
         decision: result.decision,
         explainability: result.explainability,
         deal: result.deal,
         generationSource: result.generationSource,
-        meso: result.meso ?? null,  // Include MESO options for frontend
+        meso: result.meso ?? null, // Include MESO options for frontend
       },
     });
   } catch (error) {
@@ -1312,7 +1383,7 @@ export const generatePMResponseAsync = async (
 export const generatePMResponseFallback = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1320,7 +1391,7 @@ export const generatePMResponseFallback = async (
     const userId = req.context.userId;
 
     if (!vendorMessageId) {
-      throw new CustomError('vendorMessageId is required', 400);
+      throw new CustomError("vendorMessageId is required", 400);
     }
 
     const result = await chatbotService.generatePMFallbackResponseService({
@@ -1331,9 +1402,9 @@ export const generatePMResponseFallback = async (
 
     logger.info(`[Fallback] PM fallback response generated for deal ${dealId}`);
     res.status(200).json({
-      message: 'PM fallback response generated',
+      message: "PM fallback response generated",
       data: {
-        pmMessage: result.message,  // Named pmMessage for frontend consistency
+        pmMessage: result.message, // Named pmMessage for frontend consistency
         decision: result.decision,
         explainability: result.explainability,
         deal: result.deal,
@@ -1360,7 +1431,7 @@ export const generatePMResponseFallback = async (
 export const processMesoSelection = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1372,14 +1443,16 @@ export const processMesoSelection = async (
       userId: req.context.userId,
     });
 
-    logger.info(`MESO selection processed for deal ${dealId}: option ${selectedOptionId}`);
+    logger.info(
+      `MESO selection processed for deal ${dealId}: option ${selectedOptionId}`,
+    );
     res.status(200).json({
-      message: 'Deal accepted successfully',
+      message: "Deal accepted successfully",
       data: {
         deal: result.deal,
         message: result.message,
         selectedOption: result.selectedOption,
-        phase: 'DEAL_ACCEPTED',
+        phase: "DEAL_ACCEPTED",
       },
     });
   } catch (error) {
@@ -1399,7 +1472,7 @@ export const processMesoSelection = async (
 export const processOthersSelection = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1412,9 +1485,11 @@ export const processOthersSelection = async (
       userId: req.context.userId,
     });
 
-    logger.info(`Others selection processed for deal ${dealId}: $${totalPrice}, Net ${paymentTermsDays}`);
+    logger.info(
+      `Others selection processed for deal ${dealId}: $${totalPrice}, Net ${paymentTermsDays}`,
+    );
     res.status(200).json({
-      message: 'Counter-offer submitted successfully',
+      message: "Counter-offer submitted successfully",
       data: {
         pmMessage: result.message,
         decision: result.decision,
@@ -1439,7 +1514,7 @@ export const processOthersSelection = async (
 export const processFinalOfferConfirmation = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
@@ -1451,15 +1526,19 @@ export const processFinalOfferConfirmation = async (
       userId: req.context.userId,
     });
 
-    logger.info(`Final offer confirmation for deal ${dealId}: confirmed=${isConfirmedFinal}`);
+    logger.info(
+      `Final offer confirmation for deal ${dealId}: confirmed=${isConfirmedFinal}`,
+    );
     res.status(200).json({
-      message: isConfirmedFinal ? 'Final offers generated' : 'Continuing negotiation',
+      message: isConfirmedFinal
+        ? "Final offers generated"
+        : "Continuing negotiation",
       data: {
         deal: result.deal,
         message: result.message,
         meso: result.meso,
         continueNegotiation: result.continueNegotiation,
-        phase: result.continueNegotiation ? 'NORMAL_NEGOTIATION' : 'FINAL_MESO',
+        phase: result.continueNegotiation ? "NORMAL_NEGOTIATION" : "FINAL_MESO",
       },
     });
   } catch (error) {
@@ -1474,7 +1553,7 @@ export const processFinalOfferConfirmation = async (
 export const archiveRequisition = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const rfqId = getNumericParam(req.params.rfqId);
@@ -1495,12 +1574,15 @@ export const archiveRequisition = async (
 export const unarchiveRequisition = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const rfqId = getNumericParam(req.params.rfqId);
     const unarchiveDeals = req.body.unarchiveDeals !== false; // Default true
-    const result = await chatbotService.unarchiveRequisitionService(rfqId, unarchiveDeals);
+    const result = await chatbotService.unarchiveRequisitionService(
+      rfqId,
+      unarchiveDeals,
+    );
     res.status(200).json({
       message: `Requisition unarchived successfully. ${result.unarchivedDealsCount} deals also unarchived.`,
       data: result,
@@ -1509,4 +1591,3 @@ export const unarchiveRequisition = async (
     next(error);
   }
 };
-

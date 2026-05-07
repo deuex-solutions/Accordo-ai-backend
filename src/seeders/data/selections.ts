@@ -4,10 +4,10 @@
  * Approval workflow based on amount thresholds
  */
 
-import { generateUUID, generatePoNumber } from '../helpers/idGenerator.js';
-import { daysFromDate, daysFromNow } from '../helpers/dateUtils.js';
+import { generateUUID, generatePoNumber } from '../helpers/id-generator.js';
+import { daysFromDate, daysFromNow } from '../helpers/date-utils.js';
 import { allRequisitions, type RequisitionData } from './requisitions.js';
-import { allBidComparisons, allVendorBids, getBidsByRequisition, type VendorBidData, type BidComparisonData } from './vendorBids.js';
+import { allBidComparisons, allVendorBids, getBidsByRequisition, type VendorBidData, type BidComparisonData } from './vendor-bids.js';
 import { vendorCompanies } from './companies.js';
 import { getApprovers, enterpriseUsers } from './users.js';
 

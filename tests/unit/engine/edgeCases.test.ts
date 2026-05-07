@@ -10,33 +10,33 @@
 import { describe, it, expect } from 'vitest';
 
 // Feature #2: Scope Guard
-import { checkScopeGuard } from '../../../src/modules/chatbot/engine/scopeGuard.js';
+import { checkScopeGuard } from '../../../src/modules/chatbot/engine/scope-guard.js';
 
 // Feature #4: Personality Layer
 import {
   detectMilestone,
   getPersonalityEnrichment,
   applyPersonality,
-} from '../../../src/modules/chatbot/engine/personalityLayer.js';
+} from '../../../src/modules/chatbot/engine/personality-layer.js';
 
 // Feature #5: Error Recovery
 import {
   classifyError,
   getErrorFallbackResponse,
   buildPartialResult,
-} from '../../../src/modules/chatbot/engine/errorRecovery.js';
+} from '../../../src/modules/chatbot/engine/error-recovery.js';
 
 // Feature #6: History Sanitization
-import { sanitizeNegotiationHistory } from '../../../src/modules/chatbot/engine/historySanitizer.js';
+import { sanitizeNegotiationHistory } from '../../../src/modules/chatbot/engine/history-sanitizer.js';
 
 // Feature #7: Dynamic Prompt Addenda
-import { generatePromptAddenda } from '../../../src/modules/chatbot/engine/promptAddenda.js';
+import { generatePromptAddenda } from '../../../src/modules/chatbot/engine/prompt-addenda.js';
 
 // Feature #9: Tone Templates
 import {
   getToneAwareTemplate,
   type TemplateContext,
-} from '../../../src/modules/chatbot/engine/toneTemplates.js';
+} from '../../../src/modules/chatbot/engine/tone-templates.js';
 
 // Feature #12: State Machine
 import {
@@ -48,7 +48,7 @@ import {
   getTargetState,
   type DealState,
   type TransitionEvent,
-} from '../../../src/modules/chatbot/engine/negotiationStateMachine.js';
+} from '../../../src/modules/chatbot/engine/negotiation-state-machine.js';
 
 // ═══════════════════════════════════════════════════════════════
 // 1. SCOPE GUARD — Adversarial & Edge Inputs

@@ -59,7 +59,7 @@ export const getProduct = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await getProductService({ id: Number(req.params.productid) });
+    const data = await getProductService({ id: Number(req.params.productId) });
     res.status(201).json({ message: 'Product', data });
   } catch (error) {
     next(error);
@@ -72,7 +72,7 @@ export const updateProduct = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await updateProductService(Number(req.params.productid), req.body);
+    const data = await updateProductService(Number(req.params.productId), req.body);
     res.status(201).json({ message: 'Product updated successfully', data });
   } catch (error) {
     next(error);
@@ -85,7 +85,7 @@ export const deleteProduct = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await deleteProductService({ id: Number(req.params.productid) });
+    const data = await deleteProductService({ id: Number(req.params.productId) });
     res.status(201).json({ message: 'Product deleted successfully', data });
   } catch (error) {
     next(error);

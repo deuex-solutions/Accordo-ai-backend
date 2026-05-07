@@ -20,7 +20,7 @@ import {
   ACTIVE_STATES,
   type DealState,
   type TransitionEvent,
-} from '../../../src/modules/chatbot/engine/negotiationStateMachine.js';
+} from '../../../src/modules/chatbot/engine/negotiation-state-machine.js';
 
 // ─────────────────────────────────────────────
 // Valid transitions from NEGOTIATING

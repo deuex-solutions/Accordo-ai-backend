@@ -1,10 +1,10 @@
-'use strict';
+"use strict";
 
 async function safeCreateTable(queryInterface, tableName, attributes, options) {
   try {
     await queryInterface.createTable(tableName, attributes, options);
   } catch (e) {
-    if (e.message && e.message.includes('already exists')) return;
+    if (e.message && e.message.includes("already exists")) return;
     throw e;
   }
 }
@@ -13,7 +13,7 @@ async function safeAddIndex(queryInterface, table, fields, options) {
   try {
     await queryInterface.addIndex(table, fields, options);
   } catch (e) {
-    if (e.message && e.message.includes('already exists')) return;
+    if (e.message && e.message.includes("already exists")) return;
     throw e;
   }
 }
@@ -21,7 +21,7 @@ async function safeAddIndex(queryInterface, table, fields, options) {
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── chatbot_templates ──
-    await safeCreateTable(queryInterface,'chatbot_templates', {
+    await safeCreateTable(queryInterface, "chatbot_templates", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -56,7 +56,7 @@ module.exports = {
     });
 
     // ── Preferences ──
-    await safeCreateTable(queryInterface,'Preferences', {
+    await safeCreateTable(queryInterface, "Preferences", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -74,7 +74,7 @@ module.exports = {
       context: {
         type: Sequelize.STRING,
         allowNull: true,
-        defaultValue: 'global',
+        defaultValue: "global",
       },
       weights: {
         type: Sequelize.JSONB,
@@ -95,7 +95,7 @@ module.exports = {
     });
 
     // ── chatbot_template_parameters ──
-    await safeCreateTable(queryInterface,'chatbot_template_parameters', {
+    await safeCreateTable(queryInterface, "chatbot_template_parameters", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -106,20 +106,20 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'chatbot_templates',
-          key: 'id',
+          model: "chatbot_templates",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       parameter_key: {
         type: Sequelize.STRING,
         allowNull: false,
       },
       parameter_type: {
-        type: Sequelize.ENUM('number', 'string', 'boolean', 'date'),
+        type: Sequelize.ENUM("number", "string", "boolean", "date"),
         allowNull: false,
-        defaultValue: 'number',
+        defaultValue: "number",
       },
       weight: {
         type: Sequelize.DECIMAL(5, 2),
@@ -148,7 +148,7 @@ module.exports = {
     });
 
     // ── chatbot_deals ──
-    await safeCreateTable(queryInterface,'chatbot_deals', {
+    await safeCreateTable(queryInterface, "chatbot_deals", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -164,9 +164,14 @@ module.exports = {
         allowNull: true,
       },
       status: {
-        type: Sequelize.ENUM('NEGOTIATING', 'ACCEPTED', 'WALKED_AWAY', 'ESCALATED'),
+        type: Sequelize.ENUM(
+          "NEGOTIATING",
+          "ACCEPTED",
+          "WALKED_AWAY",
+          "ESCALATED",
+        ),
         allowNull: false,
-        defaultValue: 'NEGOTIATING',
+        defaultValue: "NEGOTIATING",
       },
       round: {
         type: Sequelize.INTEGER,
@@ -174,9 +179,9 @@ module.exports = {
         defaultValue: 0,
       },
       mode: {
-        type: Sequelize.ENUM('INSIGHTS', 'CONVERSATION'),
+        type: Sequelize.ENUM("INSIGHTS", "CONVERSATION"),
         allowNull: false,
-        defaultValue: 'CONVERSATION',
+        defaultValue: "CONVERSATION",
       },
       latest_offer_json: {
         type: Sequelize.JSONB,
@@ -202,55 +207,60 @@ module.exports = {
         type: Sequelize.JSONB,
         allowNull: true,
       },
+      open_questions: {
+        type: Sequelize.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
       template_id: {
         type: Sequelize.UUID,
         allowNull: true,
         references: {
-          model: 'chatbot_templates',
-          key: 'id',
+          model: "chatbot_templates",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       requisition_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
         references: {
-          model: 'Requisitions',
-          key: 'id',
+          model: "Requisitions",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       contract_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
         references: {
-          model: 'Contracts',
-          key: 'id',
+          model: "Contracts",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       user_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
         references: {
-          model: 'User',
-          key: 'id',
+          model: "User",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       vendor_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
         references: {
-          model: 'User',
-          key: 'id',
+          model: "User",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       archived_at: {
         type: Sequelize.DATE,
@@ -285,7 +295,7 @@ module.exports = {
     });
 
     // ── chatbot_messages ──
-    await safeCreateTable(queryInterface,'chatbot_messages', {
+    await safeCreateTable(queryInterface, "chatbot_messages", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -296,14 +306,14 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'chatbot_deals',
-          key: 'id',
+          model: "chatbot_deals",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       role: {
-        type: Sequelize.ENUM('VENDOR', 'ACCORDO', 'SYSTEM'),
+        type: Sequelize.ENUM("VENDOR", "ACCORDO", "SYSTEM"),
         allowNull: false,
       },
       content: {
@@ -346,7 +356,7 @@ module.exports = {
     });
 
     // ── meso_rounds ──
-    await safeCreateTable(queryInterface,'meso_rounds', {
+    await safeCreateTable(queryInterface, "meso_rounds", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -357,88 +367,89 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'chatbot_deals',
-          key: 'id',
+          model: "chatbot_deals",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       round: {
         type: Sequelize.INTEGER,
         allowNull: false,
-        comment: 'Negotiation round number when MESO was generated',
+        comment: "Negotiation round number when MESO was generated",
       },
       options: {
         type: Sequelize.JSONB,
         allowNull: false,
-        comment: 'Array of MesoOption objects presented to vendor',
+        comment: "Array of MesoOption objects presented to vendor",
       },
       target_utility: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Target utility score for all options',
+        comment: "Target utility score for all options",
       },
       variance: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Actual variance between option utilities',
+        comment: "Actual variance between option utilities",
       },
       vendor_selection: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Vendor selection details (option ID, offer, inferred preferences)',
+        comment:
+          "Vendor selection details (option ID, offer, inferred preferences)",
       },
       selected_option_id: {
         type: Sequelize.STRING,
         allowNull: true,
-        comment: 'ID of the selected MESO option',
+        comment: "ID of the selected MESO option",
       },
       inferred_preferences: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Inferred vendor preferences from selection',
+        comment: "Inferred vendor preferences from selection",
       },
       preference_confidence: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Confidence in inferred preferences (0-1)',
+        comment: "Confidence in inferred preferences (0-1)",
       },
       metadata: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Additional metadata (strategy used, etc.)',
+        comment: "Additional metadata (strategy used, etc.)",
       },
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+        defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
       updated_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+        defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
 
-    await safeAddIndex(queryInterface,'meso_rounds', ['deal_id'], {
-      name: 'idx_meso_rounds_deal_id',
+    await safeAddIndex(queryInterface, "meso_rounds", ["deal_id"], {
+      name: "idx_meso_rounds_deal_id",
     });
-    await safeAddIndex(queryInterface,'meso_rounds', ['round'], {
-      name: 'idx_meso_rounds_round',
+    await safeAddIndex(queryInterface, "meso_rounds", ["round"], {
+      name: "idx_meso_rounds_round",
     });
-    await safeAddIndex(queryInterface,'meso_rounds', ['deal_id', 'round'], {
-      name: 'idx_meso_rounds_deal_round',
+    await safeAddIndex(queryInterface, "meso_rounds", ["deal_id", "round"], {
+      name: "idx_meso_rounds_deal_round",
       unique: true,
     });
-    await safeAddIndex(queryInterface,'meso_rounds', ['selected_option_id'], {
-      name: 'idx_meso_rounds_selected_option',
+    await safeAddIndex(queryInterface, "meso_rounds", ["selected_option_id"], {
+      name: "idx_meso_rounds_selected_option",
     });
-    await safeAddIndex(queryInterface,'meso_rounds', ['created_at'], {
-      name: 'idx_meso_rounds_created_at',
+    await safeAddIndex(queryInterface, "meso_rounds", ["created_at"], {
+      name: "idx_meso_rounds_created_at",
     });
 
     // ── vendor_negotiation_profiles ──
-    await safeCreateTable(queryInterface,'vendor_negotiation_profiles', {
+    await safeCreateTable(queryInterface, "vendor_negotiation_profiles", {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -450,145 +461,177 @@ module.exports = {
         allowNull: false,
         unique: true,
         references: {
-          model: 'User',
-          key: 'id',
+          model: "User",
+          key: "id",
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       total_deals: {
         type: Sequelize.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        comment: 'Total number of deals analyzed for this vendor',
+        comment: "Total number of deals analyzed for this vendor",
       },
       accepted_deals: {
         type: Sequelize.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        comment: 'Number of deals that ended in acceptance',
+        comment: "Number of deals that ended in acceptance",
       },
       walked_away_deals: {
         type: Sequelize.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        comment: 'Number of deals that ended in walk-away',
+        comment: "Number of deals that ended in walk-away",
       },
       escalated_deals: {
         type: Sequelize.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        comment: 'Number of deals that were escalated',
+        comment: "Number of deals that were escalated",
       },
       avg_concession_rate: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Average price concession rate per round',
+        comment: "Average price concession rate per round",
       },
       avg_rounds_to_close: {
         type: Sequelize.DECIMAL(10, 2),
         allowNull: true,
-        comment: 'Average number of rounds to close a deal',
+        comment: "Average number of rounds to close a deal",
       },
       avg_final_utility: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Average final utility score achieved',
+        comment: "Average final utility score achieved",
       },
       avg_price_reduction: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Average price reduction percentage achieved',
+        comment: "Average price reduction percentage achieved",
       },
       preferred_terms: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Preferred negotiation terms (payment, delivery, etc.)',
+        comment: "Preferred negotiation terms (payment, delivery, etc.)",
       },
       negotiation_style: {
-        type: Sequelize.ENUM('aggressive', 'collaborative', 'passive', 'unknown'),
+        type: Sequelize.ENUM(
+          "aggressive",
+          "collaborative",
+          "passive",
+          "unknown",
+        ),
         allowNull: false,
-        defaultValue: 'unknown',
-        comment: 'Detected negotiation style',
+        defaultValue: "unknown",
+        comment: "Detected negotiation style",
       },
       style_confidence: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Confidence in style detection (0-1)',
+        comment: "Confidence in style detection (0-1)",
       },
       success_rate: {
         type: Sequelize.DECIMAL(10, 4),
         allowNull: true,
-        comment: 'Overall negotiation success rate (0-1)',
+        comment: "Overall negotiation success rate (0-1)",
       },
       behavior_embedding: {
         type: Sequelize.ARRAY(Sequelize.FLOAT),
         allowNull: true,
-        comment: 'Vector embedding of vendor behavior for similarity search',
+        comment: "Vector embedding of vendor behavior for similarity search",
       },
       response_time_stats: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Statistics on vendor response times (avg, min, max)',
+        comment: "Statistics on vendor response times (avg, min, max)",
       },
       concession_patterns: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Patterns in how vendor makes concessions',
+        comment: "Patterns in how vendor makes concessions",
       },
       meso_preferences: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Inferred preferences from MESO selections',
+        comment: "Inferred preferences from MESO selections",
       },
       metadata: {
         type: Sequelize.JSONB,
         allowNull: true,
-        comment: 'Additional metadata for analysis',
+        comment: "Additional metadata for analysis",
       },
       last_deal_at: {
         type: Sequelize.DATE,
         allowNull: true,
-        comment: 'Timestamp of last deal with this vendor',
+        comment: "Timestamp of last deal with this vendor",
       },
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+        defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
       updated_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+        defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
 
-    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['vendor_id'], {
-      name: 'idx_vendor_negotiation_profiles_vendor_id',
-      unique: true,
-    });
-    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['negotiation_style'], {
-      name: 'idx_vendor_negotiation_profiles_style',
-    });
-    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['success_rate'], {
-      name: 'idx_vendor_negotiation_profiles_success_rate',
-    });
-    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['total_deals'], {
-      name: 'idx_vendor_negotiation_profiles_total_deals',
-    });
-    await safeAddIndex(queryInterface,'vendor_negotiation_profiles', ['last_deal_at'], {
-      name: 'idx_vendor_negotiation_profiles_last_deal',
-    });
+    await safeAddIndex(
+      queryInterface,
+      "vendor_negotiation_profiles",
+      ["vendor_id"],
+      {
+        name: "idx_vendor_negotiation_profiles_vendor_id",
+        unique: true,
+      },
+    );
+    await safeAddIndex(
+      queryInterface,
+      "vendor_negotiation_profiles",
+      ["negotiation_style"],
+      {
+        name: "idx_vendor_negotiation_profiles_style",
+      },
+    );
+    await safeAddIndex(
+      queryInterface,
+      "vendor_negotiation_profiles",
+      ["success_rate"],
+      {
+        name: "idx_vendor_negotiation_profiles_success_rate",
+      },
+    );
+    await safeAddIndex(
+      queryInterface,
+      "vendor_negotiation_profiles",
+      ["total_deals"],
+      {
+        name: "idx_vendor_negotiation_profiles_total_deals",
+      },
+    );
+    await safeAddIndex(
+      queryInterface,
+      "vendor_negotiation_profiles",
+      ["last_deal_at"],
+      {
+        name: "idx_vendor_negotiation_profiles_last_deal",
+      },
+    );
   },
 
   async down(queryInterface) {
-    await queryInterface.dropTable('vendor_negotiation_profiles');
-    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_vendor_negotiation_profiles_negotiation_style";');
-    await queryInterface.dropTable('meso_rounds');
-    await queryInterface.dropTable('chatbot_messages');
-    await queryInterface.dropTable('chatbot_deals');
-    await queryInterface.dropTable('chatbot_template_parameters');
-    await queryInterface.dropTable('Preferences');
-    await queryInterface.dropTable('chatbot_templates');
+    await queryInterface.dropTable("vendor_negotiation_profiles");
+    await queryInterface.sequelize.query(
+      'DROP TYPE IF EXISTS "enum_vendor_negotiation_profiles_negotiation_style";',
+    );
+    await queryInterface.dropTable("meso_rounds");
+    await queryInterface.dropTable("chatbot_messages");
+    await queryInterface.dropTable("chatbot_deals");
+    await queryInterface.dropTable("chatbot_template_parameters");
+    await queryInterface.dropTable("Preferences");
+    await queryInterface.dropTable("chatbot_templates");
   },
 };

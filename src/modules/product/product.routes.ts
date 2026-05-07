@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createProduct,
   getAllProducts,
@@ -6,64 +6,67 @@ import {
   updateProduct,
   deleteProduct,
   getAllProduct,
-} from './product.controller.js';
-import { authMiddleware, checkPermission } from '../../middlewares/auth.middleware.js';
+} from "./product.controller.js";
+import {
+  authMiddleware,
+  checkPermission,
+} from "../../middlewares/auth.middleware.js";
 import {
   validateBody,
   validateParams,
   createProductSchema,
   updateProductSchema,
   productIdSchema,
-} from './product.validator.js';
+} from "./product.validator.js";
 
 const productRouter = Router();
 const moduleId = 4;
 
 productRouter.post(
-  '/create',
+  "/",
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   validateBody(createProductSchema),
-  createProduct
+  createProduct,
 );
 
 productRouter.get(
-  '/get-all',
+  "/",
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getAllProducts
+  getAllProducts,
 );
 
 productRouter.get(
-  '/get/:productid',
+  "/all",
+  authMiddleware,
+  (req, res, next) => checkPermission(req, res, next, moduleId, 1),
+  getAllProduct,
+);
+
+productRouter.get(
+  "/:productId",
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
   validateParams(productIdSchema),
-  getProduct
-);
-
-productRouter.get(
-  '/getall',
-  authMiddleware,
-  (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getAllProduct
+  getProduct,
 );
 
 productRouter.put(
-  '/update/:productid',
+  "/:productId",
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 2),
   validateParams(productIdSchema),
   validateBody(updateProductSchema),
-  updateProduct
+  updateProduct,
 );
 
 productRouter.delete(
-  '/delete/:productid',
+  "/:productId",
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
   validateParams(productIdSchema),
-  deleteProduct
+  deleteProduct,
 );
 
 export default productRouter;

@@ -1,7 +1,7 @@
 import repo from './permission.repo.js';
 import { CustomError } from '../../utils/custom-error.js';
 import userRepo from '../user/user.repo.js';
-import type { RolePermission } from '../../models/rolePermission.js';
+import type { RolePermission } from '../../models/role-permission.js';
 
 export const getPermissionService = async (
   userId: number

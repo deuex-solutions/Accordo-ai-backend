@@ -14,7 +14,7 @@ import {
   sanitizeNegotiationHistory,
   type SanitizableMessage,
   type SanitizationResult,
-} from '../../../src/modules/chatbot/engine/historySanitizer.js';
+} from '../../../src/modules/chatbot/engine/history-sanitizer.js';
 
 // ─────────────────────────────────────────────
 // Constants

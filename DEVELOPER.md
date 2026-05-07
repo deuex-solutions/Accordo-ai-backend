@@ -2,18 +2,18 @@
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js 20, TypeScript 5.7 (ESM) |
-| Framework | Express 4.21 |
-| Database | PostgreSQL 15+ via Sequelize 6.37 |
-| Auth | JWT (jsonwebtoken + bcrypt) |
-| LLM | OpenAI GPT-3.5 → Ollama (qwen3) → fallback templates |
-| Email | Nodemailer + AWS SES SMTP |
-| Validation | Joi 17 + Zod 4 |
-| Logging | Winston 3 with daily rotation |
-| Testing | Vitest 4 + Supertest |
-| Docs | Swagger (swagger-jsdoc + swagger-ui-express) |
+| Layer      | Technology                                           |
+| ---------- | ---------------------------------------------------- |
+| Runtime    | Node.js 20, TypeScript 5.7 (ESM)                     |
+| Framework  | Express 4.21                                         |
+| Database   | PostgreSQL 15+ via Sequelize 6.37                    |
+| Auth       | JWT (jsonwebtoken + bcrypt)                          |
+| LLM        | OpenAI GPT-3.5 → Ollama (qwen3) → fallback templates |
+| Email      | Nodemailer + AWS SES SMTP                            |
+| Validation | Joi 17 + Zod 4                                       |
+| Logging    | Winston 3 with daily rotation                        |
+| Testing    | Vitest 4 + Supertest                                 |
+| Docs       | Swagger (swagger-jsdoc + swagger-ui-express)         |
 
 ---
 
@@ -31,16 +31,16 @@ The dev server auto-creates the database, runs migrations, seeds data, and watch
 
 ### Available Scripts
 
-| Script | Description |
-|---|---|
-| `npm run dev` | Dev server with hot-reload (tsx watch) |
-| `npm run build` | Compile TypeScript → `dist/` |
-| `npm start` | Run compiled production build |
-| `npm run migrate` | Run pending Sequelize migrations |
-| `npm run seed` | Seed development data |
+| Script              | Description                             |
+| ------------------- | --------------------------------------- |
+| `npm run dev`       | Dev server with hot-reload (tsx watch)  |
+| `npm run build`     | Compile TypeScript → `dist/`            |
+| `npm start`         | Run compiled production build           |
+| `npm run migrate`   | Run pending Sequelize migrations        |
+| `npm run seed`      | Seed development data                   |
 | `npm run test:unit` | Unit tests — no DB required (441 tests) |
-| `npm test` | Integration tests — requires test DB |
-| `npm run lint` | ESLint |
+| `npm test`          | Integration tests — requires test DB    |
+| `npm run lint`      | ESLint                                  |
 
 ---
 
@@ -165,40 +165,40 @@ All routes are prefixed with `/api`.
 
 ### Public (no auth)
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/health` | Service health check |
-| `POST` | `/api/vendor-chat/quote` | Vendor submits initial quote |
-| `GET` | `/api/vendor-chat/deal` | Vendor gets deal data (targets stripped) |
-| `POST` | `/api/vendor-chat/enter` | Vendor enters chat |
-| `POST` | `/api/vendor-chat/message` | Vendor sends message |
-| `POST` | `/api/vendor-chat/pm-response` | Get AI PM response |
-| `POST` | `/api/vendor-chat/meso/select` | Select MESO option |
-| `POST` | `/api/vendor-chat/meso/others` | Submit custom counter-offer |
-| `POST` | `/api/vendor-chat/final-offer/confirm` | Confirm final offer |
+| Method | Path                                   | Description                              |
+| ------ | -------------------------------------- | ---------------------------------------- |
+| `GET`  | `/api/health`                          | Service health check                     |
+| `POST` | `/api/vendor-chat/quote`               | Vendor submits initial quote             |
+| `GET`  | `/api/vendor-chat/deal`                | Vendor gets deal data (targets stripped) |
+| `POST` | `/api/vendor-chat/enter`               | Vendor enters chat                       |
+| `POST` | `/api/vendor-chat/message`             | Vendor sends message                     |
+| `POST` | `/api/vendor-chat/pm-response`         | Get AI PM response                       |
+| `POST` | `/api/vendor-chat/meso/select`         | Select MESO option                       |
+| `POST` | `/api/vendor-chat/meso/others`         | Submit custom counter-offer              |
+| `POST` | `/api/vendor-chat/final-offer/confirm` | Confirm final offer                      |
 
 ### Authenticated (JWT Bearer or API Key/Secret)
 
-| Prefix | Module | Key Endpoints |
-|---|---|---|
-| `/api/auth` | auth | `POST /login`, `POST /refresh-token`, `POST /otp` |
-| `/api/chatbot` | chatbot | Nested deal CRUD, messaging, utility scoring (see below) |
-| `/api/bid-analysis` | bidAnalysis | Bid evaluation, winner selection |
-| `/api/bid-comparison` | bidComparison | Multi-vendor comparison, PDF reports |
-| `/api/requisition` | requisition | RFQ CRUD |
-| `/api/contract` | contract | Contract lifecycle |
-| `/api/vendor` | vendor | Vendor CRUD & profiling |
-| `/api/po` | po | Purchase order management |
-| `/api/product` | product | Product catalog |
-| `/api/project` | project | Project CRUD |
-| `/api/user` | user | User management |
-| `/api/role` | role | Role management |
-| `/api/permission` | permission | Permission management |
-| `/api/company` | company | Company management |
-| `/api/dashboard` | dashboard | Analytics |
-| `/api/negotiation` | negotiation | Negotiation history |
-| `/api/vector` | vector | RAG / semantic search |
-| `/api/document` | document | Document processing (OCR) |
+| Prefix                | Module        | Key Endpoints                                            |
+| --------------------- | ------------- | -------------------------------------------------------- |
+| `/api/auth`           | auth          | `POST /login`, `POST /refresh-token`, `POST /otp`        |
+| `/api/chatbot`        | chatbot       | Nested deal CRUD, messaging, utility scoring (see below) |
+| `/api/bid-analysis`   | bidAnalysis   | Bid evaluation, winner selection                         |
+| `/api/bid-comparison` | bidComparison | Multi-vendor comparison, PDF reports                     |
+| `/api/requisition`    | requisition   | RFQ CRUD                                                 |
+| `/api/contract`       | contract      | Contract lifecycle                                       |
+| `/api/vendor`         | vendor        | Vendor CRUD & profiling                                  |
+| `/api/po`             | po            | Purchase order management                                |
+| `/api/product`        | product       | Product catalog                                          |
+| `/api/project`        | project       | Project CRUD                                             |
+| `/api/user`           | user          | User management                                          |
+| `/api/role`           | role          | Role management                                          |
+| `/api/permission`     | permission    | Permission management                                    |
+| `/api/company`        | company       | Company management                                       |
+| `/api/dashboard`      | dashboard     | Analytics                                                |
+| `/api/negotiation`    | negotiation   | Negotiation history                                      |
+| `/api/vector`         | vector        | RAG / semantic search                                    |
+| `/api/document`       | document      | Document processing (OCR)                                |
 
 ### Chatbot Nested Routes
 
@@ -253,32 +253,32 @@ req.context = {
 
 ### Two Modes
 
-| Mode | Flow | Use Case |
-|---|---|---|
-| **INSIGHTS** | `chatbot.service` → `decide.ts` → `responseGenerator.ts` | Deterministic analysis |
-| **CONVERSATION** | `conversationService` → intent pipeline → LLM render | Human-like negotiation |
+| Mode             | Flow                                                     | Use Case               |
+| ---------------- | -------------------------------------------------------- | ---------------------- |
+| **INSIGHTS**     | `chatbot.service` → `decide.ts` → `responseGenerator.ts` | Deterministic analysis |
+| **CONVERSATION** | `conversationService` → intent pipeline → LLM render     | Human-like negotiation |
 
 ### Decision Engine (`src/modules/chatbot/engine/`)
 
 24 files handling the full negotiation lifecycle:
 
-| File | Purpose |
-|---|---|
-| `decide.ts` | Main decision logic — utility thresholds, counter generation |
-| `weightedUtility.ts` | Multi-parameter weighted utility scoring |
-| `parameterUtility.ts` | Individual parameter utility functions |
-| `parseOffer.ts` | Regex-based offer extraction from vendor messages |
-| `offerAccumulator.ts` | Merges multi-message partial offers |
-| `toneDetector.ts` | Vendor tone analysis (formal/casual/urgent/firm/friendly) |
-| `behavioralAnalyzer.ts` | Concession velocity, convergence, momentum |
-| `stallDetector.ts` | Detects negotiation stalls |
-| `concernExtractor.ts` | Extracts vendor concerns |
-| `meso.ts` | MESO option generation & phase control |
-| `crossDealLearning.ts` | Learns from other deals with same vendor |
-| `vendorProfileService.ts` | Vendor historical profiling |
-| `responseGenerator.ts` | Hardcoded response templates (INSIGHTS mode) |
-| `config.ts` | Engine configuration constants |
-| `types.ts` | Type definitions |
+| File                      | Purpose                                                      |
+| ------------------------- | ------------------------------------------------------------ |
+| `decide.ts`               | Main decision logic — utility thresholds, counter generation |
+| `weightedUtility.ts`      | Multi-parameter weighted utility scoring                     |
+| `parameterUtility.ts`     | Individual parameter utility functions                       |
+| `parseOffer.ts`           | Regex-based offer extraction from vendor messages            |
+| `offerAccumulator.ts`     | Merges multi-message partial offers                          |
+| `toneDetector.ts`         | Vendor tone analysis (formal/casual/urgent/firm/friendly)    |
+| `behavioralAnalyzer.ts`   | Concession velocity, convergence, momentum                   |
+| `stallDetector.ts`        | Detects negotiation stalls                                   |
+| `concernExtractor.ts`     | Extracts vendor concerns                                     |
+| `meso.ts`                 | MESO option generation & phase control                       |
+| `crossDealLearning.ts`    | Learns from other deals with same vendor                     |
+| `vendorProfileService.ts` | Vendor historical profiling                                  |
+| `responseGenerator.ts`    | Hardcoded response templates (INSIGHTS mode)                 |
+| `config.ts`               | Engine configuration constants                               |
+| `types.ts`                | Type definitions                                             |
 
 ### Feb 2026 Intent Pipeline (CONVERSATION mode)
 
@@ -300,10 +300,16 @@ Response
 
 ```typescript
 interface NegotiationIntent {
-  action: 'ACCEPT' | 'COUNTER' | 'ESCALATE' | 'WALK_AWAY' | 'MESO' | 'ASK_CLARIFY';
-  firmness: number;                    // 0-1
-  commercialPosition: string;          // Pre-written phrase
-  allowedPrice?: number;               // Only for COUNTER, bounded [target, max]
+  action:
+    | "ACCEPT"
+    | "COUNTER"
+    | "ESCALATE"
+    | "WALK_AWAY"
+    | "MESO"
+    | "ASK_CLARIFY";
+  firmness: number; // 0-1
+  commercialPosition: string; // Pre-written phrase
+  allowedPrice?: number; // Only for COUNTER, bounded [target, max]
   allowedPaymentTerms?: string;
   allowedDelivery?: string;
   weakestPrimaryParameter?: string;
@@ -456,9 +462,9 @@ Config: `vitest.config.ts`. Timeout: 30s. Requires a test database (name must co
 - **Module system:** ESM (NodeNext)
 - **Import extensions:** Always use `.js` (TypeScript ESM convention)
   ```typescript
-  import { User } from '../models/user.js';  // NOT .ts
+  import { User } from "../models/user.js"; // NOT .ts
   ```
-- **Path aliases:** `@/` → `src/`, `@config/` → `src/config/`, `@models/` → `src/models/`, etc.
+- **Imports:** Use relative paths only (e.g. `../models/user.js`). Path aliases are not configured.
 - **Strict mode:** Fully enabled with `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`
 
 ---
@@ -495,11 +501,11 @@ SIGTERM/SIGINT → stop cron scheduler → flush logs (1s grace) → exit. Preve
 
 ### Winston Configuration
 
-| Transport | Location | Retention |
-|---|---|---|
-| Console | stdout | — |
-| Combined file | `logs/combined/` | 14 days |
-| Error file | `logs/error/` | 30 days |
+| Transport     | Location         | Retention |
+| ------------- | ---------------- | --------- |
+| Console       | stdout           | —         |
+| Combined file | `logs/combined/` | 14 days   |
+| Error file    | `logs/error/`    | 30 days   |
 
 ### Negotiation Audit Log
 

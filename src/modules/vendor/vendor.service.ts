@@ -14,7 +14,7 @@ import {
   validateStep4,
 } from './vendor.validator.js';
 import type { User } from '../../models/user.js';
-import type { VendorCompany } from '../../models/vendorCompany.js';
+import type { VendorCompany } from '../../models/vendor-company.js';
 import type { Company } from '../../models/company.js';
 import type { Address } from '../../models/address.js';
 import models, { sequelize } from '../../models/index.js';

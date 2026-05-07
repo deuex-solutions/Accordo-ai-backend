@@ -5,7 +5,7 @@
  * - 4 system/test users
  */
 
-import { generateEmail } from '../helpers/idGenerator.js';
+import { generateEmail } from '../helpers/id-generator.js';
 import { enterpriseCompanies, vendorCompanies } from './companies.js';
 
 export interface UserData {

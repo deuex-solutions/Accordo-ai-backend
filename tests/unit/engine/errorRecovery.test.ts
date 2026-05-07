@@ -16,7 +16,7 @@ import {
   type ErrorCategory,
   type ProcessingStep,
   type PartialResult,
-} from '../../../src/modules/chatbot/engine/errorRecovery.js';
+} from '../../../src/modules/chatbot/engine/error-recovery.js';
 
 // ─────────────────────────────────────────────
 // classifyError
