@@ -253,66 +253,72 @@ const COMMERCIAL_POSITIONS: Record<
 > = {
   ACCEPT: {
     default: [
-      "We are pleased to accept this offer as it meets our procurement requirements.",
-      "This offer aligns with what we need and we are ready to move forward.",
-      "The terms work for us and we are confirming our acceptance.",
+      "The terms work for us and we're good to move forward.",
+      "This lines up with what we need, we're confirming.",
+      "We're on board with this, let's get it wrapped up.",
     ],
     friendly: [
-      "This offer works well for us and we are happy to proceed.",
-      "We're glad we could reach an agreement that works for both sides.",
+      "Really happy with where we landed on this one.",
+      "This works well for both sides, glad we got here.",
+      "Great outcome, looking forward to getting started.",
     ],
     formal: [
-      "We confirm formal acceptance of the terms as presented.",
-      "We hereby accept the terms under the conditions discussed.",
+      "We confirm acceptance of the terms as discussed.",
+      "The terms meet our requirements and we are prepared to proceed.",
     ],
   },
   COUNTER: {
     high_firmness: [
-      "Our budget constraints require us to maintain firm terms for this procurement.",
-      "We have limited room to move on this and need to hold our position.",
-      "Our internal guidelines require us to stay within these parameters.",
+      "We don't have much room on this one and need to hold here.",
+      "The budget on this is tight, so we need to stay close to these numbers.",
+      "We've looked at this internally and can't stretch much further.",
     ],
     medium_firmness: [
-      "We are working toward mutually beneficial terms that align with our requirements.",
-      "We think there is a fair middle ground and are proposing terms we can both work with.",
-      "We are looking for an arrangement that reflects the value of this engagement for both parties.",
+      "We think there's a fair landing zone here and this is what works on our end.",
+      "We're trying to find something that makes sense for both sides.",
+      "Here's where we can be on this, hoping we can meet somewhere close.",
     ],
     low_firmness: [
-      "We remain flexible and are committed to finding an arrangement that works for both parties.",
-      "We see room for collaboration here and are proposing terms in that spirit.",
-      "We value this relationship and are approaching this with flexibility.",
+      "We're flexible here and want to find something that works for everyone.",
+      "There's room to work with on our side, so here's what we're thinking.",
+      "We want to make this work and are open to finding the right fit.",
     ],
     urgent: [
-      "Given our project timeline, we need to reach an agreement on these terms promptly.",
-      "We are on a tight schedule and need to finalize terms soon.",
+      "We're on a timeline here and need to land on terms soon.",
+      "Need to move on this quickly, so here's where we are.",
+      "We're pressed for time and hoping to close this out.",
     ],
   },
   WALK_AWAY: {
     default: [
-      "After careful consideration, the current terms do not align with our procurement requirements.",
-      "We have evaluated the offer thoroughly and are unable to proceed under these conditions.",
+      "We've given this a good look but the terms aren't going to work for us.",
+      "Unfortunately the gap is too wide for us to close on this one.",
+      "We're not going to be able to make this work at these terms.",
     ],
     firm: [
-      "We have reached the limit of what is workable within our constraints.",
-      "The gap between our positions is too wide for us to bridge at this time.",
+      "We've reached as far as we can go on this.",
+      "The numbers just aren't workable for us at this point.",
     ],
   },
   ESCALATE: {
     default: [
-      "This negotiation requires senior review before we can proceed further.",
-      "We would like to bring in our procurement leadership to continue this discussion.",
+      "We'd like to loop in our senior team to continue this discussion.",
+      "This one needs a bit more review on our end before we can move forward.",
+      "Going to bring in our procurement lead to pick this up.",
     ],
   },
   MESO: {
     default: [
-      "We have prepared several options that may work for both parties.",
-      "We are presenting a few alternatives to find the best fit.",
+      "We've put together a few options that might work.",
+      "Here are some alternatives we think could land well for both sides.",
+      "We're offering a few different paths forward on this.",
     ],
   },
   ASK_CLARIFY: {
     default: [
-      "We need a few more details to move this negotiation forward.",
-      "Some information is missing before we can respond with a complete offer.",
+      "We need a couple more details before we can come back with a proper response.",
+      "Can you fill in a few gaps for us so we can move this along?",
+      "Just need a bit more info on your end to keep things moving.",
     ],
   },
 };

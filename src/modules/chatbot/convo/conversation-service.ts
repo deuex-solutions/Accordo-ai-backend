@@ -589,6 +589,80 @@ export async function processConversationMessage(
         }
       }
 
+      // 7-pre-C. Graduated response for offers ABOVE max_acceptable (late rounds).
+      //   Within 5% above max → ACCEPT (close enough, not worth losing the deal)
+      //   Beyond 5% above max → ESCALATE (needs senior review)
+      //   Strategy lives here — the LLM only sees the resulting intent.
+      if (
+        decision.action === "COUNTER" &&
+        !isVendorAffirmative &&
+        deal.round >= 5 &&
+        vendorOffer.total_price != null &&
+        maxAcceptableForProximity != null &&
+        maxAcceptableForProximity > 0 &&
+        vendorOffer.total_price > maxAcceptableForProximity
+      ) {
+        const overagePercent =
+          (vendorOffer.total_price - maxAcceptableForProximity) /
+          maxAcceptableForProximity;
+
+        if (overagePercent <= 0.05) {
+          // Within 5% above max — close enough to accept
+          const termsAcceptable =
+            vendorOffer.payment_terms_days == null ||
+            vendorOffer.payment_terms_days >= 30;
+
+          if (termsAcceptable) {
+            logger.info(
+              "[ConversationService] Graduated-accept: vendor within 5% above max_acceptable after round 5+",
+              {
+                dealId,
+                vendorPrice: vendorOffer.total_price,
+                maxAcceptable: maxAcceptableForProximity,
+                overagePercent: (overagePercent * 100).toFixed(2) + "%",
+                round: deal.round + 1,
+              },
+            );
+            decision = {
+              action: "ACCEPT",
+              utilityScore: decision.utilityScore,
+              counterOffer: null,
+              reasons: [
+                ...decision.reasons,
+                `Graduated-accept: vendor at ${vendorOffer.total_price} is within 5% above max_acceptable ${maxAcceptableForProximity} after round ${deal.round + 1}.`,
+              ],
+            };
+            explainability = computeExplainability(
+              config,
+              vendorOffer,
+              decision,
+            );
+          }
+        } else if (deal.round >= 7) {
+          // Beyond 5% above max and round 7+ — escalate to senior team
+          logger.info(
+            "[ConversationService] Graduated-escalate: vendor >5% above max_acceptable after round 7+",
+            {
+              dealId,
+              vendorPrice: vendorOffer.total_price,
+              maxAcceptable: maxAcceptableForProximity,
+              overagePercent: (overagePercent * 100).toFixed(2) + "%",
+              round: deal.round + 1,
+            },
+          );
+          decision = {
+            action: "ESCALATE",
+            utilityScore: decision.utilityScore,
+            counterOffer: null,
+            reasons: [
+              ...decision.reasons,
+              `Graduated-escalate: vendor at ${vendorOffer.total_price} is ${(overagePercent * 100).toFixed(1)}% above max_acceptable ${maxAcceptableForProximity} after round ${deal.round + 1}.`,
+            ],
+          };
+          explainability = computeExplainability(config, vendorOffer, decision);
+        }
+      }
+
       // 7-pre-A. Firmness handling — vendor signals "this is final / best price / non-negotiable"
       // Strategy: if vendor's price is at or below max_acceptable → ACCEPT.
       // If over budget and we have not yet made our last attempt → counter at max_acceptable
