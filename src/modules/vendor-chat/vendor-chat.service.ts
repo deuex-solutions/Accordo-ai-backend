@@ -1104,7 +1104,7 @@ export const selectMesoOptionService = async (
     id: uuidv4(),
     dealId: deal.id,
     role: "SYSTEM",
-    content: `Your selection of "${selectedOption.label}" has been accepted. Your deal is now under review and will be processed shortly. Thank you for your business.`,
+    content: `Great, we'll go with "${selectedOption.label}". The deal is confirmed and we'll get the paperwork started on our end. Thanks for working through this with us.`,
     extractedOffer: null,
     counterOffer: selectedOption.offer,
     engineDecision: null,
@@ -1452,9 +1452,14 @@ export const submitInitialDiscountService = async (
     );
   }
 
-  // Compute the effective (discounted) total
-  const discountedTotal =
-    Math.round(originalTotal * (1 - percent / 100) * 100) / 100;
+  // Compute the effective (discounted) total — use humanRoundPrice so the
+  // vendor sees a natural number (₹348,000 not ₹347,608.80).
+  const { humanRoundPrice } = await import(
+    "../../negotiation/intent/build-negotiation-intent.js"
+  );
+  const discountedTotal = humanRoundPrice(
+    Math.round(originalTotal * (1 - percent / 100) * 100) / 100,
+  );
 
   // Carry forward payment terms from the opening vendor message (all fields
   // on the quote form are compulsory, so these should exist).
@@ -1546,7 +1551,22 @@ export const submitInitialDiscountService = async (
     discountedTotal,
     requisitionCurrency,
   );
-  const originalEngineContent = engineResult.message.content || "";
+  let originalEngineContent = engineResult.message.content || "";
+  // Strip leading "Thank you" / "Thanks" from engine output when the ack
+  // already opens with one — prevents "Thank you for the discount. Thank you
+  // for working with us, here's our counter..." double-thanks.
+  if (/^thank/i.test(ack)) {
+    originalEngineContent = originalEngineContent
+      .replace(/^(thanks?\s+(you\s+)?)(for\s+\w+[\w\s,]*[.,]\s*)/i, "")
+      .replace(/^(thanks?\s+(you\s+)?[\w\s,]*[.,]\s*)/i, "")
+      .replace(/^\s+/, "");
+    // Capitalize the new first character after stripping.
+    if (originalEngineContent.length > 0) {
+      originalEngineContent =
+        originalEngineContent[0].toUpperCase() +
+        originalEngineContent.slice(1);
+    }
+  }
   await engineResult.message.update({
     content: ack + originalEngineContent,
   });

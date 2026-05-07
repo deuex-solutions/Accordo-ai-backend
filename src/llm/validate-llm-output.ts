@@ -276,6 +276,18 @@ export function sanitizeText(text: string): string {
   // preposition that the template also injects. Catches "by by", "on on",
   // "with with", "at at", "in in", "for for", "to to", "of of".
   s = s.replace(/\b(by|on|with|at|in|for|to|of)\s+\1\b/gi, (_, w) => w);
+  // Basic grammar fixes — catch common LLM output issues silently.
+  // 1. Capitalize the first letter of the message.
+  if (s.length > 0 && /^[a-z]/.test(s)) {
+    s = s[0].toUpperCase() + s.slice(1);
+  }
+  // 2. Capitalize first letter after sentence-ending punctuation.
+  s = s.replace(/([.?])\s+([a-z])/g, (_, p, c) => `${p} ${c.toUpperCase()}`);
+  // 3. Fix missing space after period/comma before a word.
+  s = s.replace(/([.,])([A-Za-z])/g, "$1 $2");
+  // 4. Fix double periods (LLM sometimes generates "terms.." or "forward..")
+  s = s.replace(/\.{2,}/g, ".");
+
   // Collapse strip artifacts.
   s = s
     .replace(/,\s*,/g, ",")
@@ -400,6 +412,45 @@ export function validateLlmOutput(
           "meso_unauthorized_price",
           "meso_unauthorized_price",
         );
+      }
+    }
+  }
+
+  // Step 7: Fabrication catch — reject if LLM invents vendor concerns that
+  // were never in the instruction. Rule 16 in the system prompt bans this,
+  // but the LLM occasionally ignores prompt-level constraints, so a
+  // validator-level safety net is necessary.
+  if (
+    action === "COUNTER" ||
+    action === "MESO" ||
+    action === "WALK_AWAY" ||
+    action === "ESCALATE"
+  ) {
+    const fabricationPatterns: RegExp[] = [
+      /\b(your|the vendor'?s?)\s+(cash ?flow|budget|financial|margin|overhead)\s+(pressure|constraint|concern|situation|challenge|issue|limitation|difficult)/i,
+      /\bunderstand\s+(your|the)\s+(cash ?flow|budget|financial|margin)\s+(pressure|constraint|concern|situation|challenge)/i,
+      /\bhear you on\s+(the\s+)?(cash ?flow|budget|financial|margin)/i,
+      /\b(tight|limited|stretched|squeezed)\s+(budget|cash ?flow|margin|financial)/i,
+      /\b(cash ?flow|budget|margin)\s+(is|seems?|must be|looks?)\s+(tight|limited|stretched|squeezed|challenging)/i,
+      /\b(my boss|my manager|management)\s+(said|told|asked|wants|insisted|requires)/i,
+    ];
+
+    const concernsAllowed = intent.acknowledgeConcerns ?? [];
+    const hasConcernInstruction = concernsAllowed.length > 0;
+
+    for (const pattern of fabricationPatterns) {
+      if (pattern.test(sanitized)) {
+        // Only reject if the concern wasn't explicitly listed in acknowledgeConcerns
+        const matchedText = sanitized.match(pattern)?.[0] ?? "";
+        const isCovered = hasConcernInstruction && concernsAllowed.some(
+          (c) => matchedText.toLowerCase().includes(c.toLowerCase()),
+        );
+        if (!isCovered) {
+          throw new ValidationError(
+            "fabricated_concern",
+            "fabricated_concern",
+          );
+        }
       }
     }
   }

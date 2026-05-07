@@ -288,6 +288,26 @@ function calculateCounterPrice(
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, max_acceptable);
 
+  // Convergence adjustment (May 2026): the base formula uses a near-static
+  // offset from target, so it barely moves after round 5. When the vendor
+  // has come down significantly, blend toward the midpoint between our
+  // base counter and the vendor's offer — this shows good-faith movement
+  // and prevents the PM from looking stuck at the same number.
+  if (
+    vendorOffer.total_price !== null &&
+    vendorOffer.total_price > 0 &&
+    round >= 3
+  ) {
+    const midpoint = (counterPrice + vendorOffer.total_price) / 2;
+    // Blend factor increases with round: round 3 = 15%, round 5 = 35%, round 7+ = 50%
+    const blendFactor = Math.min(0.5, 0.05 + round * 0.05);
+    const blendedPrice = counterPrice + (midpoint - counterPrice) * blendFactor;
+    // Only apply if blended price is still within our acceptable range
+    if (blendedPrice <= max_acceptable && blendedPrice > counterPrice) {
+      counterPrice = blendedPrice;
+    }
+  }
+
   // Never counter at or above vendor's offer — always go below
   if (
     vendorOffer.total_price !== null &&

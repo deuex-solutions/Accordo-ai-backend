@@ -79,19 +79,19 @@ const ACCEPT_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
 const COUNTER_TEMPLATES: Record<VendorTone | "default", TemplatePool> = {
   formal: [
     (i) =>
-      `Thank you for your proposal. After careful review, we would like to counter with a total price of ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, with ${i.allowedPaymentTerms} payment terms` : ""}${i.allowedDelivery ? `, and delivery ${i.allowedDelivery}` : ""}. We believe these terms represent a fair path forward.`,
+      `Thank you for the proposal. We'd like to counter at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We think this is a fair position for both sides.`,
     (i) =>
-      `We appreciate the offer and wish to propose the following: ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")} total${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We trust this aligns with both parties' objectives.`,
+      `We appreciate the offer. On our end, we're at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Hoping we can find common ground here.`,
     (i) =>
-      `Following our review, we propose ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` and delivery ${i.allowedDelivery}` : ""} as our counter. We remain open to discussion.`,
+      `Noted, thank you. Our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We're open to continuing the discussion.`,
     (i) =>
-      `Having considered your proposal, our counter is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We are confident this reflects market conditions fairly.`,
+      `We've reviewed the numbers and our position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We think this works well given the scope.`,
     (i) =>
-      `We have given your offer careful consideration. Our position is ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, with delivery ${i.allowedDelivery}` : ""}. We look forward to your response.`,
+      `Thank you for the detailed offer. We're proposing ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` on ${i.allowedPaymentTerms} terms` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Looking forward to your thoughts.`,
     (i) =>
-      `Your proposal is noted. Based on our requirements, we are countering at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We value this relationship and hope we can align.`,
+      `We appreciate the time on this. Our counter stands at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? `, ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. We think these terms are workable.`,
     (i) =>
-      `We acknowledge your offer with appreciation. Our counter stands at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? ` and delivery ${i.allowedDelivery}` : ""}. We believe this represents workable terms for both sides.`,
+      `Good to have the updated numbers. We're looking at ${i.currencySymbol}${i.allowedPrice?.toLocaleString("en-US")}${i.allowedPaymentTerms ? ` with ${i.allowedPaymentTerms}` : ""}${i.allowedDelivery ? `, delivery ${i.allowedDelivery}` : ""}. Let us know how that sits with you.`,
   ],
   casual: [
     (i) =>

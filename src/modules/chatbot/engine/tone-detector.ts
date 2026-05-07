@@ -196,6 +196,17 @@ function detectToneFromMessage(
   content: string,
 ): Partial<Record<VendorTone, number>> {
   const scores: Partial<Record<VendorTone, number>> = {};
+  const wordCount = content.trim().split(/\s+/).length;
+
+  // In Indian English, "sir" is a casual address term (like "bhai" or "ji"),
+  // not a formality indicator. Detect when "sir" is the ONLY formal marker in
+  // a short message and downweight it so it doesn't dominate tone detection.
+  const hasSirOnly =
+    /\bsir\b/i.test(content) &&
+    !/\b(dear|madam|respectfully|kindly|sincerely|regards|pursuant|hereby|faithfully)\b/i.test(
+      content,
+    );
+  const sirDownweight = hasSirOnly && wordCount <= 15;
 
   for (const [tone, patternGroups] of Object.entries(TONE_PATTERNS)) {
     let totalScore = 0;
@@ -203,7 +214,16 @@ function detectToneFromMessage(
     for (const { patterns, weight } of patternGroups) {
       for (const pattern of patterns) {
         if (pattern.test(content)) {
-          totalScore += weight;
+          let effectiveWeight = weight;
+          // Downweight "sir" in short messages without other formal cues
+          if (
+            sirDownweight &&
+            tone === "formal" &&
+            pattern.source.includes("sir")
+          ) {
+            effectiveWeight = 0.3;
+          }
+          totalScore += effectiveWeight;
         }
       }
     }
@@ -624,7 +644,28 @@ function extractFirstPrice(text: string): number | null {
     if (!isNaN(value) && value > 100) return value;
   }
 
-  // Bare number ≥ 1000 (handles "26000" or "26,000")
+  // Lakh/crore suffix (3.5L = 350,000, 1.2Cr = 12,000,000)
+  const lPattern = /\b([\d.]+)\s*(?:L|lakh|lac|lacs|lakhs)\b/i;
+  const crPattern = /\b([\d.]+)\s*(?:Cr|crore|crores)\b/i;
+  match = text.match(lPattern);
+  if (match) {
+    const value = parseFloat(match[1]) * 100_000;
+    if (!isNaN(value) && value > 100) return value;
+  }
+  match = text.match(crPattern);
+  if (match) {
+    const value = parseFloat(match[1]) * 10_000_000;
+    if (!isNaN(value) && value > 100) return value;
+  }
+
+  // Indian comma format: 3,55,000 or 12,34,567 (lakh grouping: X,XX,XXX)
+  const indianComma = text.match(/\b(\d{1,2}(?:,\d{2})*,\d{3})\b/);
+  if (indianComma) {
+    const value = parseFloat(indianComma[1].replace(/,/g, ""));
+    if (!isNaN(value) && value >= 1000) return value;
+  }
+
+  // Bare number ≥ 1000 (handles "26000" or "26,000" Western format)
   const bare = text.match(/\b(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d{1,2})?\b/);
   if (bare) {
     const value = parseFloat(bare[1].replace(/,/g, ""));
