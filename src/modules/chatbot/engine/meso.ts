@@ -25,6 +25,7 @@ import type {
   NegotiationPhase,
 } from "./types.js";
 import { calculateWeightedUtilityFromResolved } from "./weighted-utility.js";
+import { humanRoundPrice } from "../../../negotiation/intent/build-negotiation-intent.js";
 import {
   formatCurrency,
   type SupportedCurrency,
@@ -470,7 +471,7 @@ function calculateBasePrice(
     let basePrice = floor + span * innerProgress;
     basePrice = Math.min(basePrice, ceiling);
     basePrice = Math.max(basePrice, floor);
-    return Math.round(basePrice * 100) / 100;
+    return humanRoundPrice(Math.round(basePrice * 100) / 100);
   }
 
   // Standard path (no convergence band): use the original formula.
@@ -485,7 +486,7 @@ function calculateBasePrice(
     basePrice = Math.max(basePrice, lastAccordoCounterPrice as number);
   }
 
-  return Math.round(basePrice * 100) / 100;
+  return humanRoundPrice(Math.round(basePrice * 100) / 100);
 }
 
 /**
@@ -596,10 +597,10 @@ function getMediumDeliveryDays(
     const requiredDays = Math.ceil(
       (config.deliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
     );
-    return Math.min(vendorDelivery, requiredDays);
+    return Math.max(1, Math.min(vendorDelivery, requiredDays));
   }
 
-  return vendorDelivery;
+  return Math.max(1, vendorDelivery);
 }
 
 /**
@@ -632,7 +633,7 @@ function generatePriceFocusedOffer(
       ? Math.max(config.targetPrice, lastAccordoCounterPrice)
       : config.targetPrice;
   bestPrice = Math.max(priceFloor, bestPrice);
-  bestPrice = Math.round(bestPrice * 100) / 100;
+  bestPrice = humanRoundPrice(Math.round(bestPrice * 100) / 100);
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -749,8 +750,15 @@ function adjustOffersForVariance(
       const priceAdjustment = utilityDiff * config.priceRange * 0.1;
 
       if (option.offer.total_price != null) {
-        option.offer.total_price =
-          Math.round((option.offer.total_price + priceAdjustment) * 100) / 100;
+        option.offer.total_price = humanRoundPrice(
+          Math.round((option.offer.total_price + priceAdjustment) * 100) / 100,
+        );
+
+        // Ensure variance adjustment didn't push below target price floor
+        option.offer.total_price = Math.max(
+          option.offer.total_price,
+          config.targetPrice,
+        );
 
         // Recalculate utility
         const newUtility = calculateWeightedUtilityFromResolved(
@@ -1215,7 +1223,7 @@ function generateDynamicPriceFocusedOffer(
   // Floor at convergence too (so the 2.5% discount doesn't drop us below it)
   bestPrice = applyConvergenceFloor(bestPrice, config, lastAccordoCounterPrice);
   bestPrice = Math.max(config.targetPrice, bestPrice);
-  bestPrice = Math.round(bestPrice * 100) / 100;
+  bestPrice = humanRoundPrice(Math.round(bestPrice * 100) / 100);
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -1281,7 +1289,7 @@ function generateDynamicTermsFocusedOffer(
     config,
     lastAccordoCounterPrice,
   );
-  mediumPrice = Math.round(mediumPrice * 100) / 100;
+  mediumPrice = humanRoundPrice(Math.round(mediumPrice * 100) / 100);
 
   // BEST payment terms (longest)
   const bestPaymentDays = config.paymentTermsMaxDays;
@@ -1344,7 +1352,7 @@ function generateDynamicBalancedOffer(
     config,
     lastAccordoCounterPrice,
   );
-  mediumPrice = Math.round(mediumPrice * 100) / 100;
+  mediumPrice = humanRoundPrice(Math.round(mediumPrice * 100) / 100);
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -1417,7 +1425,7 @@ export function generateFinalMesoOptions(
     // Slight discount from vendor price, fastest delivery
     // ============================================
 
-    const finalPrice1 = Math.round(vendorPrice * 0.97 * 100) / 100; // 3% off vendor
+    const finalPrice1 = humanRoundPrice(Math.round(vendorPrice * 0.97 * 100) / 100); // 3% off vendor
     const mediumTerms = getMediumPaymentDays(config);
     const bestDelivery = getBestDeliveryDays(config, vendorOffer);
     const minWarranty = Math.max(0, config.warrantyPeriodMonths - 6);
@@ -1462,11 +1470,11 @@ export function generateFinalMesoOptions(
     const standardWarranty = config.warrantyPeriodMonths;
 
     const finalOffer2: ExtendedOffer = {
-      total_price: applyConvergenceFloor(
+      total_price: humanRoundPrice(applyConvergenceFloor(
         Math.round(vendorPrice * 100) / 100,
         config,
         lastAccordoCounterPrice,
-      ),
+      )),
       payment_terms: `Net ${bestTerms}`,
       payment_terms_days: bestTerms,
       delivery_days: mediumDelivery,
@@ -1499,11 +1507,11 @@ export function generateFinalMesoOptions(
     const extendedWarranty = config.warrantyPeriodMonths + 6;
 
     const finalOffer3: ExtendedOffer = {
-      total_price: applyConvergenceFloor(
+      total_price: humanRoundPrice(applyConvergenceFloor(
         Math.round(vendorPrice * 100) / 100,
         config,
         lastAccordoCounterPrice,
-      ),
+      )),
       payment_terms: `Net ${mediumTerms}`,
       payment_terms_days: mediumTerms,
       delivery_days: bestDelivery,
@@ -1734,9 +1742,9 @@ export function generateMesoFromVendorPrice(
   basePrice = applyConvergenceFloor(basePrice, config, lastAccordoCounterPrice);
 
   // Generate 3 offers based on the base price
-  const offer1Price = Math.round(basePrice * 0.97 * 100) / 100; // 3% below
-  const offer2Price = Math.round(basePrice * 100) / 100;
-  const offer3Price = Math.round(basePrice * 1.02 * 100) / 100; // 2% above (up to max)
+  const offer1Price = humanRoundPrice(Math.round(basePrice * 0.97 * 100) / 100); // 3% below
+  const offer2Price = humanRoundPrice(Math.round(basePrice * 100) / 100);
+  const offer3Price = humanRoundPrice(Math.round(basePrice * 1.02 * 100) / 100); // 2% above (up to max)
 
   const mediumTerms = Math.round(
     (config.paymentTermsMinDays + config.paymentTermsMaxDays) / 2,

@@ -71,7 +71,9 @@ Structure rules:
 12. If the vendor asked questions previously that weren't answered, address those briefly before the negotiation thread.
 13. If the vendor is just making smalltalk, give a short warm reply and redirect to the deal.
 14. Adapt length to the vendor: short message → short reply, longer message → longer reply. Stay within the bounds you'll be given.
-15. Single message only. No bullet points unless presenting MESO options.`;
+15. Single message only. No bullet points unless presenting MESO options.
+16. NEVER invent, infer, or fabricate vendor concerns. Only acknowledge concerns explicitly listed in the instruction below. If no concerns are listed, do not reference any vendor concern, motivation, or circumstance (e.g. do NOT say "cash flow", "financial arrangements", "budget pressure" unless those exact words appear in the instruction).
+17. Never output dates in YYYY-MM-DD format. Always use Month Day format (e.g. June 5 or June 5, 2026).`;
 }
 
 // ─────────────────────────────────────────────
@@ -93,13 +95,13 @@ const LANGUAGE_NAMES: Record<string, string> = {
 // ─────────────────────────────────────────────
 
 const COUNTER_REASONING_HINTS: string[] = [
-  "budget constraints",
-  "market benchmarks we're seeing",
-  "the scope of this project",
-  "our volume expectations",
-  "comparable pricing from other vendors",
-  "internal procurement guidelines",
-  "the project's overall financial parameters",
+  "what we can work with on this one",
+  "where we see the numbers landing",
+  "what makes sense for this order",
+  "the pricing on our end",
+  "what we had in mind for this",
+  "the range we're working within",
+  "how we're looking at this deal",
 ];
 
 function getCounterReasoningHint(round: number): string {
@@ -143,10 +145,12 @@ function buildInstruction(
   // Tone mirroring — formality only, never hostility.
   const formalityHint = style
     ? style.formality >= 0.7
-      ? "The vendor writes formally — match their formal register."
+      ? "The vendor writes formally, match their formal register."
       : style.formality <= 0.3
-        ? "The vendor writes casually — match that with contractions and a relaxed register."
-        : "The vendor's tone is neutral — keep yours warm and professional."
+        ? "The vendor writes casually and briefly. Match that energy: use contractions, keep your reply short and direct, skip preambles like 'Thank you for your offer' or 'We have given careful consideration'. Just get to the point."
+        : style.length <= 8
+          ? "The vendor's message is very short. Keep your reply similarly brief and direct, no long preambles."
+          : "The vendor's tone is neutral, keep yours warm and professional."
     : `Mirror the vendor's ${intent.vendorTone} tone in formality only.`;
 
   const movementHint = intent.vendorMovement
@@ -237,7 +241,7 @@ function buildInstruction(
           ? `, delivery: ${intent.allowedDelivery}`
           : "";
         const reasonHint = getCounterReasoningHint(intent.roundNumber ?? 1);
-        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${intent.allowedPrice.toLocaleString("en-US")}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Provide a brief, natural business reason (${reasonHint}). Keep it conversational.`;
+        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${intent.allowedPrice.toLocaleString("en-US")}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Frame it naturally around ${reasonHint}. Do NOT invent any vendor concern or motivation that isn't listed in this instruction.`;
       } else {
         actionInstruction =
           "Indicate that the current offer needs improvement and ask the vendor to reconsider their terms. Be polite but clear.";

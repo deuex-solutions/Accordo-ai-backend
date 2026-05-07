@@ -582,6 +582,17 @@ function detectFormality(text: string, hasGreeting: boolean): number {
   const contractions = (t.match(/\b\w+'(s|t|re|ll|ve|d|m)\b/g) || []).length;
   if (contractions >= 2) score -= 0.1;
 
+  // Short-message heuristic: messages under 8 words with no formal markers
+  // are almost always casual/terse — pull toward 0.25.
+  const wordCount = text.trim().split(/\s+/).length;
+  const hasFormalMarker =
+    /\b(dear|sir|madam|respectfully|kindly|sincerely|regards|pursuant|hereby)\b/i.test(
+      text,
+    );
+  if (wordCount <= 8 && !hasFormalMarker && score >= 0.4) {
+    score = Math.min(score, 0.25);
+  }
+
   return Math.max(0, Math.min(1, score));
 }
 

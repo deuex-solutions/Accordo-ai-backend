@@ -1324,7 +1324,17 @@ export async function processConversationMessage(
     deal.latestVendorOffer = vendorOffer as any;
     deal.latestDecisionAction = decision.action;
     deal.latestUtility = decision.utilityScore;
-    deal.latestOfferJson = (decision.counterOffer as any) || null;
+    // Persist the ROUNDED price the vendor actually saw (from humanRoundPrice),
+    // not the raw engine price. This ensures the monotonic floor, MESO anchoring,
+    // and auto-accept logic all use the price the vendor was shown.
+    if (decision.counterOffer && negotiationIntent.allowedPrice != null) {
+      deal.latestOfferJson = {
+        ...(decision.counterOffer as any),
+        total_price: negotiationIntent.allowedPrice,
+      };
+    } else {
+      deal.latestOfferJson = (decision.counterOffer as any) || null;
+    }
     // Track the round we sent the maxAcceptable counter so next round can walk
     // away if the vendor still hasn't moved.
     const updatedConvoState: any = { ...(newConversationState as any) };
