@@ -607,7 +607,8 @@ function getBestDeliveryDays(
       (config.preferredDeliveryDate.getTime() - Date.now()) /
         (1000 * 60 * 60 * 24),
     );
-    return Math.max(1, Math.min(preferredDays, vendorDelivery));
+    // Floor at 3 days — anything less doesn't make business sense in a MESO card
+    return Math.max(3, Math.min(preferredDays, vendorDelivery));
   }
 
   // Otherwise, aim for 10-20% faster than vendor's offer
@@ -629,10 +630,11 @@ function getMediumDeliveryDays(
     const requiredDays = Math.ceil(
       (config.deliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
     );
-    return Math.max(1, Math.min(vendorDelivery, requiredDays));
+    // Floor at 3 days — anything less doesn't make business sense
+    return Math.max(3, Math.min(vendorDelivery, requiredDays));
   }
 
-  return Math.max(1, vendorDelivery);
+  return Math.max(3, vendorDelivery);
 }
 
 /**

@@ -126,6 +126,26 @@ export interface ConversationState {
    * over-budget on the next round, we escalate.
    */
   lastAttemptUsed?: boolean;
+
+  // ── Endgame flow state (May 2026) ──
+  // Tracks the MESO-before-walkaway state machine.
+
+  /**
+   * Current endgame phase:
+   * - undefined / "NORMAL": standard negotiation
+   * - "COUNTERING_AT_MAX": vendor above max but within 10%, countering at max
+   * - "FINAL_MESO_SHOWN": final MESO with Others presented after 2 max-counters
+   */
+  endgamePhase?: "NORMAL" | "COUNTERING_AT_MAX" | "FINAL_MESO_SHOWN";
+
+  /** How many consecutive rounds we've countered at max_acceptable during endgame */
+  endgameCounterRounds?: number;
+
+  /** Round at which endgame MESO was first shown (for dedup) */
+  endgameMesoRound?: number;
+
+  /** Round at which final endgame MESO was shown */
+  endgameFinalMesoRound?: number;
 }
 
 /**

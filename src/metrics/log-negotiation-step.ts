@@ -73,8 +73,16 @@ export interface NegotiationStepRecord {
   };
   /** Which validation rule fired ("banned_keyword_hard", "too_long", etc.). Never the rejected text. */
   validationFailureReason?: string;
-  /** Repeat-offer escape-hatch mode applied this turn, if any. */
-  escapeHatchApplied?: "accept" | "ceiling-meso" | "post-meso-walk" | null;
+  /** Repeat-offer escape-hatch or endgame flow mode applied this turn, if any. */
+  escapeHatchApplied?:
+    | "accept"
+    | "ceiling-meso"
+    | "post-meso-walk"
+    | "endgame-meso"
+    | "endgame-counter-at-max"
+    | "endgame-escalate"
+    | "endgame-walkaway"
+    | null;
   /** Length distribution signal — final word count of the message that went to vendor. */
   messageWordCount?: number;
 }

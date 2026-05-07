@@ -164,6 +164,67 @@ export function hasRecentOpener(
   return getPhrasings(dealId).includes(openerFp);
 }
 
+// ─────────────────────────────────────────────
+// Programmatic opener rewrite
+// ─────────────────────────────────────────────
+
+/**
+ * Rotating pool of neutral openers for programmatic rewrite.
+ * Each should work as a sentence start before any substance.
+ * Kept short and generic so they pair with any action type.
+ */
+const OPENER_POOL = [
+  "Noted.",
+  "Got it.",
+  "Thanks for that.",
+  "Understood.",
+  "Appreciate the update.",
+  "Good to have those numbers.",
+  "Thanks for sharing.",
+  "Alright.",
+  "Fair enough.",
+  "Okay.",
+  "Right.",
+  "Thanks for coming back on this.",
+  "Noted, thanks.",
+];
+
+/**
+ * Rewrite the opener of a message to avoid repeating the same first few words.
+ * Strips the first sentence (up to the first period/comma/dash boundary) and
+ * prepends a random opener from the pool that doesn't match recent history.
+ *
+ * Returns the rewritten message, or the original if rewrite isn't possible.
+ */
+export function rewriteOpener(
+  dealId: string,
+  action: string,
+  message: string,
+): string {
+  if (!message || message.length < 10) return message;
+
+  // Find the first sentence boundary (period, or a comma followed by a space and uppercase)
+  const firstSentenceEnd = message.search(/[.]\s+[A-Z]|,\s+[A-Z]/);
+  if (firstSentenceEnd < 0) return message; // Single sentence — can't rewrite opener
+
+  // Extract rest of message after the first sentence
+  const boundary = message[firstSentenceEnd] === "." ? firstSentenceEnd + 1 : firstSentenceEnd + 1;
+  const restOfMessage = message.slice(boundary).trim();
+  if (!restOfMessage) return message;
+
+  // Pick a random opener that isn't in recent history
+  const phrasings = getPhrasings(dealId);
+  const available = OPENER_POOL.filter((opener) => {
+    const fp = buildOpenerFingerprint(action, opener + " " + restOfMessage);
+    return !phrasings.includes(fp);
+  });
+
+  const pool = available.length > 0 ? available : OPENER_POOL;
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
+
+  return `${chosen} ${restOfMessage}`;
+}
+
 /**
  * Test-only helper. Not exported in production paths.
  */

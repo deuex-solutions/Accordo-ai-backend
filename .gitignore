@@ -36,9 +36,6 @@ Thumbs.db
 # Lock files (optional - remove if you want to track them)
 yarn.lock
 
-CLAUDE.md
-.claude/
-
 # OpenMemory - IDE/Assistant specific rules
 .cursor/rules/openmemory.mdc
 openmemory.md

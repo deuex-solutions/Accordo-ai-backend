@@ -63,10 +63,16 @@ import {
   extractVendorConcerns,
   type VendorStyle,
 } from "../engine/tone-detector.js";
-import { recordPhrasing, getPhrasings } from "../../../llm/phrasing-history.js";
+import {
+  recordPhrasing,
+  getPhrasings,
+  hasRecentOpener,
+  rewriteOpener,
+} from "../../../llm/phrasing-history.js";
 import {
   buildNegotiationIntent,
   getCurrencySymbol,
+  humanRoundPrice,
 } from "../../../negotiation/intent/build-negotiation-intent.js";
 import { buildArcSummary } from "../../../llm/arc-summary.js";
 import { renderNegotiationMessage } from "../../../llm/persona-renderer.js";
@@ -98,6 +104,42 @@ import type {
   ExtendedOffer as EngineExtendedOffer,
 } from "../engine/types.js";
 import type { SupportedCurrency } from "../../../services/currency.service.js";
+import type { NegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
+
+// ─────────────────────────────────────────────
+// Validated fallback helper
+// ─────────────────────────────────────────────
+
+/**
+ * Get a fallback response that passes the same validation as LLM output.
+ * Tries up to `maxAttempts` random fallbacks through validateLlmOutput();
+ * if all fail, returns the last sanitized-only fallback (same as before).
+ *
+ * @param excludeContent - Optional content to exclude (e.g. the identical message
+ *   that triggered the fallback). If the candidate matches this, skip it.
+ */
+function getValidatedFallback(
+  intent: NegotiationIntent,
+  maxAttempts = 5,
+  excludeContent?: string,
+): string {
+  const excludeTrimmed = excludeContent?.trim();
+  for (let i = 0; i < maxAttempts; i++) {
+    const candidate = getFallbackResponse(intent);
+    // Skip if this candidate is identical to the excluded content
+    if (excludeTrimmed && candidate.trim() === excludeTrimmed) {
+      continue;
+    }
+    try {
+      return validateLlmOutput(candidate, intent);
+    } catch {
+      // Validation failed — try another random fallback
+      continue;
+    }
+  }
+  // All attempts failed validation — return sanitized-only fallback (last resort)
+  return getFallbackResponse(intent);
+}
 
 /**
  * Start a new conversation
@@ -513,7 +555,32 @@ export async function processConversationMessage(
       vendorOffer.total_price !== null &&
       vendorOffer.payment_terms !== null
     ) {
-      decision = decideNextMove(config, vendorOffer, deal.round + 1);
+      // Retrieve negotiation state + previous PM offer so decideNextMove can
+      // enable rejection concession, concession bonus, and monotonic floor.
+      const negState = (deal as any)
+        .negotiationStateJson as NegotiationState | null;
+      const pmHistForDecide = conversationState.pmCounterHistory ?? [];
+      const prevPmOffer =
+        pmHistForDecide.length > 0
+          ? {
+              price: pmHistForDecide[pmHistForDecide.length - 1],
+              terms:
+                conversationState.lastVendorOffer?.payment_terms ?? "Net 30",
+              round: deal.round,
+              deliveryDays: null,
+              timestamp: new Date(),
+            }
+          : null;
+
+      decision = decideNextMove(
+        config,
+        vendorOffer,
+        deal.round + 1,
+        negState,
+        prevPmOffer,
+        null, // behavioralSignals — not available in CONVERSATION mode
+        null, // adaptiveStrategy — not available in CONVERSATION mode
+      );
       explainability = computeExplainability(config, vendorOffer, decision);
 
       // 7-pre-0. Affirmative override: if vendor's message was a short acceptance
@@ -590,13 +657,14 @@ export async function processConversationMessage(
       }
 
       // 7-pre-C. Graduated response for offers ABOVE max_acceptable (late rounds).
-      //   Within 5% above max → ACCEPT (close enough, not worth losing the deal)
-      //   Beyond 5% above max → ESCALATE (needs senior review)
+      //   Strict rule: NEVER accept above max_acceptable.
+      //   Within 10% above max → COUNTER at max (handled by endgame flow in section 11a)
+      //   Beyond 10% above max after round 7+ → ESCALATE (needs senior review)
       //   Strategy lives here — the LLM only sees the resulting intent.
       if (
         decision.action === "COUNTER" &&
         !isVendorAffirmative &&
-        deal.round >= 5 &&
+        deal.round >= 7 &&
         vendorOffer.total_price != null &&
         maxAcceptableForProximity != null &&
         maxAcceptableForProximity > 0 &&
@@ -606,42 +674,10 @@ export async function processConversationMessage(
           (vendorOffer.total_price - maxAcceptableForProximity) /
           maxAcceptableForProximity;
 
-        if (overagePercent <= 0.05) {
-          // Within 5% above max — close enough to accept
-          const termsAcceptable =
-            vendorOffer.payment_terms_days == null ||
-            vendorOffer.payment_terms_days >= 30;
-
-          if (termsAcceptable) {
-            logger.info(
-              "[ConversationService] Graduated-accept: vendor within 5% above max_acceptable after round 5+",
-              {
-                dealId,
-                vendorPrice: vendorOffer.total_price,
-                maxAcceptable: maxAcceptableForProximity,
-                overagePercent: (overagePercent * 100).toFixed(2) + "%",
-                round: deal.round + 1,
-              },
-            );
-            decision = {
-              action: "ACCEPT",
-              utilityScore: decision.utilityScore,
-              counterOffer: null,
-              reasons: [
-                ...decision.reasons,
-                `Graduated-accept: vendor at ${vendorOffer.total_price} is within 5% above max_acceptable ${maxAcceptableForProximity} after round ${deal.round + 1}.`,
-              ],
-            };
-            explainability = computeExplainability(
-              config,
-              vendorOffer,
-              decision,
-            );
-          }
-        } else if (deal.round >= 7) {
-          // Beyond 5% above max and round 7+ — escalate to senior team
+        if (overagePercent > 0.10) {
+          // Beyond 10% above max and round 7+ — escalate to senior team
           logger.info(
-            "[ConversationService] Graduated-escalate: vendor >5% above max_acceptable after round 7+",
+            "[ConversationService] Graduated-escalate: vendor >10% above max_acceptable after round 7+",
             {
               dealId,
               vendorPrice: vendorOffer.total_price,
@@ -782,12 +818,11 @@ export async function processConversationMessage(
           config.parameters?.total_price ??
           (config.parameters as any)?.unit_price;
         let counterPrice = priceConfig
-          ? Math.round(
-              (priceConfig.target +
-                (priceConfig.max_acceptable - priceConfig.target) * 0.5) *
-                100,
-            ) / 100
-          : vendorOffer.total_price * 0.9;
+          ? humanRoundPrice(
+              priceConfig.target +
+                (priceConfig.max_acceptable - priceConfig.target) * 0.5,
+            )
+          : humanRoundPrice(vendorOffer.total_price * 0.9);
         // Never counter above vendor's offer
         if (
           vendorOffer.total_price != null &&
@@ -879,6 +914,44 @@ export async function processConversationMessage(
       };
     }
 
+    // 7a-endgame. Early endgame check: resolve maxAcceptable + endgame state
+    //            so the MESO section below can act on endgame flags.
+    const earlyConvoState = (deal.convoStateJson as any) || {};
+    const earlyStoredConfig = deal.negotiationConfigJson as any;
+    const earlyMaxAcceptable: number | undefined =
+      earlyStoredConfig?.parameters?.total_price?.max_acceptable ??
+      earlyStoredConfig?.wizardConfig?.priceQuantity?.maxAcceptablePrice ??
+      undefined;
+    const earlyVendorPrice = vendorOffer.total_price;
+    const earlyRound = deal.round + 1;
+    const earlyEndgamePhase: string = earlyConvoState.endgamePhase ?? "NORMAL";
+    const earlyEndgameCounterRounds: number =
+      earlyConvoState.endgameCounterRounds ?? 0;
+
+    // Determine if endgame should trigger MESO this round
+    let endgameTriggersMeso = false;
+    let endgameIsFinalMeso = false;
+    if (
+      earlyMaxAcceptable != null &&
+      earlyVendorPrice != null &&
+      earlyVendorPrice > earlyMaxAcceptable
+    ) {
+      const earlyOverMaxPct =
+        (earlyVendorPrice - earlyMaxAcceptable) / earlyMaxAcceptable;
+      if (earlyOverMaxPct <= 0.10) {
+        if (
+          earlyEndgamePhase === "COUNTERING_AT_MAX" &&
+          earlyEndgameCounterRounds >= 2
+        ) {
+          endgameTriggersMeso = true;
+          endgameIsFinalMeso = true;
+        } else if (earlyRound >= 5 && earlyEndgamePhase === "NORMAL") {
+          endgameTriggersMeso = true;
+          endgameIsFinalMeso = false;
+        }
+      }
+    }
+
     // 7b. MESO handling: Generate MESO options when conditions are met
     let mesoResult: MesoResult | null = null;
 
@@ -898,11 +971,12 @@ export async function processConversationMessage(
       finalOfferState,
     });
 
-    // If MESO should show OR the decision engine returned MESO action
+    // If MESO should show OR the decision engine returned MESO action OR endgame triggers it
     if (
       mesoCheck.shouldShow ||
       decision.action === "MESO" ||
-      (decision.action as string) === "MESO"
+      (decision.action as string) === "MESO" ||
+      endgameTriggersMeso
     ) {
       try {
         const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
@@ -943,6 +1017,15 @@ export async function processConversationMessage(
         mesoResult.phase = mesoCheck.phase;
         mesoResult.inputDisabled = mesoCheck.inputDisabled;
         mesoResult.disabledMessage = mesoCheck.disabledMessage;
+
+        // Endgame override: endgame MESO always shows Others
+        if (endgameTriggersMeso) {
+          mesoResult.showOthers = true;
+          mesoResult.isFinal = endgameIsFinalMeso;
+          mesoResult.phase = endgameIsFinalMeso
+            ? "FINAL_MESO"
+            : "MESO_PRESENTATION";
+        }
 
         if (mesoResult.success && mesoResult.options.length > 0) {
           // Save MESO round to DB so processMesoSelection can find it
@@ -1160,26 +1243,117 @@ export async function processConversationMessage(
       storedConfig?.wizardConfig?.priceQuantity?.maxAcceptablePrice ??
       undefined;
 
-    // 11b. Repeat-offer escape hatch (Apr 2026).
-    //      When the vendor restates the same exact price 3+ times in a row, we
-    //      stop the back-and-forth: ACCEPT if their price fits our ceiling, or
-    //      send a final MESO at maxAcceptable. If we already sent that MESO
-    //      last round and they still won't move, we walk away politely.
-    //      Strategy lives here — the LLM only ever sees the resulting intent.
+    // 11a. Endgame flow state machine (May 2026).
+    //      When vendor price is above max but within 10%, orchestrate a structured
+    //      wind-down: counter at max for 2 rounds → final MESO with Others →
+    //      ESCALATE (within 10%) or WALK_AWAY (>10%).
+    //      This replaces the older repeat-offer escape hatch.
     const convoState = (deal.convoStateJson as any) || {};
-    const lastWasCeilingMeso = convoState?.lastCeilingMesoRound === deal.round;
     let escapeHatchApplied:
       | "accept"
       | "ceiling-meso"
       | "post-meso-walk"
+      | "endgame-meso"
+      | "endgame-counter-at-max"
+      | "endgame-escalate"
+      | "endgame-walkaway"
       | null = null;
 
+    const vendorPrice = vendorOffer.total_price ?? vendorStyle.lastVendorPrice;
+    const currentRound = deal.round + 1;
+    const endgamePhase: string = convoState.endgamePhase ?? "NORMAL";
+    const endgameCounterRounds: number = convoState.endgameCounterRounds ?? 0;
+
     if (
+      maxAcceptablePrice != null &&
+      vendorPrice != null &&
+      vendorPrice > 0
+    ) {
+      const overMaxPercent =
+        (vendorPrice - maxAcceptablePrice) / maxAcceptablePrice;
+
+      // ── Vendor at or below max → ACCEPT ──
+      if (vendorPrice <= maxAcceptablePrice) {
+        decision.action = "ACCEPT";
+        decision.counterOffer = {
+          ...(decision.counterOffer || {}),
+          total_price: vendorPrice,
+        } as any;
+        escapeHatchApplied = "accept";
+      }
+      // ── Vendor within 10% above max ──
+      else if (overMaxPercent <= 0.10) {
+        if (endgamePhase === "FINAL_MESO_SHOWN") {
+          // After final MESO, vendor countered within 10% → ESCALATE
+          decision.action = "ESCALATE";
+          decision.counterOffer = null;
+          escapeHatchApplied = "endgame-escalate";
+        } else if (
+          endgamePhase === "COUNTERING_AT_MAX" &&
+          endgameCounterRounds >= 2
+        ) {
+          // 2 rounds of countering at max done → final MESO with Others.
+          // MESO generation was already triggered by the early endgame check (7a).
+          escapeHatchApplied = "endgame-meso";
+        } else if (currentRound >= 5 && endgamePhase === "NORMAL") {
+          // First endgame entry: initial MESO with Others.
+          // MESO generation was already triggered by the early endgame check (7a).
+          escapeHatchApplied = "endgame-meso";
+        } else if (endgamePhase === "COUNTERING_AT_MAX") {
+          // Still in counter rounds (< 2) → counter at max
+          decision.action = "COUNTER";
+          decision.counterOffer = {
+            ...(decision.counterOffer || {}),
+            total_price: maxAcceptablePrice,
+          } as any;
+          escapeHatchApplied = "endgame-counter-at-max";
+        }
+        // Before round 5, let the normal engine decision stand
+      }
+      // ── Vendor more than 10% above max ──
+      else {
+        if (endgamePhase === "FINAL_MESO_SHOWN") {
+          // After final MESO, vendor countered >10% above max → WALK AWAY
+          decision.action = "WALK_AWAY";
+          decision.counterOffer = null;
+          escapeHatchApplied = "endgame-walkaway";
+        } else if (
+          endgamePhase === "COUNTERING_AT_MAX" &&
+          endgameCounterRounds >= 2
+        ) {
+          // After 2 counter rounds at max, vendor still >10% above → WALK AWAY
+          decision.action = "WALK_AWAY";
+          decision.counterOffer = null;
+          escapeHatchApplied = "endgame-walkaway";
+        }
+        // Otherwise let normal engine decision stand (COUNTER, etc.)
+      }
+
+      if (escapeHatchApplied) {
+        logger.info("[ConversationService] Endgame flow applied", {
+          dealId,
+          mode: escapeHatchApplied,
+          vendorPrice,
+          maxAcceptablePrice,
+          overMaxPercent: (overMaxPercent * 100).toFixed(1) + "%",
+          endgamePhase,
+          endgameCounterRounds,
+          currentRound,
+        });
+      }
+    }
+
+    // 11b. Repeat-offer escape hatch (legacy fallback).
+    //      Only fires when the endgame flow above didn't already handle it.
+    if (
+      !escapeHatchApplied &&
       vendorStyle.repeatedOfferCount >= 2 &&
       vendorStyle.lastVendorPrice != null
     ) {
+      const lastWasCeilingMeso =
+        convoState?.lastCeilingMesoRound === deal.round;
+
       if (lastWasCeilingMeso) {
-        // Vendor still won't move after our maxAcceptable counter — walk away.
         decision.action = "WALK_AWAY";
         decision.counterOffer = null;
         escapeHatchApplied = "post-meso-walk";
@@ -1187,7 +1361,6 @@ export async function processConversationMessage(
         maxAcceptablePrice != null &&
         vendorStyle.lastVendorPrice <= maxAcceptablePrice
       ) {
-        // Vendor's stuck price is within our ceiling — close the deal.
         decision.action = "ACCEPT";
         decision.counterOffer = {
           ...(decision.counterOffer || {}),
@@ -1195,8 +1368,6 @@ export async function processConversationMessage(
         } as any;
         escapeHatchApplied = "accept";
       } else if (maxAcceptablePrice != null) {
-        // Above ceiling — send a final counter at maxAcceptable, framed as a
-        // regular meet-in-the-middle move (no "this is final" signal leaks).
         decision.action = "COUNTER";
         decision.counterOffer = {
           ...(decision.counterOffer || {}),
@@ -1310,11 +1481,58 @@ export async function processConversationMessage(
         );
       }
       // Silent fallback — vendor never knows
-      accordoReplyContent = getFallbackResponse(negotiationIntent);
+      accordoReplyContent = getValidatedFallback(negotiationIntent);
       fromLlm = false;
     }
 
-    // 15b. Record the phrasing fingerprint so the next round avoids reusing it.
+    // 15a. Identical-message guard: if this reply matches the last Accordo
+    //       message verbatim, swap to a fallback to avoid robotic repetition.
+    const lastAccordoMsg = [...allMessages]
+      .reverse()
+      .find((m: any) => m.role === "ACCORDO");
+    if (
+      lastAccordoMsg &&
+      (lastAccordoMsg as any).content?.trim() === accordoReplyContent.trim()
+    ) {
+      logger.warn(
+        "[ConversationService] Identical consecutive message detected, using fallback",
+        { dealId, action: negotiationIntent.action },
+      );
+      accordoReplyContent = getValidatedFallback(
+        negotiationIntent,
+        5,
+        accordoReplyContent, // exclude the identical message from fallback pool
+      );
+      fromLlm = false;
+    }
+
+    // 15b. Cross-message opener dedup: if this reply reused the same opener
+    //       pattern as a recent message in this deal, try programmatic rewrite
+    //       first (swap opener only), then fall back to full template swap.
+    //       Runs on ALL messages (LLM and fallbacks) to prevent repetitive openers.
+    if (
+      hasRecentOpener(dealId, negotiationIntent.action, accordoReplyContent)
+    ) {
+      // Try programmatic opener rewrite first — preserves the body of the message
+      const rewritten = rewriteOpener(dealId, negotiationIntent.action, accordoReplyContent);
+      if (!hasRecentOpener(dealId, negotiationIntent.action, rewritten)) {
+        logger.info(
+          "[ConversationService] Repeated opener rewritten programmatically",
+          { dealId, action: negotiationIntent.action },
+        );
+        accordoReplyContent = rewritten;
+      } else {
+        // Rewrite still collides — fall back to full template swap
+        logger.warn(
+          "[ConversationService] Repeated opener detected, rewrite failed, using fallback",
+          { dealId, action: negotiationIntent.action },
+        );
+        accordoReplyContent = getValidatedFallback(negotiationIntent);
+        fromLlm = false;
+      }
+    }
+
+    // 15c. Record the phrasing fingerprint so the next round avoids reusing it.
     recordPhrasing(dealId, negotiationIntent.action, accordoReplyContent);
 
     // 16. Log the negotiation step (audit trail — no LLM text, no scores)
@@ -1409,11 +1627,38 @@ export async function processConversationMessage(
     } else {
       deal.latestOfferJson = (decision.counterOffer as any) || null;
     }
-    // Track the round we sent the maxAcceptable counter so next round can walk
-    // away if the vendor still hasn't moved.
+    // Track endgame flow state transitions + legacy ceiling-meso marker.
     const updatedConvoState: any = { ...(newConversationState as any) };
     if (escapeHatchApplied === "ceiling-meso") {
       updatedConvoState.lastCeilingMesoRound = deal.round + 1;
+    }
+    // Endgame state machine transitions
+    if (escapeHatchApplied === "endgame-meso") {
+      if (
+        updatedConvoState.endgamePhase === "COUNTERING_AT_MAX" &&
+        (updatedConvoState.endgameCounterRounds ?? 0) >= 2
+      ) {
+        // This is the FINAL MESO after 2 counter rounds
+        updatedConvoState.endgamePhase = "FINAL_MESO_SHOWN";
+        updatedConvoState.endgameFinalMesoRound = deal.round;
+      } else {
+        // First MESO entry → vendor chose Others → start counter phase
+        updatedConvoState.endgamePhase = "COUNTERING_AT_MAX";
+        updatedConvoState.endgameCounterRounds = 0;
+        updatedConvoState.endgameMesoRound = deal.round;
+      }
+    } else if (escapeHatchApplied === "endgame-counter-at-max") {
+      updatedConvoState.endgamePhase = "COUNTERING_AT_MAX";
+      updatedConvoState.endgameCounterRounds =
+        (updatedConvoState.endgameCounterRounds ?? 0) + 1;
+    } else if (
+      escapeHatchApplied === "endgame-escalate" ||
+      escapeHatchApplied === "endgame-walkaway"
+    ) {
+      // Terminal — no further state changes needed
+    } else if (escapeHatchApplied === "accept") {
+      // Deal accepted — reset endgame
+      updatedConvoState.endgamePhase = "NORMAL";
     }
     deal.convoStateJson = updatedConvoState;
     deal.lastMessageAt = new Date();
@@ -1437,6 +1682,37 @@ export async function processConversationMessage(
       }
     }
     deal.openQuestions = newQuestions;
+
+    // Safety net: NEVER accept above max_acceptable (CONVERSATION mode).
+    if (decision.action === "ACCEPT") {
+      const safetyMaxPrice =
+        config.parameters?.total_price?.max_acceptable ??
+        (config.parameters as any)?.unit_price?.max_acceptable ??
+        null;
+      const acceptedPrice = vendorOffer.total_price ?? null;
+      if (
+        safetyMaxPrice != null &&
+        acceptedPrice != null &&
+        acceptedPrice > safetyMaxPrice
+      ) {
+        logger.warn(
+          `[ConversationService] SAFETY NET: Overriding ACCEPT → COUNTER — price ${acceptedPrice} exceeds max_acceptable ${safetyMaxPrice}`,
+          { dealId },
+        );
+        decision = {
+          action: "COUNTER",
+          utilityScore: decision.utilityScore,
+          counterOffer: {
+            total_price: safetyMaxPrice,
+            payment_terms: vendorOffer.payment_terms ?? null,
+          } as any,
+          reasons: [
+            ...decision.reasons,
+            `Safety override: vendor price ${acceptedPrice} exceeds max_acceptable ${safetyMaxPrice} — countering at max.`,
+          ],
+        };
+      }
+    }
 
     // Update status via state machine
     const event = actionToEvent(decision.action);

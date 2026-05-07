@@ -501,6 +501,35 @@ export function calculateDynamicCounter(
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, max_acceptable);
 
+  // ── Convergence blend: from round 3+, blend counter toward midpoint with vendor ──
+  // This prevents the counter from staying flat at max_acceptable for many rounds.
+  if (
+    round >= 3 &&
+    vendorOffer.total_price !== null &&
+    vendorOffer.total_price > counterPrice
+  ) {
+    const blendFactor = Math.min(0.5, 0.10 + round * 0.07);
+    const midpoint = (counterPrice + vendorOffer.total_price) / 2;
+    const blended = counterPrice + (midpoint - counterPrice) * blendFactor;
+    // Blended price must still respect max_acceptable ceiling
+    counterPrice = Math.min(blended, max_acceptable);
+  }
+
+  // ── Minimum step guard: if counter equals our last counter, force at least 1% movement ──
+  if (previousPmOffer && vendorOffer.total_price !== null && vendorOffer.total_price > counterPrice) {
+    const prevPmPriceForStep =
+      typeof previousPmOffer === "object" && "price" in previousPmOffer
+        ? (previousPmOffer as PmCounterRecord).price
+        : (previousPmOffer as Offer).total_price;
+    if (
+      prevPmPriceForStep != null &&
+      Math.abs(counterPrice - prevPmPriceForStep) < 0.01
+    ) {
+      const step = (vendorOffer.total_price - counterPrice) * 0.01;
+      counterPrice = Math.min(counterPrice + Math.max(step, 1), max_acceptable);
+    }
+  }
+
   // Never counter above vendor's offer — counter should always be BELOW vendor's price
   // If counter ends up at or above vendor's price, use a meaningful counter below it
   if (

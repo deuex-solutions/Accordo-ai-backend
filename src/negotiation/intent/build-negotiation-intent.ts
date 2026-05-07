@@ -187,6 +187,13 @@ export interface NegotiationIntent {
   allowedPrice?: number;
 
   /**
+   * True when the counter price equals max_acceptable — indicates we're at our
+   * ceiling and should use "our best position" language instead of leaving room
+   * for further concession. Never reveals the word "maximum" or "limit" to vendor.
+   */
+  atCeiling?: boolean;
+
+  /**
    * Payment terms for COUNTER responses (e.g. "Net 60").
    * Absent for non-COUNTER actions.
    */
@@ -580,6 +587,10 @@ export function buildNegotiationIntent(
         humanPrice = maxAcceptablePrice;
       }
       intent.allowedPrice = humanPrice;
+      // Flag when we're at the ceiling (counter equals max_acceptable)
+      if (maxAcceptablePrice != null && Math.abs(humanPrice - maxAcceptablePrice) < 0.01) {
+        intent.atCeiling = true;
+      }
     }
     if (counterPaymentTerms) {
       intent.allowedPaymentTerms = counterPaymentTerms;

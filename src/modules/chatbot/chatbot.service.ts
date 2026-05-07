@@ -1821,6 +1821,34 @@ export const processVendorMessageService = async (
       explainabilityJson: explainability as any,
     });
 
+    // Safety net: NEVER accept above max_acceptable (INSIGHTS mode).
+    if (decision.action === "ACCEPT") {
+      const safetyMaxPrice =
+        config.parameters?.total_price?.max_acceptable ??
+        (config.parameters as any)?.unit_price?.max_acceptable ??
+        null;
+      const acceptedPrice =
+        extractedOffer?.total_price ?? decision.counterOffer?.total_price ?? null;
+      if (
+        safetyMaxPrice != null &&
+        acceptedPrice != null &&
+        acceptedPrice > safetyMaxPrice
+      ) {
+        logger.warn(
+          `[INSIGHTS] SAFETY NET: Overriding ACCEPT → COUNTER — accepted price ${acceptedPrice} exceeds max_acceptable ${safetyMaxPrice}`,
+          { dealId: deal.id },
+        );
+        (decision as any).action = "COUNTER";
+        decision.counterOffer = {
+          total_price: safetyMaxPrice,
+          payment_terms: extractedOffer?.payment_terms ?? null,
+        };
+        decision.reasons.push(
+          `Safety override: vendor price ${acceptedPrice} exceeds max_acceptable ${safetyMaxPrice} — countering at max.`,
+        );
+      }
+    }
+
     // Update deal with latest state
     let finalStatus: "NEGOTIATING" | "ACCEPTED" | "WALKED_AWAY" | "ESCALATED" =
       deal.status;
@@ -2522,14 +2550,11 @@ export const generatePMResponseAsyncService = async (
     const previousVendorPrice =
       (previousVendorOffer as any)?.total_price ?? null;
     const currentVendorPrice = extractedOffer?.total_price ?? null;
-    // ACCEPT tolerance (Apr 2026 follow-up): vendor's offer within ~1.5%
-    // above maxAcceptable still counts as "within ceiling" if they're
-    // converging. Catches the "£420,500 vs £418,900 ceiling" failure mode
-    // where £1,600 (0.4%) above kept us countering forever instead of
-    // closing.
-    const ACCEPT_TOLERANCE = 0.015;
-    const effectiveCeiling =
-      maxAcceptable != null ? maxAcceptable * (1 + ACCEPT_TOLERANCE) : null;
+    // Strict max ceiling: vendor-convergence ACCEPT only fires when the
+    // vendor's price is at or below maxAcceptable. No tolerance — accepting
+    // above max causes incorrect deal closure (e.g. ₹3,51,500 accepted when
+    // max is ₹3,49,000).
+    const effectiveCeiling = maxAcceptable ?? null;
     const isVendorConverging =
       !isVendorAffirmative &&
       currentVendorPrice != null &&
@@ -3273,6 +3298,40 @@ export const generatePMResponseAsyncService = async (
       explainabilityJson: explainability as any,
       round: currentRound, // PM message has same round as vendor message
     });
+
+    // Safety net: NEVER accept above max_acceptable. If an upstream path
+    // (vendor-convergence, graduated-accept, engine bug) returns ACCEPT but the
+    // vendor's price exceeds max, override to COUNTER at max.
+    if (decision.action === "ACCEPT") {
+      const safetyMaxPrice =
+        config.parameters?.total_price?.max_acceptable ??
+        (config.parameters as any)?.unit_price?.max_acceptable ??
+        null;
+      const acceptedPrice =
+        extractedOffer?.total_price ?? decision.counterOffer?.total_price ?? null;
+      if (
+        safetyMaxPrice != null &&
+        acceptedPrice != null &&
+        acceptedPrice > safetyMaxPrice
+      ) {
+        logger.warn(
+          `[Phase2] SAFETY NET: Overriding ACCEPT → COUNTER — accepted price ${acceptedPrice} exceeds max_acceptable ${safetyMaxPrice}`,
+          { dealId: input.dealId },
+        );
+        decision = {
+          action: "COUNTER",
+          utilityScore: decision.utilityScore,
+          counterOffer: {
+            total_price: safetyMaxPrice,
+            payment_terms: extractedOffer?.payment_terms ?? null,
+          },
+          reasons: [
+            ...decision.reasons,
+            `Safety override: vendor price ${acceptedPrice} exceeds max_acceptable ${safetyMaxPrice} — countering at max.`,
+          ],
+        };
+      }
+    }
 
     // Update deal with final status based on decision
     // PM response CONCLUDES the round, so increment deal.round NOW

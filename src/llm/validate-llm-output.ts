@@ -344,7 +344,14 @@ export function sanitizeText(text: string): string {
     return yr === currentYear ? `${monthName} ${dayNum}` : `${monthName} ${dayNum}, ${yr}`;
   });
 
-  // 5. Same-message opener dedup (May 2026): if the same opener phrase appears
+  // 5. Subject-verb agreement fix: plural noun + "is" → "are".
+  // Catches common LLM errors like "arrangements is", "terms is", "options is".
+  s = s.replace(
+    /\b(arrangements|terms|conditions|options|considerations|requirements|details|numbers|prices|specs|specifications|factors|alternatives|concerns)\s+is\b/gi,
+    (_, noun) => `${noun} are`,
+  );
+
+  // 6. Same-message opener dedup (May 2026): if the same opener phrase appears
   // in two separate sentences, remove the second occurrence's sentence.
   // Catches "I appreciate your offer. ... I appreciate your position." etc.
   s = deduplicateOpeners(s);
@@ -488,14 +495,18 @@ export function validateLlmOutput(
     action === "ESCALATE"
   ) {
     const fabricationPatterns: RegExp[] = [
-      /\b(your|the vendor'?s?)\s+(cash ?flow|budget|financial|margin|overhead)\s+(pressure|constraint|concern|consideration|situation|challenge|issue|limitation|difficult|need|problem|requirement|reality|priorit)/i,
-      /\bunderstand\s+(your|the)\s+(cash ?flow|budget|financial|margin)\s+(pressure|constraint|concern|consideration|situation|challenge|need|problem|requirement)/i,
-      /\bhear you on\s+(the\s+)?(cash ?flow|budget|financial|margin)/i,
-      /\b(tight|limited|stretched|squeezed)\s+(budget|cash ?flow|margin|financial)/i,
+      /\b(your|the vendor'?s?)\s+(cash ?flow|budget|financial|margin|overhead|payment\s+terms?)\s+(pressures?|constraints?|concerns?|considerations?|situations?|challenges?|issues?|limitations?|difficult\w*|needs?|problems?|requirements?|realit\w*|priorit\w*|arrangements?)/i,
+      /\bunderstand\s+(your|the)\s+(cash ?flow|budget|financial|margin|payment\s+terms?)\s+(pressures?|constraints?|concerns?|considerations?|situations?|challenges?|needs?|problems?|requirements?|arrangements?)/i,
+      /\bhear you on\s+(the\s+)?(cash ?flow|budget|financial|margin|payment\s+terms?)/i,
+      /\b(tight|limited|stretched|squeezed)\s+(budget|cash ?flow|margin|financial|payment\s+terms?)/i,
       /\b(cash ?flow|budget|margin)\s+(is|seems?|must be|looks?)\s+(tight|limited|stretched|squeezed|challenging)/i,
       /\b(my boss|my manager|management)\s+(said|told|asked|wants|insisted|requires)/i,
       // Catch "Given/considering cash flow considerations/needs" pattern
-      /\b(given|considering|acknowledging|recognizing|noting)\s+(your\s+)?(cash ?flow|budget|financial|margin)\s+(consideration|concern|constraint|need|situation|requirement|priorit|reality|position)/i,
+      /\b(given|considering|acknowledging|recognizing|noting)\s+(your\s+)?(cash ?flow|budget|financial|margin|payment\s+terms?)\s+(considerations?|concerns?|constraints?|needs?|situations?|requirements?|priorit\w*|realit\w*|positions?|arrangements?)/i,
+      // Catch "X is a factor" templatic fabrication
+      /\b(cash ?flow|budget|margin|overhead|cost structure|financial arrangements?|financial considerations?|payment\s+terms?)\s+(is|are)\s+(a\s+)?(factor|considerations?|concerns?|priorit\w*|issues?)/i,
+      // Catch "your/their financial arrangements" fabrication (not "payment arrangements" in general)
+      /\b(your|their|the vendor'?s?)\s+(financial|current)\s+arrangements?/i,
     ];
 
     const concernsAllowed = intent.acknowledgeConcerns ?? [];
@@ -516,6 +527,57 @@ export function validateLlmOutput(
         }
       }
     }
+  }
+
+  // 6. Price normalization: replace any price token with the exact formatted
+  //    allowedPrice so the LLM can't reformat prices (e.g. "349000" → "3,49,000").
+  if (intent.allowedPrice != null && intent.currencySymbol) {
+    const priceLocale = intent.currencySymbol === "₹" ? "en-IN" : "en-US";
+    const formattedPrice = intent.allowedPrice.toLocaleString(priceLocale);
+    const expectedFormatted = `${intent.currencySymbol}${formattedPrice}`;
+
+    // Build regex that matches the currency symbol followed by any numeric
+    // representation of the allowed price (with/without commas, with/without
+    // decimal, with K/L/Cr suffix, or plain digits).
+    // We match: ₹349000, ₹3,49,000, ₹349,000, ₹349K, ₹3.49L, etc.
+    const escapedSymbol = intent.currencySymbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const priceDigits = String(Math.round(intent.allowedPrice));
+
+    // Match currency symbol + any comma-grouped or plain number that rounds
+    // to the same integer value as allowedPrice
+    const pricePattern = new RegExp(
+      `${escapedSymbol}\\s*[\\d,]+(?:\\.\\d+)?(?:\\s*(?:K|L|Cr|lakh|crore))?`,
+      "gi",
+    );
+
+    sanitized = sanitized.replace(pricePattern, (match) => {
+      // Extract numeric value from the matched price
+      const numericStr = match
+        .replace(new RegExp(escapedSymbol, "g"), "")
+        .replace(/,/g, "")
+        .trim();
+      let matchedValue: number;
+
+      if (/\d+(\.\d+)?\s*(cr|crore)/i.test(numericStr)) {
+        matchedValue = parseFloat(numericStr) * 10000000;
+      } else if (/\d+(\.\d+)?\s*(l|lakh)/i.test(numericStr)) {
+        matchedValue = parseFloat(numericStr) * 100000;
+      } else if (/\d+(\.\d+)?\s*k/i.test(numericStr)) {
+        matchedValue = parseFloat(numericStr) * 1000;
+      } else {
+        matchedValue = parseFloat(numericStr);
+      }
+
+      // Only replace if the matched value rounds to the same integer as allowedPrice
+      // (tolerance: within 1% to catch rounding differences)
+      if (
+        !isNaN(matchedValue) &&
+        Math.abs(matchedValue - intent.allowedPrice!) / intent.allowedPrice! < 0.01
+      ) {
+        return expectedFormatted;
+      }
+      return match; // Different price (e.g. vendor's price echo) — leave as-is
+    });
   }
 
   return sanitized;
