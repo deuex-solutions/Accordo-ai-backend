@@ -72,7 +72,7 @@ Structure rules:
 13. If the vendor is just making smalltalk, give a short warm reply and redirect to the deal.
 14. Adapt length to the vendor: short message → short reply, longer message → longer reply. Stay within the bounds you'll be given.
 15. Single message only. No bullet points unless presenting MESO options.
-16. NEVER invent, infer, or fabricate vendor concerns. Only acknowledge concerns explicitly listed in the instruction below. If no concerns are listed, do not reference any vendor concern, motivation, or circumstance (e.g. do NOT say "cash flow", "financial arrangements", "budget pressure" unless those exact words appear in the instruction).
+16. NEVER invent, infer, or fabricate vendor concerns, motivations, or financial situations. Only acknowledge concerns explicitly listed in the instruction below. If no concerns are listed, do NOT reference ANY vendor concern or circumstance. Specifically banned when no concerns are listed: "cash flow", "budget", "financial considerations", "financial needs", "margin pressure", "cash flow considerations", "budget constraints", "financial arrangements", "overhead", "cost structure". Do not use "given your/their..." or "considering your/their..." followed by any financial term.
 17. Never output dates in YYYY-MM-DD format. Always use Month Day format (e.g. June 5 or June 5, 2026).`;
 }
 
@@ -174,7 +174,7 @@ function buildInstruction(
       : "Reply in English.";
 
   const greetingHint = isFirstRound
-    ? "This is the first round — a brief greeting is appropriate."
+    ? `This is the first round — start with a brief, general greeting. Use one of these opener styles (pick the one that fits the vendor's tone): "Thanks for your offer", "Good to connect with you on this", "Thanks for getting back to us", "Appreciate you putting this together", "Good to hear from you". Do NOT reference specific terms (payment, delivery, warranty, price) in your opening sentence — keep it general.`
     : "This is an ongoing chat — do NOT greet, just continue the conversation.";
 
   const firmnessInstruction =
@@ -224,6 +224,12 @@ function buildInstruction(
       : "";
 
   const lengthHint = lengthHintForAction(intent.action, style?.length ?? 0);
+
+  // Vendor price echo — when present, LLM uses this exact string instead of
+  // inventing its own formatting (prevents "355000" instead of "₹3,55,000").
+  const vendorPriceHint = intent.vendorPriceFormatted
+    ? `When referencing the vendor's price, use exactly: ${intent.vendorPriceFormatted}. Do not reformat or round it.`
+    : "";
 
   let actionInstruction = "";
 
@@ -293,6 +299,7 @@ function buildInstruction(
     greetingHint,
     hostilityHint,
     movementHint,
+    vendorPriceHint,
     orderingHint,
     smalltalkHint,
     openQuestionsHint,

@@ -72,7 +72,24 @@ export function buildFingerprint(action: string, message: string): string {
 }
 
 /**
+ * Build a coarse opener fingerprint from just the first 3 words.
+ * Catches "I appreciate your offer" and "I appreciate your position" as
+ * the same opener pattern, preventing cross-message "I appreciate..." repeats.
+ */
+export function buildOpenerFingerprint(action: string, message: string): string {
+  const words = (message || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s']/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3);
+  return `OPENER|${action}|${words.join(":")}`;
+}
+
+/**
  * Record a phrasing fingerprint for a deal.
+ * Records BOTH a 5-word fingerprint (specific phrasing) and a 3-word opener
+ * fingerprint (catches "I appreciate" variants across messages).
  * Idempotent for repeat fingerprints — keeps the most recent timestamp.
  */
 export function recordPhrasing(
@@ -86,14 +103,17 @@ export function recordPhrasing(
   evictOldestIfFull();
 
   const fingerprint = buildFingerprint(action, message);
+  const openerFp = buildOpenerFingerprint(action, message);
   const existing = cache.get(dealId) ?? {
     fingerprints: [],
     lastTouched: now(),
   };
 
-  // Keep only most-recent occurrence of this fingerprint
-  const filtered = existing.fingerprints.filter((fp) => fp !== fingerprint);
-  filtered.push(fingerprint);
+  // Keep only most-recent occurrence of each fingerprint
+  let filtered = existing.fingerprints.filter(
+    (fp) => fp !== fingerprint && fp !== openerFp,
+  );
+  filtered.push(fingerprint, openerFp);
 
   // Cap per-deal list
   const trimmed =
@@ -118,7 +138,7 @@ export function getPhrasings(dealId: string): string[] {
 }
 
 /**
- * True when this exact (action, first-3-words) fingerprint has been used
+ * True when this exact (action, first-5-words) fingerprint has been used
  * recently in this deal.
  */
 export function hasRecentPhrasing(
@@ -128,6 +148,20 @@ export function hasRecentPhrasing(
 ): boolean {
   const fingerprint = buildFingerprint(action, message);
   return getPhrasings(dealId).includes(fingerprint);
+}
+
+/**
+ * True when this opener pattern (action, first-3-words) has been used
+ * recently in this deal. Catches "I appreciate your offer" and "I appreciate
+ * your position" as the same opener.
+ */
+export function hasRecentOpener(
+  dealId: string,
+  action: string,
+  message: string,
+): boolean {
+  const openerFp = buildOpenerFingerprint(action, message);
+  return getPhrasings(dealId).includes(openerFp);
 }
 
 /**

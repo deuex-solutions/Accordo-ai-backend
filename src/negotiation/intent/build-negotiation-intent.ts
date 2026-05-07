@@ -34,6 +34,23 @@ export function getCurrencySymbol(code?: string): string {
 }
 
 /**
+ * Format a price with locale-aware grouping and currency symbol.
+ * Uses en-IN for INR (₹3,55,000) and en-US for others ($355,000).
+ * Strips .00 decimals for whole numbers.
+ */
+function formatPriceForDisplay(amount: number, currencyCode?: string): string {
+  const code = (currencyCode || "USD").toUpperCase();
+  const symbol = CURRENCY_SYMBOL_MAP[code] || "$";
+  const locale = code === "INR" ? "en-IN" : "en-US";
+  const isWhole = amount === Math.floor(amount);
+  const formatted = amount.toLocaleString(locale, {
+    minimumFractionDigits: isWhole ? 0 : 2,
+    maximumFractionDigits: isWhole ? 0 : 2,
+  });
+  return `${symbol}${formatted}`;
+}
+
+/**
  * Round a price to a clean, human-sounding number.
  * Procurement managers don't quote to the penny.
  *
@@ -85,9 +102,24 @@ function humanizeDeliveryDate(delivery: string): string {
     ];
     const monthName = months[parseInt(month, 10) - 1];
     const dayNum = parseInt(day, 10);
+    // Omit year when it's the current year (May 2026 humanization)
+    const currentYear = new Date().getFullYear().toString();
+    if (year === currentYear) {
+      return `${monthName} ${dayNum}`;
+    }
     return `${monthName} ${dayNum}, ${year}`;
   }
   return delivery;
+}
+
+/**
+ * Format an ISO date string for use in MESO descriptions, system messages,
+ * and any engine-generated text. Exported so meso.ts and other modules can
+ * share the same formatting. (May 2026)
+ */
+export function formatHumanDate(isoDate: string | null | undefined): string {
+  if (!isoDate) return "";
+  return humanizeDeliveryDate(isoDate);
 }
 
 /**
@@ -222,6 +254,14 @@ export interface NegotiationIntent {
    * acknowledge concessions naturally.
    */
   vendorMovement?: "significant" | "moderate" | "minor";
+
+  /**
+   * Vendor's last stated price, pre-formatted with locale-aware currency
+   * (e.g. "₹3,55,000" or "$26,000"). When present, the persona-renderer
+   * instructs the LLM to echo this exact string instead of raw numbers.
+   * Only set when the vendor has stated a price.
+   */
+  vendorPriceFormatted?: string;
 }
 
 /**
@@ -513,6 +553,15 @@ export function buildNegotiationIntent(
   if (openQuestions && openQuestions.length > 0)
     intent.openQuestions = openQuestions;
   if (input.vendorMovement) intent.vendorMovement = input.vendorMovement;
+
+  // Format the vendor's last stated price for display (May 2026).
+  // The LLM echoes this exact string instead of inventing its own formatting.
+  if (vendorStyle?.lastVendorPrice != null && vendorStyle.lastVendorPrice > 0) {
+    intent.vendorPriceFormatted = formatPriceForDisplay(
+      vendorStyle.lastVendorPrice,
+      input.currencyCode,
+    );
+  }
 
   // Only COUNTER gets pricing fields and weakest parameter signal
   if (finalAction === "COUNTER" && counterPrice != null) {

@@ -254,6 +254,52 @@ function stripSoftPhrases(text: string): string {
   return cleaned.replace(/\s{2,}/g, " ").trim();
 }
 
+// ─────────────────────────────────────────────
+// Same-message opener deduplication (May 2026)
+// ─────────────────────────────────────────────
+
+/** Common opener phrases that LLMs love to repeat within the same message. */
+const DEDUP_OPENER_PATTERNS = [
+  /\bI appreciate\b/i,
+  /\bthank you for\b/i,
+  /\bthanks for\b/i,
+  /\bI understand\b/i,
+  /\bI hear you\b/i,
+];
+
+/**
+ * If the same opener phrase appears in two separate sentences within the
+ * same message, remove the sentence containing the second occurrence.
+ * This prevents "I appreciate your offer. ... I appreciate your position."
+ */
+function deduplicateOpeners(text: string): string {
+  // Split into sentences (period/question mark boundaries)
+  const sentences = text.split(/(?<=[.?])\s+/);
+  if (sentences.length < 2) return text;
+
+  const usedOpeners = new Set<number>();
+  const keep: string[] = [];
+
+  for (const sentence of sentences) {
+    let isDuplicate = false;
+    for (let i = 0; i < DEDUP_OPENER_PATTERNS.length; i++) {
+      if (DEDUP_OPENER_PATTERNS[i].test(sentence)) {
+        if (usedOpeners.has(i)) {
+          // This opener already appeared in a prior sentence — skip this one
+          isDuplicate = true;
+          break;
+        }
+        usedOpeners.add(i);
+      }
+    }
+    if (!isDuplicate) {
+      keep.push(sentence);
+    }
+  }
+
+  return keep.join(" ");
+}
+
 /**
  * Apply all silent text scrubbers — soft phrases, weak apologies, AI-tells,
  * em-dashes, exclamation marks. Used by both the LLM-output validator and
@@ -287,6 +333,21 @@ export function sanitizeText(text: string): string {
   s = s.replace(/([.,])([A-Za-z])/g, "$1 $2");
   // 4. Fix double periods (LLM sometimes generates "terms.." or "forward..")
   s = s.replace(/\.{2,}/g, ".");
+  // 4b. Convert ISO dates (YYYY-MM-DD) to "Month Day" format (May 2026).
+  // LLM sometimes outputs "2026-06-05" despite Rule 17. Silently fix it.
+  const ISO_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  s = s.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_, yr, mo, dy) => {
+    const monthName = ISO_MONTHS[parseInt(mo, 10) - 1];
+    if (!monthName) return `${yr}-${mo}-${dy}`;
+    const dayNum = parseInt(dy, 10);
+    const currentYear = new Date().getFullYear().toString();
+    return yr === currentYear ? `${monthName} ${dayNum}` : `${monthName} ${dayNum}, ${yr}`;
+  });
+
+  // 5. Same-message opener dedup (May 2026): if the same opener phrase appears
+  // in two separate sentences, remove the second occurrence's sentence.
+  // Catches "I appreciate your offer. ... I appreciate your position." etc.
+  s = deduplicateOpeners(s);
 
   // Collapse strip artifacts.
   s = s
@@ -427,12 +488,14 @@ export function validateLlmOutput(
     action === "ESCALATE"
   ) {
     const fabricationPatterns: RegExp[] = [
-      /\b(your|the vendor'?s?)\s+(cash ?flow|budget|financial|margin|overhead)\s+(pressure|constraint|concern|situation|challenge|issue|limitation|difficult)/i,
-      /\bunderstand\s+(your|the)\s+(cash ?flow|budget|financial|margin)\s+(pressure|constraint|concern|situation|challenge)/i,
+      /\b(your|the vendor'?s?)\s+(cash ?flow|budget|financial|margin|overhead)\s+(pressure|constraint|concern|consideration|situation|challenge|issue|limitation|difficult|need|problem|requirement|reality|priorit)/i,
+      /\bunderstand\s+(your|the)\s+(cash ?flow|budget|financial|margin)\s+(pressure|constraint|concern|consideration|situation|challenge|need|problem|requirement)/i,
       /\bhear you on\s+(the\s+)?(cash ?flow|budget|financial|margin)/i,
       /\b(tight|limited|stretched|squeezed)\s+(budget|cash ?flow|margin|financial)/i,
       /\b(cash ?flow|budget|margin)\s+(is|seems?|must be|looks?)\s+(tight|limited|stretched|squeezed|challenging)/i,
       /\b(my boss|my manager|management)\s+(said|told|asked|wants|insisted|requires)/i,
+      // Catch "Given/considering cash flow considerations/needs" pattern
+      /\b(given|considering|acknowledging|recognizing|noting)\s+(your\s+)?(cash ?flow|budget|financial|margin)\s+(consideration|concern|constraint|need|situation|requirement|priorit|reality|position)/i,
     ];
 
     const concernsAllowed = intent.acknowledgeConcerns ?? [];

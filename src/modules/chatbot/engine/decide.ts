@@ -1612,6 +1612,59 @@ function generateCounterOffer(
 
   // Never exceed max acceptable
   counterPrice = Math.min(counterPrice, maxAcceptablePrice);
+
+  // Convergence blend (May 2026): the base formula uses a near-static offset
+  // from target, so it barely moves after round 5. When the vendor has come
+  // down significantly, blend toward the midpoint between our base counter
+  // and the vendor's offer — this shows good-faith movement and prevents
+  // the PM from looking stuck at the same number.
+  if (
+    vendorOffer.total_price !== null &&
+    vendorOffer.total_price > 0 &&
+    round >= 3
+  ) {
+    const midpoint = (counterPrice + vendorOffer.total_price) / 2;
+    // Blend factor increases with round: round 3 = 31%, round 5 = 45%, round 7+ = 50%
+    const blendFactor = Math.min(0.5, 0.10 + round * 0.07);
+    const blendedPrice = counterPrice + (midpoint - counterPrice) * blendFactor;
+    // Only apply if blended price is still within our acceptable range
+    if (blendedPrice <= maxAcceptablePrice && blendedPrice > counterPrice) {
+      counterPrice = blendedPrice;
+    }
+  }
+
+  // Minimum step guard (May 2026): if the counter is the same as (or barely
+  // different from) the previous PM counter, force at least a 1% movement
+  // toward the vendor's offer. Without this, humanRoundPrice() downstream
+  // can eat small blend movements and the PM appears stuck.
+  if (
+    negotiationState &&
+    negotiationState.pmCounterHistory.length > 0 &&
+    vendorOffer.total_price != null &&
+    vendorOffer.total_price > 0 &&
+    round >= 2
+  ) {
+    const lastPmCounter =
+      negotiationState.pmCounterHistory[
+        negotiationState.pmCounterHistory.length - 1
+      ].price;
+    if (lastPmCounter != null && lastPmCounter > 0) {
+      const diff = Math.abs(counterPrice - lastPmCounter);
+      const onePercent = lastPmCounter * 0.01;
+      // If diff is less than 1% of the last counter, bump by 1% toward vendor
+      if (diff < onePercent) {
+        const stepped = lastPmCounter + onePercent;
+        // Only apply if stepped price is still within bounds
+        if (
+          stepped <= maxAcceptablePrice &&
+          stepped < vendorOffer.total_price
+        ) {
+          counterPrice = stepped;
+        }
+      }
+    }
+  }
+
   counterPrice = Math.round(counterPrice * 100) / 100;
 
   // Determine payment terms

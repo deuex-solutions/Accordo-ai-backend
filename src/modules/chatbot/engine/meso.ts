@@ -189,6 +189,12 @@ export interface MesoOption {
   emphasis: ("price" | "payment_terms" | "delivery" | "warranty")[];
   /** Trade-offs made in this option */
   tradeoffs: string[];
+  /** Pre-formatted labels for frontend display (May 2026) */
+  formattedLabels?: {
+    deliveryLabel: string;    // e.g. "1-day delivery" or "30-day delivery"
+    warrantyLabel: string;    // e.g. "1-month warranty" or "12-month warranty"
+    paymentLabel: string;     // e.g. "Net 30"
+  };
 }
 
 /**
@@ -394,6 +400,11 @@ export function generateMesoOptions(
       ...finalUtilities.map((u) => Math.abs(u - finalAvg)),
     );
 
+    // Dedup guard (May 2026): when the convergence floor clamps Option 1's
+    // price discount, multiple options can end up identical on all visible
+    // dimensions (price, delivery, payment_terms). Detect and force variation.
+    deduplicateMesoOptions(options, config);
+
     // Re-render labels with FINAL prices (Apr 2026): variance adjustment
     // can mutate offer.total_price after the original description was set.
     renderMesoDescriptions(options, currency);
@@ -512,9 +523,20 @@ export function renderMesoDescriptions(
   options: MesoOption[],
   currency: SupportedCurrency,
 ): void {
+  // Render descriptions, tradeoffs, AND formattedLabels for each option
+  for (const opt of options) {
+    const o = opt.offer;
+    opt.description = `${formatMesoPrice(o.total_price, currency)}, ${fmtDays(o.delivery_days)} delivery, Net ${o.payment_terms_days}`;
+    opt.formattedLabels = {
+      deliveryLabel: `${fmtDays(o.delivery_days)} delivery`,
+      warrantyLabel: `${fmtMonths(o.warranty_months)} warranty`,
+      paymentLabel: `Net ${o.payment_terms_days}`,
+    };
+  }
+
+  // Per-option tradeoff arrays (highlight what each option trades away)
   if (options[0]) {
     const o = options[0].offer;
-    options[0].description = `${formatMesoPrice(o.total_price, currency)}, ${fmtDays(o.delivery_days)} delivery, Net ${o.payment_terms_days}`;
     options[0].tradeoffs = [
       `${o.warranty_months || 0} ${(o.warranty_months || 0) === 1 ? "month" : "months"} warranty`,
       `Net ${o.payment_terms_days} payment`,
@@ -522,7 +544,6 @@ export function renderMesoDescriptions(
   }
   if (options[1]) {
     const o = options[1].offer;
-    options[1].description = `${formatMesoPrice(o.total_price, currency)}, ${fmtDays(o.delivery_days)} delivery, Net ${o.payment_terms_days}`;
     options[1].tradeoffs = [
       `${formatMesoPrice(o.total_price, currency)} price`,
       `${fmtDays(o.delivery_days)} delivery`,
@@ -530,7 +551,6 @@ export function renderMesoDescriptions(
   }
   if (options[2]) {
     const o = options[2].offer;
-    options[2].description = `${formatMesoPrice(o.total_price, currency)}, ${fmtDays(o.delivery_days)} delivery, Net ${o.payment_terms_days}`;
     options[2].tradeoffs = [
       `${formatMesoPrice(o.total_price, currency)} price`,
       `Net ${o.payment_terms_days} payment`,
@@ -781,6 +801,87 @@ function adjustOffersForVariance(
       }
     }
   }
+}
+
+// ============================================
+// MESO DEDUPLICATION (May 2026)
+// ============================================
+
+/**
+ * Detect and fix duplicate MESO options.
+ *
+ * Root cause: when the convergence floor clamps Option 1's price discount,
+ * it can match Option 3's base price. Both share the same delivery (best)
+ * and payment terms (medium), leaving only warranty as a differentiator —
+ * which may also get flattened by adjustOffersForVariance.
+ *
+ * Strategy: compare each pair on (price, delivery_days, payment_terms_days).
+ * If two match on all three, shift the later option's most flexible dimension:
+ *   1. Payment terms: shift by ±10 days (within config bounds)
+ *   2. Delivery days: shift by ±5 days (within bounds)
+ *   3. Price: shift by ±2% (within bounds)
+ */
+function deduplicateMesoOptions(
+  options: MesoOption[],
+  config: ResolvedNegotiationConfig,
+): void {
+  for (let i = 0; i < options.length; i++) {
+    for (let j = i + 1; j < options.length; j++) {
+      const a = options[i].offer;
+      const b = options[j].offer;
+
+      const samePrice = a.total_price === b.total_price;
+      const sameDelivery = a.delivery_days === b.delivery_days;
+      const samePayment = a.payment_terms_days === b.payment_terms_days;
+
+      if (samePrice && sameDelivery && samePayment) {
+        // Duplicate detected — force variation on option j
+        const shifted = forceVariation(options[j], config, options[i]);
+        options[j] = shifted;
+      }
+    }
+  }
+}
+
+/**
+ * Force a MESO option to differ from its duplicate by shifting the most
+ * flexible dimension first.
+ */
+function forceVariation(
+  dup: MesoOption,
+  config: ResolvedNegotiationConfig,
+  original: MesoOption,
+): MesoOption {
+  const offer = { ...dup.offer };
+
+  // Try 1: Shift payment terms by +10 days (longer terms = vendor-friendly)
+  const newPayment = (offer.payment_terms_days ?? 30) + 10;
+  if (newPayment <= config.paymentTermsMaxDays) {
+    offer.payment_terms_days = newPayment;
+    offer.payment_terms = `Net ${newPayment}`;
+    const newUtility = calculateWeightedUtilityFromResolved(offer, config);
+    return { ...dup, offer, utility: newUtility.totalUtility };
+  }
+
+  // Try 2: Shift payment terms by -10 days (shorter terms)
+  const shorterPayment = Math.max(config.paymentTermsMinDays, (offer.payment_terms_days ?? 30) - 10);
+  if (shorterPayment !== offer.payment_terms_days) {
+    offer.payment_terms_days = shorterPayment;
+    offer.payment_terms = `Net ${shorterPayment}`;
+    const newUtility = calculateWeightedUtilityFromResolved(offer, config);
+    return { ...dup, offer, utility: newUtility.totalUtility };
+  }
+
+  // Try 3: Shift delivery by +5 days (slower delivery = price room)
+  const slowerDelivery = (offer.delivery_days ?? 30) + 5;
+  offer.delivery_days = slowerDelivery;
+  // Compensate with a 1.5% price reduction
+  if (offer.total_price != null) {
+    const reducedPrice = humanRoundPrice(Math.round(offer.total_price * 0.985 * 100) / 100);
+    offer.total_price = Math.max(config.targetPrice, reducedPrice);
+  }
+  const newUtility = calculateWeightedUtilityFromResolved(offer, config);
+  return { ...dup, offer, utility: newUtility.totalUtility };
 }
 
 // ============================================
@@ -1147,6 +1248,11 @@ export function generateDynamicMesoOptions(
     const finalVariance = Math.max(
       ...finalUtilities.map((u) => Math.abs(u - finalAvg)),
     );
+
+    // Dedup guard (May 2026): when the convergence floor clamps Option 1's
+    // price discount, multiple options can end up identical on all visible
+    // dimensions (price, delivery, payment_terms). Detect and force variation.
+    deduplicateMesoOptions(options, config);
 
     // Re-render labels with FINAL prices (Apr 2026): variance adjustment
     // can mutate offer.total_price after the original description was set.
