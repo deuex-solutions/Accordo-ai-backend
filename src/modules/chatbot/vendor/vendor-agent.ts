@@ -6,8 +6,8 @@
  * specific negotiation policies and scenarios.
  */
 
-import type { VendorScenario, VendorPolicy, GenerateVendorReplyInput, VendorReplyResult } from './types.js';
-import { getScenarioPolicy, mergeVendorPolicy, calculateNextVendorPrice, calculateNextVendorTerms, shouldVendorWalkAway } from './vendor-policy.js';
+import type { VendorScenario, GenerateVendorReplyInput, VendorReplyResult } from './types.js';
+import { mergeVendorPolicy, calculateNextVendorPrice, calculateNextVendorTerms, shouldVendorWalkAway } from './vendor-policy.js';
 import { generateChatbotLlamaCompletion } from '../llm/chatbot-llama-client.js';
 import { parseOfferRegex } from '../engine/parse-offer.js';
 import logger from '../../../config/logger.js';

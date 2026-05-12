@@ -1,33 +1,37 @@
-import PDFDocument from 'pdfkit';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import env from '../../../config/env.js';
-import logger from '../../../config/logger.js';
-import type { GeneratePDFInput, PDFBidData } from '../bid-comparison.types.js';
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
+import env from "../../../config/env.js";
+import logger from "../../../config/logger.js";
+import type { GeneratePDFInput, PDFBidData } from "../bid-comparison.types.js";
 
 // Ensure uploads directory exists
-const PDF_DIR = path.join(process.cwd(), 'uploads', 'pdfs');
+const PDF_DIR = path.join(process.cwd(), "uploads", "pdfs");
 if (!fs.existsSync(PDF_DIR)) {
   fs.mkdirSync(PDF_DIR, { recursive: true });
 }
 
 // Colors for the chart
 const CHART_COLORS = {
-  rank1: '#28a745', // Green
-  rank2: '#17a2b8', // Cyan
-  rank3: '#ffc107', // Yellow
-  other: '#6c757d', // Gray
-  text: '#333333',
-  border: '#dee2e6',
-  background: '#f8f9fa',
+  rank1: "#28a745", // Green
+  rank2: "#17a2b8", // Cyan
+  rank3: "#ffc107", // Yellow
+  other: "#6c757d", // Gray
+  text: "#333333",
+  border: "#dee2e6",
+  background: "#f8f9fa",
 };
 
 /**
  * Generate a PDF comparison report with bar chart
  */
-export async function generateComparisonPDF(input: GeneratePDFInput): Promise<string> {
+export async function generateComparisonPDF(
+  input: GeneratePDFInput,
+): Promise<string> {
   const { requisition, bids, generatedAt } = input;
+
+  // pdfkit is dynamically imported so it isn't loaded on app boot.
+  const { default: PDFDocument } = await import("pdfkit");
 
   return new Promise((resolve, reject) => {
     try {
@@ -35,13 +39,13 @@ export async function generateComparisonPDF(input: GeneratePDFInput): Promise<st
       const filepath = path.join(PDF_DIR, filename);
 
       const doc = new PDFDocument({
-        size: 'A4',
+        size: "A4",
         margin: 50,
         info: {
           Title: `Bid Comparison - ${requisition.rfqId}`,
-          Author: 'Accordo AI',
-          Subject: 'Vendor Bid Comparison Report',
-          Keywords: 'procurement, negotiation, bid comparison',
+          Author: "Accordo AI",
+          Subject: "Vendor Bid Comparison Report",
+          Keywords: "procurement, negotiation, bid comparison",
         },
       });
 
@@ -60,7 +64,10 @@ export async function generateComparisonPDF(input: GeneratePDFInput): Promise<st
       if (bids.length > 0) {
         renderBarChart(doc, bids);
       } else {
-        doc.fontSize(12).fillColor(CHART_COLORS.text).text('No completed bids to display.', { align: 'center' });
+        doc
+          .fontSize(12)
+          .fillColor(CHART_COLORS.text)
+          .text("No completed bids to display.", { align: "center" });
       }
 
       // Bid Details Table
@@ -72,12 +79,12 @@ export async function generateComparisonPDF(input: GeneratePDFInput): Promise<st
 
       doc.end();
 
-      stream.on('finish', () => {
+      stream.on("finish", () => {
         logger.info(`PDF generated: ${filepath}`);
         resolve(filepath);
       });
 
-      stream.on('error', (err) => {
+      stream.on("error", (err) => {
         logger.error(`PDF generation error: ${err.message}`);
         reject(err);
       });
@@ -90,22 +97,35 @@ export async function generateComparisonPDF(input: GeneratePDFInput): Promise<st
 /**
  * Render the header section
  */
-function renderHeader(doc: PDFKit.PDFDocument, requisition: any, generatedAt: Date): void {
+function renderHeader(
+  doc: PDFKit.PDFDocument,
+  requisition: any,
+  generatedAt: Date,
+): void {
   // Title
-  doc.fontSize(24).fillColor('#0066cc').text('Vendor Bid Comparison Report', { align: 'center' });
+  doc
+    .fontSize(24)
+    .fillColor("#0066cc")
+    .text("Vendor Bid Comparison Report", { align: "center" });
 
   doc.moveDown(0.5);
 
   // Requisition info
-  doc.fontSize(14).fillColor(CHART_COLORS.text).text(requisition.subject, { align: 'center' });
+  doc
+    .fontSize(14)
+    .fillColor(CHART_COLORS.text)
+    .text(requisition.subject, { align: "center" });
 
   doc.moveDown(0.5);
 
   // Project and RFQ
-  doc.fontSize(10).fillColor('#666666');
-  doc.text(`Project: ${requisition.projectName}`, { align: 'center' });
-  doc.text(`RFQ ID: ${requisition.rfqId}`, { align: 'center' });
-  doc.text(`Generated: ${generatedAt.toLocaleDateString()} ${generatedAt.toLocaleTimeString()}`, { align: 'center' });
+  doc.fontSize(10).fillColor("#666666");
+  doc.text(`Project: ${requisition.projectName}`, { align: "center" });
+  doc.text(`RFQ ID: ${requisition.rfqId}`, { align: "center" });
+  doc.text(
+    `Generated: ${generatedAt.toLocaleDateString()} ${generatedAt.toLocaleTimeString()}`,
+    { align: "center" },
+  );
 
   doc.moveDown(0.5);
 
@@ -124,13 +144,40 @@ function renderSummaryStats(doc: PDFKit.PDFDocument, requisition: any): void {
   const spacing = 15;
 
   // Total Vendors box
-  drawStatBox(doc, 50, statsY, boxWidth, boxHeight, 'Total Vendors', String(requisition.totalVendors), '#0066cc');
+  drawStatBox(
+    doc,
+    50,
+    statsY,
+    boxWidth,
+    boxHeight,
+    "Total Vendors",
+    String(requisition.totalVendors),
+    "#0066cc",
+  );
 
   // Completed box
-  drawStatBox(doc, 50 + boxWidth + spacing, statsY, boxWidth, boxHeight, 'Completed', String(requisition.completedVendors), '#28a745');
+  drawStatBox(
+    doc,
+    50 + boxWidth + spacing,
+    statsY,
+    boxWidth,
+    boxHeight,
+    "Completed",
+    String(requisition.completedVendors),
+    "#28a745",
+  );
 
   // Excluded box
-  drawStatBox(doc, 50 + (boxWidth + spacing) * 2, statsY, boxWidth, boxHeight, 'Excluded', String(requisition.excludedVendors), '#dc3545');
+  drawStatBox(
+    doc,
+    50 + (boxWidth + spacing) * 2,
+    statsY,
+    boxWidth,
+    boxHeight,
+    "Excluded",
+    String(requisition.excludedVendors),
+    "#dc3545",
+  );
 
   doc.y = statsY + boxHeight + 10;
 }
@@ -146,17 +193,23 @@ function drawStatBox(
   height: number,
   label: string,
   value: string,
-  color: string
+  color: string,
 ): void {
   // Box background
   doc.rect(x, y, width, height).fill(CHART_COLORS.background);
   doc.rect(x, y, width, height).stroke(CHART_COLORS.border);
 
   // Value
-  doc.fontSize(20).fillColor(color).text(value, x, y + 10, { width, align: 'center' });
+  doc
+    .fontSize(20)
+    .fillColor(color)
+    .text(value, x, y + 10, { width, align: "center" });
 
   // Label
-  doc.fontSize(10).fillColor('#666666').text(label, x, y + 32, { width, align: 'center' });
+  doc
+    .fontSize(10)
+    .fillColor("#666666")
+    .text(label, x, y + 32, { width, align: "center" });
 }
 
 /**
@@ -170,10 +223,13 @@ function renderBarChart(doc: PDFKit.PDFDocument, bids: PDFBidData[]): void {
   const chartWidth = 400;
   const barHeight = 30;
   const barSpacing = 10;
-  const chartHeight = bids.length * (barHeight + barSpacing) + 40;
+  // removed dead: const _chartHeight = bids.length * (barHeight + barSpacing) + 40;
 
   // Title
-  doc.fontSize(14).fillColor(CHART_COLORS.text).text('Price Comparison', chartX, chartY, { underline: true });
+  doc
+    .fontSize(14)
+    .fillColor(CHART_COLORS.text)
+    .text("Price Comparison", chartX, chartY, { underline: true });
 
   const startY = chartY + 25;
 
@@ -188,7 +244,10 @@ function renderBarChart(doc: PDFKit.PDFDocument, bids: PDFBidData[]): void {
     const color = getBarColor(bid.rank);
 
     // Vendor name (left side)
-    doc.fontSize(10).fillColor(CHART_COLORS.text).text(bid.vendorName, chartX, y + 8, { width: 100, ellipsis: true });
+    doc
+      .fontSize(10)
+      .fillColor(CHART_COLORS.text)
+      .text(bid.vendorName, chartX, y + 8, { width: 100, ellipsis: true });
 
     // Bar
     const barX = chartX + 110;
@@ -197,7 +256,10 @@ function renderBarChart(doc: PDFKit.PDFDocument, bids: PDFBidData[]): void {
     // Price label on bar
     const priceLabel = `$${bid.finalPrice.toLocaleString()}`;
     const labelX = barX + barWidth + 5;
-    doc.fontSize(10).fillColor(CHART_COLORS.text).text(priceLabel, labelX, y + 8);
+    doc
+      .fontSize(10)
+      .fillColor(CHART_COLORS.text)
+      .text(priceLabel, labelX, y + 8);
 
     // Rank badge
     const rankX = chartX + chartWidth + 50;
@@ -226,12 +288,20 @@ function getBarColor(rank: number): string {
 /**
  * Draw rank badge
  */
-function drawRankBadge(doc: PDFKit.PDFDocument, x: number, y: number, rank: number): void {
+function drawRankBadge(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  rank: number,
+): void {
   const color = getBarColor(rank);
   const size = 20;
 
   doc.circle(x + size / 2, y + size / 2, size / 2).fill(color);
-  doc.fontSize(10).fillColor('#ffffff').text(`#${rank}`, x, y + 5, { width: size, align: 'center' });
+  doc
+    .fontSize(10)
+    .fillColor("#ffffff")
+    .text(`#${rank}`, x, y + 5, { width: size, align: "center" });
 }
 
 /**
@@ -249,18 +319,21 @@ function renderBidTable(doc: PDFKit.PDFDocument, bids: PDFBidData[]): void {
   const tableY = doc.y + 10;
 
   // Title
-  doc.fontSize(14).fillColor(CHART_COLORS.text).text('Bid Details', tableX, tableY, { underline: true });
+  doc
+    .fontSize(14)
+    .fillColor(CHART_COLORS.text)
+    .text("Bid Details", tableX, tableY, { underline: true });
 
   // Table headers
-  const headers = ['Rank', 'Vendor', 'Price', 'Payment Terms', 'Utility'];
+  const headers = ["Rank", "Vendor", "Price", "Payment Terms", "Utility"];
   const colWidths = [40, 150, 80, 100, 80];
   const rowHeight = 25;
 
   let y = tableY + 25;
 
   // Header row
-  doc.fontSize(10).fillColor('#ffffff');
-  doc.rect(tableX, y, 495, rowHeight).fill('#0066cc');
+  doc.fontSize(10).fillColor("#ffffff");
+  doc.rect(tableX, y, 495, rowHeight).fill("#0066cc");
 
   let x = tableX + 5;
   headers.forEach((header, i) => {
@@ -272,7 +345,7 @@ function renderBidTable(doc: PDFKit.PDFDocument, bids: PDFBidData[]): void {
 
   // Data rows
   bids.forEach((bid, index) => {
-    const bgColor = index % 2 === 0 ? '#ffffff' : CHART_COLORS.background;
+    const bgColor = index % 2 === 0 ? "#ffffff" : CHART_COLORS.background;
     doc.rect(tableX, y, 495, rowHeight).fill(bgColor);
     doc.rect(tableX, y, 495, rowHeight).stroke(CHART_COLORS.border);
 
@@ -284,7 +357,9 @@ function renderBidTable(doc: PDFKit.PDFDocument, bids: PDFBidData[]): void {
       bid.vendorName,
       `$${bid.finalPrice.toLocaleString()}`,
       bid.paymentTerms,
-      bid.utilityScore !== null ? `${(bid.utilityScore * 100).toFixed(1)}%` : 'N/A',
+      bid.utilityScore !== null
+        ? `${(bid.utilityScore * 100).toFixed(1)}%`
+        : "N/A",
     ];
 
     rowData.forEach((cell, i) => {
@@ -309,14 +384,17 @@ function renderFooter(doc: PDFKit.PDFDocument): void {
   doc.moveTo(50, bottomY).lineTo(545, bottomY).stroke();
 
   // Footer text
-  doc.fontSize(8).fillColor('#999999');
+  doc.fontSize(8).fillColor("#999999");
   doc.text(
-    'This report is generated by Accordo AI. For questions, please contact your procurement team.',
+    "This report is generated by Accordo AI. For questions, please contact your procurement team.",
     50,
     bottomY + 10,
-    { align: 'center', width: 495 }
+    { align: "center", width: 495 },
   );
-  doc.text('Confidential - For internal use only', 50, bottomY + 25, { align: 'center', width: 495 });
+  doc.text("Confidential - For internal use only", 50, bottomY + 25, {
+    align: "center",
+    width: 495,
+  });
 }
 
 /**
@@ -324,5 +402,5 @@ function renderFooter(doc: PDFKit.PDFDocument): void {
  */
 export function getPDFUrl(filepath: string): string {
   const filename = path.basename(filepath);
-  return `${env.backendUrl || 'http://localhost:8000'}/pdfs/${filename}`;
+  return `${env.backendUrl || "http://localhost:8000"}/pdfs/${filename}`;
 }

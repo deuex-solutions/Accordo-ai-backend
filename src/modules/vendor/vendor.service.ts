@@ -1,10 +1,11 @@
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
-import repo from './vendor.repo.js';
-import userRepo from '../user/user.repo.js';
-import authRepo from '../auth/auth.repo.js';
-import { CustomError } from '../../utils/custom-error.js';
-import util from '../common/util.js';
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import logger from "../../config/logger.js";
+import repo from "./vendor.repo.js";
+import userRepo from "../user/user.repo.js";
+import authRepo from "../auth/auth.repo.js";
+import { CustomError } from "../../utils/custom-error.js";
+import util from "../common/util.js";
 import {
   validateCreateVendor,
   validateCreateVendorWithCompany,
@@ -12,12 +13,12 @@ import {
   validateStep2,
   validateStep3,
   validateStep4,
-} from './vendor.validator.js';
-import type { User } from '../../models/user.js';
-import type { VendorCompany } from '../../models/vendor-company.js';
-import type { Company } from '../../models/company.js';
-import type { Address } from '../../models/address.js';
-import models, { sequelize } from '../../models/index.js';
+} from "./vendor.validator.js";
+import type { User } from "../../models/user.js";
+import type { VendorCompany } from "../../models/vendor-company.js";
+import type { Company } from "../../models/company.js";
+import type { Address } from "../../models/address.js";
+import models, { sequelize } from "../../models/index.js";
 
 interface VendorData {
   email: string;
@@ -54,7 +55,7 @@ export interface VendorWithCompanyData {
   // Company info
   companyName: string;
   establishmentDate?: string;
-  nature?: 'Domestic' | 'Interational';
+  nature?: "Domestic" | "Interational";
   type?: string;
   numberOfEmployees?: string;
   annualTurnover?: string;
@@ -141,7 +142,7 @@ const parseRange = (value: unknown): [number, number] | null => {
  */
 export const createVendorService = async (
   vendorData: VendorData,
-  userId: number
+  userId: number,
 ): Promise<[User, VendorCompany]> => {
   const { error } = validateCreateVendor(vendorData);
   if (error) {
@@ -155,7 +156,7 @@ export const createVendorService = async (
 
   const user = await userRepo.getUser(userId);
   if (!user) {
-    throw new CustomError('User not found', 404);
+    throw new CustomError("User not found", 404);
   }
 
   const newVendor = await repo.createVendor(vendorData);
@@ -176,7 +177,7 @@ export const getVendorsService = async (
   search?: string,
   page: string | number = 1,
   limit: string | number = 10,
-  filters?: string
+  filters?: string,
 ): Promise<VendorServiceResponse> => {
   const parsedPage = Number.parseInt(String(page), 10) || 1;
   const parsedLimit = Number.parseInt(String(limit), 10) || 10;
@@ -198,17 +199,23 @@ export const getVendorsService = async (
 
   if (filters) {
     try {
-      const filterData = JSON.parse(decodeURIComponent(filters)) as FilterData[];
+      const filterData = JSON.parse(
+        decodeURIComponent(filters),
+      ) as FilterData[];
       const transformedFilters = util.filterUtil(filterData);
       if (Object.keys(transformedFilters).length) {
         queryOptions.filters = transformedFilters;
       }
 
-      const totalContractsFilter = filterData.find((item) => item.filterBy === 'totalContracts');
-      const completedContractsFilter = filterData.find(
-        (item) => item.filterBy === 'completedContracts'
+      const totalContractsFilter = filterData.find(
+        (item) => item.filterBy === "totalContracts",
       );
-      const vendorStatusFilter = filterData.find((item) => item.filterBy === 'vendorStatus');
+      const completedContractsFilter = filterData.find(
+        (item) => item.filterBy === "completedContracts",
+      );
+      const vendorStatusFilter = filterData.find(
+        (item) => item.filterBy === "vendorStatus",
+      );
 
       const totalRange = parseRange(totalContractsFilter?.value);
       if (totalRange) {
@@ -220,25 +227,31 @@ export const getVendorsService = async (
         queryOptions.completedContractsRange = completedRange;
       }
 
-      if (Array.isArray(vendorStatusFilter?.value) && vendorStatusFilter.value.length) {
-        const cleaned = vendorStatusFilter.value.filter((val): val is string => typeof val === 'string');
+      if (
+        Array.isArray(vendorStatusFilter?.value) &&
+        vendorStatusFilter.value.length
+      ) {
+        const cleaned = vendorStatusFilter.value.filter(
+          (val): val is string => typeof val === "string",
+        );
         if (cleaned.length) {
           queryOptions.vendorStatusList = cleaned;
         }
       }
     } catch (error) {
-      throw new CustomError('Invalid filters format', 400);
+      throw new CustomError("Invalid filters format", 400);
     }
   }
 
   const user = await userRepo.getUserProfile(userId);
 
   // Super Admin users see all vendors across all companies
-  const isAdmin = user?.userType === 'super_admin';
+  const isAdmin = user?.userType === "super_admin";
 
   if (isAdmin) {
     // For admin users, get all vendors from all companies
-    const { response, vendorCount } = await repo.getAllVendorsForAdmin(queryOptions);
+    const { response, vendorCount } =
+      await repo.getAllVendorsForAdmin(queryOptions);
     const { rows, count } = response;
 
     const total = count;
@@ -257,10 +270,13 @@ export const getVendorsService = async (
 
   // Non-admin users only see their company's vendors
   if (!user?.companyId) {
-    throw new CustomError('Unable to determine company for user', 400);
+    throw new CustomError("Unable to determine company for user", 400);
   }
 
-  const { response, vendorCount } = await repo.getAllVendorCompany(user.companyId, queryOptions);
+  const { response, vendorCount } = await repo.getAllVendorCompany(
+    user.companyId,
+    queryOptions,
+  );
   const { rows, count } = response;
 
   const total = count;
@@ -280,7 +296,9 @@ export const getVendorsService = async (
 /**
  * Get a specific vendor by ID
  */
-export const getVendorService = async (vendorData: { id: number }): Promise<User | null> => {
+export const getVendorService = async (vendorData: {
+  id: number;
+}): Promise<User | null> => {
   try {
     return await repo.getVendor(vendorData);
   } catch (error) {
@@ -293,10 +311,11 @@ export const getVendorService = async (vendorData: { id: number }): Promise<User
  */
 export const updateVendorService = async (
   vendorId: string | number,
-  vendorData: Partial<VendorData>
+  vendorData: Partial<VendorData>,
 ): Promise<[number]> => {
   try {
-    const id = typeof vendorId === 'string' ? Number.parseInt(vendorId, 10) : vendorId;
+    const id =
+      typeof vendorId === "string" ? Number.parseInt(vendorId, 10) : vendorId;
 
     // If email is being updated, check if it's already in use by another vendor
     if (vendorData.email) {
@@ -319,9 +338,12 @@ export const updateVendorService = async (
 /**
  * Delete a vendor by ID
  */
-export const deleteVendorService = async (vendorId: string | number): Promise<number> => {
+export const deleteVendorService = async (
+  vendorId: string | number,
+): Promise<number> => {
   try {
-    const id = typeof vendorId === 'string' ? Number.parseInt(vendorId, 10) : vendorId;
+    const id =
+      typeof vendorId === "string" ? Number.parseInt(vendorId, 10) : vendorId;
     return await repo.deleteVendor({ id });
   } catch (error) {
     throw new CustomError((error as Error).message || String(error), 400);
@@ -332,7 +354,7 @@ export const deleteVendorService = async (vendorId: string | number): Promise<nu
  * Generate a random temporary password
  */
 const generateTempPassword = (): string => {
-  return crypto.randomBytes(8).toString('hex') + 'A1!';
+  return crypto.randomBytes(8).toString("hex") + "A1!";
 };
 
 /**
@@ -345,7 +367,7 @@ const generateTempPassword = (): string => {
  */
 export const createVendorWithCompanyService = async (
   data: VendorWithCompanyData,
-  creatorUserId: number
+  creatorUserId: number,
 ): Promise<VendorWithCompanyResponse> => {
   // Validate input
   const { error } = validateCreateVendorWithCompany(data);
@@ -362,10 +384,10 @@ export const createVendorWithCompanyService = async (
   // Get the creator user to determine their company
   const creatorUser = await userRepo.getUser(creatorUserId);
   if (!creatorUser) {
-    throw new CustomError('Creator user not found', 404);
+    throw new CustomError("Creator user not found", 404);
   }
   if (!creatorUser.companyId) {
-    throw new CustomError('Creator user has no associated company', 400);
+    throw new CustomError("Creator user has no associated company", 400);
   }
 
   // Start transaction
@@ -376,14 +398,16 @@ export const createVendorWithCompanyService = async (
     const company = await models.Company.create(
       {
         companyName: data.companyName,
-        establishmentDate: data.establishmentDate ? new Date(data.establishmentDate) : null,
+        establishmentDate: data.establishmentDate
+          ? new Date(data.establishmentDate)
+          : null,
         nature: data.nature || null,
         type: data.type || null,
-        numberOfEmployees: data.numberOfEmployees as any || null,
+        numberOfEmployees: (data.numberOfEmployees as any) || null,
         annualTurnover: data.annualTurnover || null,
-        industryType: data.industryType as any || null,
+        industryType: (data.industryType as any) || null,
         companyLogo: data.companyLogo || null,
-        typeOfCurrency: data.typeOfCurrency as any || null,
+        typeOfCurrency: (data.typeOfCurrency as any) || null,
         bankName: data.bankName || null,
         beneficiaryName: data.beneficiaryName || null,
         accountNumber: data.accountNumber || null,
@@ -406,7 +430,7 @@ export const createVendorWithCompanyService = async (
         escalationPhone: data.escalationPhone || null,
         createdBy: creatorUserId,
       },
-      { transaction }
+      { transaction },
     );
 
     // 2. Create vendor user account with temporary password
@@ -419,13 +443,13 @@ export const createVendorWithCompanyService = async (
         email: data.email,
         phone: data.phone || null,
         password: hashedPassword,
-        userType: 'vendor',
+        userType: "vendor",
         companyId: company.id, // Vendor belongs to their own company
         roleId: 6, // Vendor role
-        status: 'active',
-        approvalLevel: 'NONE', // Explicitly set to avoid NOT NULL constraint error
+        status: "active",
+        approvalLevel: "NONE", // Explicitly set to avoid NOT NULL constraint error
       } as any,
-      { transaction }
+      { transaction },
     );
 
     // 3. Create VendorCompany association (links vendor to the customer's company)
@@ -434,7 +458,7 @@ export const createVendorWithCompanyService = async (
         vendorId: vendor.id,
         companyId: creatorUser.companyId, // Link to customer's company
       },
-      { transaction }
+      { transaction },
     );
 
     // 4. Create addresses for the vendor's company
@@ -448,10 +472,12 @@ export const createVendorWithCompanyService = async (
         state: addr.state || null,
         country: addr.country || null,
         postalCode: addr.postalCode || null,
-        isDefault: addr.isDefault ?? (index === 0), // First address is default if not specified
+        isDefault: addr.isDefault ?? index === 0, // First address is default if not specified
       }));
 
-      addresses = await models.Address.bulkCreate(addressRecords, { transaction });
+      addresses = await models.Address.bulkCreate(addressRecords, {
+        transaction,
+      });
     }
 
     // Commit transaction
@@ -476,7 +502,7 @@ export const createVendorWithCompanyService = async (
     }
     throw new CustomError(
       `Failed to create vendor: ${(error as Error).message || String(error)}`,
-      500
+      500,
     );
   }
 };
@@ -519,7 +545,7 @@ export interface Step1Response {
 
 export const createVendorStep1Service = async (
   data: Step1Data,
-  creatorUserId: number
+  creatorUserId: number,
 ): Promise<Step1Response> => {
   // Validate input
   const { error } = validateStep1(data);
@@ -528,11 +554,11 @@ export const createVendorStep1Service = async (
   }
 
   // Check if email already exists - if so, return existing vendor data to allow continuing
-  const existingUser = await authRepo.findUserByEmail(data.email) as any;
+  const existingUser = (await authRepo.findUserByEmail(data.email)) as any;
   if (existingUser) {
     // If vendor already exists, return their data so frontend can continue to step 2
     // This handles the case where step 1 succeeded but navigation failed
-    if (existingUser.userType === 'vendor' && existingUser.companyId) {
+    if (existingUser.userType === "vendor" && existingUser.companyId) {
       // Find the VendorCompany association
       const vendorCompany = await models.VendorCompany.findOne({
         where: { vendorId: existingUser.id },
@@ -541,8 +567,8 @@ export const createVendorStep1Service = async (
       return {
         vendor: {
           id: existingUser.id,
-          name: existingUser.name || '',
-          email: existingUser.email || '',
+          name: existingUser.name || "",
+          email: existingUser.email || "",
           phone: existingUser.phone || null,
         },
         company: {
@@ -557,16 +583,19 @@ export const createVendorStep1Service = async (
       };
     }
     // If email exists but is not a vendor, throw error
-    throw new CustomError(`Email ${data.email} is already in use by another user type`, 409);
+    throw new CustomError(
+      `Email ${data.email} is already in use by another user type`,
+      409,
+    );
   }
 
   // Get the creator user to determine their company
   const creatorUser = await userRepo.getUser(creatorUserId);
   if (!creatorUser) {
-    throw new CustomError('Creator user not found', 404);
+    throw new CustomError("Creator user not found", 404);
   }
   if (!creatorUser.companyId) {
-    throw new CustomError('Creator user has no associated company', 400);
+    throw new CustomError("Creator user has no associated company", 400);
   }
 
   // Start transaction
@@ -577,16 +606,18 @@ export const createVendorStep1Service = async (
     const company = await models.Company.create(
       {
         companyName: data.companyName,
-        establishmentDate: data.establishmentDate ? new Date(data.establishmentDate) : null,
-        nature: data.nature as any || null,
+        establishmentDate: data.establishmentDate
+          ? new Date(data.establishmentDate)
+          : null,
+        nature: (data.nature as any) || null,
         type: data.type || null,
-        numberOfEmployees: data.numberOfEmployees as any || null,
+        numberOfEmployees: (data.numberOfEmployees as any) || null,
         annualTurnover: data.annualTurnover || null,
-        industryType: data.industryType as any || null,
+        industryType: (data.industryType as any) || null,
         companyLogo: data.companyLogo || null,
         createdBy: creatorUserId,
       },
-      { transaction }
+      { transaction },
     );
 
     // 2. Create vendor user account with temporary password
@@ -599,13 +630,13 @@ export const createVendorStep1Service = async (
         email: data.email,
         phone: data.phone || null,
         password: hashedPassword,
-        userType: 'vendor',
+        userType: "vendor",
         companyId: company.id,
         roleId: 6,
-        status: 'active',
-        approvalLevel: 'NONE', // Explicitly set to avoid NOT NULL constraint error
+        status: "active",
+        approvalLevel: "NONE", // Explicitly set to avoid NOT NULL constraint error
       } as any,
-      { transaction }
+      { transaction },
     );
 
     // 3. Create VendorCompany association (links vendor to the customer's company)
@@ -614,7 +645,7 @@ export const createVendorStep1Service = async (
         vendorId: vendor.id,
         companyId: creatorUser.companyId,
       },
-      { transaction }
+      { transaction },
     );
 
     // Commit transaction
@@ -623,13 +654,13 @@ export const createVendorStep1Service = async (
     return {
       vendor: {
         id: vendor.id,
-        name: vendor.name || '',
-        email: vendor.email || '',
+        name: vendor.name || "",
+        email: vendor.email || "",
         phone: vendor.phone || null,
       },
       company: {
         id: company.id,
-        companyName: company.companyName || '',
+        companyName: company.companyName || "",
       },
       vendorCompany: {
         id: vendorCompany.id,
@@ -640,7 +671,7 @@ export const createVendorStep1Service = async (
   } catch (error: any) {
     await transaction.rollback();
 
-    console.error('Step 1 Error:', {
+    logger.error("Step 1 Error:", {
       name: error.name,
       message: error.message,
       errors: error.errors,
@@ -652,19 +683,24 @@ export const createVendorStep1Service = async (
     }
 
     // Handle Sequelize validation errors with more detail
-    if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
-      const messages = error.errors?.map((e: any) => `${e.path}: ${e.message}`).join(', ') || error.message;
+    if (
+      error.name === "SequelizeValidationError" ||
+      error.name === "SequelizeUniqueConstraintError"
+    ) {
+      const messages =
+        error.errors?.map((e: any) => `${e.path}: ${e.message}`).join(", ") ||
+        error.message;
       throw new CustomError(`Validation failed: ${messages}`, 400);
     }
 
     // Handle Sequelize database errors
-    if (error.name === 'SequelizeDatabaseError') {
+    if (error.name === "SequelizeDatabaseError") {
       throw new CustomError(`Database error: ${error.message}`, 500);
     }
 
     throw new CustomError(
       `Failed to create vendor (Step 1): ${error.name}: ${(error as Error).message || String(error)}`,
-      500
+      500,
     );
   }
 };
@@ -683,8 +719,12 @@ export interface Step2Data {
 
 export const updateVendorStep2Service = async (
   companyId: number,
-  data: Step2Data
-): Promise<{ success: boolean; company: { id: number }; address: { id: number } }> => {
+  data: Step2Data,
+): Promise<{
+  success: boolean;
+  company: { id: number };
+  address: { id: number };
+}> => {
   // Validate input
   const { error } = validateStep2(data);
   if (error) {
@@ -694,7 +734,7 @@ export const updateVendorStep2Service = async (
   // Find the company
   const company = await models.Company.findByPk(companyId);
   if (!company) {
-    throw new CustomError('Company not found', 404);
+    throw new CustomError("Company not found", 404);
   }
 
   try {
@@ -718,7 +758,7 @@ export const updateVendorStep2Service = async (
       // Create new address
       address = await models.Address.create({
         companyId,
-        label: 'Primary Address',
+        label: "Primary Address",
         address: data.address,
         city: data.city || null,
         state: data.state || null,
@@ -734,7 +774,7 @@ export const updateVendorStep2Service = async (
       address: { id: address.id },
     };
   } catch (error: any) {
-    console.error('Step 2 Error:', {
+    logger.error("Step 2 Error:", {
       name: error.name,
       message: error.message,
       errors: error.errors,
@@ -746,19 +786,24 @@ export const updateVendorStep2Service = async (
     }
 
     // Handle Sequelize validation errors with more detail
-    if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
-      const messages = error.errors?.map((e: any) => `${e.path}: ${e.message}`).join(', ') || error.message;
+    if (
+      error.name === "SequelizeValidationError" ||
+      error.name === "SequelizeUniqueConstraintError"
+    ) {
+      const messages =
+        error.errors?.map((e: any) => `${e.path}: ${e.message}`).join(", ") ||
+        error.message;
       throw new CustomError(`Validation failed: ${messages}`, 400);
     }
 
     // Handle Sequelize database errors
-    if (error.name === 'SequelizeDatabaseError') {
+    if (error.name === "SequelizeDatabaseError") {
       throw new CustomError(`Database error: ${error.message}`, 500);
     }
 
     throw new CustomError(
       `Failed to update location (Step 2): ${error.message || String(error)}`,
-      500
+      500,
     );
   }
 };
@@ -785,7 +830,7 @@ export interface Step3Data {
 
 export const updateVendorStep3Service = async (
   companyId: number,
-  data: Step3Data
+  data: Step3Data,
 ): Promise<{ success: boolean; company: { id: number } }> => {
   // Validate input
   const { error } = validateStep3(data);
@@ -796,12 +841,12 @@ export const updateVendorStep3Service = async (
   // Find the company
   const company = await models.Company.findByPk(companyId);
   if (!company) {
-    throw new CustomError('Company not found', 404);
+    throw new CustomError("Company not found", 404);
   }
 
   // Update company with financial/banking data
   await company.update({
-    typeOfCurrency: data.typeOfCurrency as any || null,
+    typeOfCurrency: (data.typeOfCurrency as any) || null,
     bankName: data.bankName || null,
     beneficiaryName: data.beneficiaryName || null,
     accountNumber: data.accountNumber || null,
@@ -840,7 +885,7 @@ export interface Step4Data {
 
 export const updateVendorStep4Service = async (
   companyId: number,
-  data: Step4Data
+  data: Step4Data,
 ): Promise<{ success: boolean; company: { id: number } }> => {
   // Validate input
   const { error } = validateStep4(data);
@@ -851,7 +896,7 @@ export const updateVendorStep4Service = async (
   // Find the company
   const company = await models.Company.findByPk(companyId);
   if (!company) {
-    throw new CustomError('Company not found', 404);
+    throw new CustomError("Company not found", 404);
   }
 
   // Update company with contact data
@@ -878,7 +923,7 @@ export const updateVendorStep4Service = async (
  * GET /vendor-management/create-vendor/:companyId?step=5
  */
 export const getVendorForReviewService = async (
-  companyId: number
+  companyId: number,
 ): Promise<any> => {
   try {
     // Find the company with vendor association
@@ -887,20 +932,20 @@ export const getVendorForReviewService = async (
       include: [
         {
           model: models.User,
-          as: 'Users',  // Using 'Users' alias from Company model
-          where: { userType: 'vendor' },
+          as: "Users", // Using 'Users' alias from Company model
+          where: { userType: "vendor" },
           required: false,
         },
         {
           model: models.Address,
-          as: 'Addresses',
+          as: "Addresses",
           required: false,
         },
       ],
     });
 
     if (!company) {
-      throw new CustomError('Company not found', 404);
+      throw new CustomError("Company not found", 404);
     }
 
     // Transform the response to match frontend expectations
@@ -913,7 +958,7 @@ export const getVendorForReviewService = async (
 
     return companyData;
   } catch (error: any) {
-    console.error('Step 5 (Review) Error:', {
+    logger.error("Step 5 (Review) Error:", {
       name: error.name,
       message: error.message,
       stack: error.stack,
@@ -925,7 +970,7 @@ export const getVendorForReviewService = async (
 
     throw new CustomError(
       `Failed to get vendor for review: ${error.message || String(error)}`,
-      500
+      500,
     );
   }
 };

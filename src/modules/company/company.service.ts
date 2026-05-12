@@ -3,7 +3,7 @@ import companyRepo from './company.repo.js';
 import CustomError from '../../utils/custom-error.js';
 import type { Company, CompanyNature, EmployeesRange, IndustryType, CurrencyType } from '../../models/company.js';
 import models, { sequelize } from '../../models/index.js';
-import type { Address } from '../../models/address.js';
+
 
 /**
  * Enum definitions for company fields

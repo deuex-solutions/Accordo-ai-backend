@@ -1,9 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-import { sendEmail } from '../../services/email.service.js';
-import logger from '../../config/logger.js';
-import env from '../../config/env.js';
-import type { TopBidInfo, TriggerType } from './bid-comparison.types.js';
+import { promises as fsp } from "fs";
+import path from "path";
+import { sendEmail } from "../../services/email.service.js";
+import logger from "../../config/logger.js";
+import env from "../../config/env.js";
+import type { TopBidInfo, TriggerType } from "./bid-comparison.types.js";
 
 interface SendComparisonEmailInput {
   recipientEmail: string;
@@ -40,7 +40,9 @@ interface SendVendorLostEmailInput {
 /**
  * Send comparison email to procurement owner with PDF attachment
  */
-export async function sendComparisonEmail(input: SendComparisonEmailInput): Promise<void> {
+export async function sendComparisonEmail(
+  input: SendComparisonEmailInput,
+): Promise<void> {
   const {
     recipientEmail,
     recipientName,
@@ -55,14 +57,14 @@ export async function sendComparisonEmail(input: SendComparisonEmailInput): Prom
     pdfPath,
   } = input;
 
-  const portalLink = `${env.vendorPortalUrl?.replace('/vendor', '')}/requisitions/${requisitionId}/bids`;
+  const portalLink = `${env.vendorPortalUrl?.replace("/vendor", "")}/requisitions/${requisitionId}/bids`;
 
   const triggerMessage =
-    triggeredBy === 'ALL_COMPLETED'
-      ? 'All vendors have completed their negotiations.'
-      : triggeredBy === 'DEADLINE_REACHED'
-      ? 'The negotiation deadline has been reached.'
-      : 'This report was manually generated.';
+    triggeredBy === "ALL_COMPLETED"
+      ? "All vendors have completed their negotiations."
+      : triggeredBy === "DEADLINE_REACHED"
+        ? "The negotiation deadline has been reached."
+        : "This report was manually generated.";
 
   const html = generateComparisonEmailHTML({
     recipientName,
@@ -90,16 +92,24 @@ export async function sendComparisonEmail(input: SendComparisonEmailInput): Prom
   });
 
   // Read PDF file for attachment
-  let attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
-  if (fs.existsSync(pdfPath)) {
-    const pdfBuffer = fs.readFileSync(pdfPath);
+  let attachments: Array<{
+    filename: string;
+    content: Buffer;
+    contentType: string;
+  }> = [];
+  try {
+    const pdfBuffer = await fsp.readFile(pdfPath);
     attachments = [
       {
         filename: `Bid_Comparison_${rfqId}.pdf`,
         content: pdfBuffer,
-        contentType: 'application/pdf',
+        contentType: "application/pdf",
       },
     ];
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e?.code !== "ENOENT") throw err;
+    // PDF doesn't exist — send email without attachment
   }
 
   await sendEmail({
@@ -110,14 +120,25 @@ export async function sendComparisonEmail(input: SendComparisonEmailInput): Prom
     attachments,
   });
 
-  logger.info(`Sent comparison email to ${recipientEmail} for requisition ${requisitionId}`);
+  logger.info(
+    `Sent comparison email to ${recipientEmail} for requisition ${requisitionId}`,
+  );
 }
 
 /**
  * Send email to winning vendor
  */
-export async function sendVendorWonEmail(input: SendVendorWonEmailInput): Promise<void> {
-  const { recipientEmail, vendorName, requisitionTitle, projectName, selectedPrice, chatSummary } = input;
+export async function sendVendorWonEmail(
+  input: SendVendorWonEmailInput,
+): Promise<void> {
+  const {
+    recipientEmail,
+    vendorName,
+    requisitionTitle,
+    projectName,
+    selectedPrice,
+    chatSummary,
+  } = input;
 
   const html = `
     <!DOCTYPE html>
@@ -151,7 +172,7 @@ export async function sendVendorWonEmail(input: SendVendorWonEmailInput): Promis
           <p style="margin: 0; font-style: italic;">${chatSummary}</p>
         </div>
         `
-            : ''
+            : ""
         }
 
         <p>A Purchase Order will be issued shortly. Please ensure you are prepared to fulfill the order according to the agreed terms.</p>
@@ -177,7 +198,7 @@ Project: ${projectName}
 Requisition: ${requisitionTitle}
 Agreed Price: $${selectedPrice.toLocaleString()}
 
-${chatSummary ? `Negotiation Summary:\n${chatSummary}\n\n` : ''}
+${chatSummary ? `Negotiation Summary:\n${chatSummary}\n\n` : ""}
 A Purchase Order will be issued shortly. Please ensure you are prepared to fulfill the order according to the agreed terms.
 
 Thank you for your participation in the negotiation process. We look forward to working with you.
@@ -199,8 +220,17 @@ The Procurement Team
 /**
  * Send email to non-winning vendors
  */
-export async function sendVendorLostEmail(input: SendVendorLostEmailInput): Promise<void> {
-  const { recipientEmail, vendorName, requisitionTitle, projectName, bidPrice, winningPrice } = input;
+export async function sendVendorLostEmail(
+  input: SendVendorLostEmailInput,
+): Promise<void> {
+  const {
+    recipientEmail,
+    vendorName,
+    requisitionTitle,
+    projectName,
+    bidPrice,
+    winningPrice,
+  } = input;
 
   const html = `
     <!DOCTYPE html>
@@ -282,25 +312,36 @@ function generateComparisonEmailHTML(data: {
   portalLink: string;
   requisitionId: number;
 }): string {
-  const { recipientName, requisitionTitle, projectName, rfqId, topBids, totalVendors, completedVendors, triggerMessage, portalLink, requisitionId } = data;
+  const {
+    recipientName,
+    requisitionTitle,
+    projectName,
+    rfqId,
+    topBids,
+    totalVendors,
+    completedVendors,
+    triggerMessage,
+    portalLink,
+    requisitionId,
+  } = data;
 
   const bidsRows = topBids
     .map(
       (bid) => `
     <tr>
       <td style="padding: 12px; border-bottom: 1px solid #e9ecef; text-align: center;">
-        <span style="background: ${bid.rank === 1 ? '#28a745' : bid.rank === 2 ? '#17a2b8' : '#ffc107'}; color: #fff; padding: 4px 10px; border-radius: 12px; font-weight: bold;">#${bid.rank}</span>
+        <span style="background: ${bid.rank === 1 ? "#28a745" : bid.rank === 2 ? "#17a2b8" : "#ffc107"}; color: #fff; padding: 4px 10px; border-radius: 12px; font-weight: bold;">#${bid.rank}</span>
       </td>
       <td style="padding: 12px; border-bottom: 1px solid #e9ecef;">${bid.vendorName}</td>
       <td style="padding: 12px; border-bottom: 1px solid #e9ecef; font-weight: bold;">$${bid.finalPrice.toLocaleString()}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #e9ecef;">${bid.paymentTerms || 'N/A'}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e9ecef;">${bid.paymentTerms || "N/A"}</td>
       <td style="padding: 12px; border-bottom: 1px solid #e9ecef; text-align: center;">
         <a href="${portalLink}/select/${bid.bidId}" style="background: #0066cc; color: #fff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px;">Select</a>
       </td>
     </tr>
-  `
+  `,
     )
-    .join('');
+    .join("");
 
   return `
     <!DOCTYPE html>
@@ -375,11 +416,24 @@ function generateComparisonEmailPlainText(data: {
   triggerMessage: string;
   portalLink: string;
 }): string {
-  const { recipientName, requisitionTitle, projectName, rfqId, topBids, totalVendors, completedVendors, triggerMessage, portalLink } = data;
+  const {
+    recipientName,
+    requisitionTitle,
+    projectName,
+    rfqId,
+    topBids,
+    totalVendors,
+    completedVendors,
+    triggerMessage,
+    portalLink,
+  } = data;
 
   const bidsList = topBids
-    .map((bid) => `#${bid.rank} - ${bid.vendorName}: $${bid.finalPrice.toLocaleString()} (${bid.paymentTerms || 'N/A'})`)
-    .join('\n');
+    .map(
+      (bid) =>
+        `#${bid.rank} - ${bid.vendorName}: $${bid.finalPrice.toLocaleString()} (${bid.paymentTerms || "N/A"})`,
+    )
+    .join("\n");
 
   return `
 BID COMPARISON REPORT

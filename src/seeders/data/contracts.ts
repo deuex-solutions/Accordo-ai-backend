@@ -4,12 +4,12 @@
  * Chatbot deals for requisitions in 'NegotiationStarted' status
  */
 
-import { daysFromNow, daysFromDate } from '../helpers/date-utils.js';
+import { daysFromDate } from '../helpers/date-utils.js';
 import { generateUUID } from '../helpers/id-generator.js';
 import { allRequisitions, type RequisitionData } from './requisitions.js';
 import { vendorCompanies, getVendorRating } from './companies.js';
-import { vendorUsers, getProcurementUsers } from './users.js';
-import { getProductById } from './products.js';
+import { vendorUsers } from './users.js';
+
 
 export interface ContractData {
   id: number;

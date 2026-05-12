@@ -7,7 +7,6 @@ import sequelize from "../../config/database.js";
 import { sendPMQuoteNotificationEmail } from "../../services/email.service.js";
 import {
   buildConfigFromRequisition,
-  saveVendorMessageOnlyService,
   generatePMResponseAsyncService,
   syncContractStatus,
 } from "../chatbot/chatbot.service.js";
@@ -22,7 +21,6 @@ import {
   buildInitialDiscountPromptMessage,
   buildVendorDiscountBubble,
   buildDiscountAcknowledgement,
-  buildPaymentTermsPromptMessage,
   buildVendorPaymentTermsBubble,
   formatPaymentTermsLabel,
 } from "./structured-prompts.js";

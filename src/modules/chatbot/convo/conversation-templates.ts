@@ -6,20 +6,21 @@
  * for consistency across conversation turns.
  */
 
-import { createHash } from 'crypto';
+import { createHash } from "crypto";
+import logger from "../../../config/logger.js";
 
 /**
  * Conversation intent types for Accordo's responses
  */
 export type ConvoIntent =
-  | 'GREET'
-  | 'ASK_FOR_OFFER'
-  | 'ASK_CLARIFY'
-  | 'COUNTER'
-  | 'ACCEPT'
-  | 'ESCALATE'
-  | 'WALK_AWAY'
-  | 'SMALL_TALK';
+  | "GREET"
+  | "ASK_FOR_OFFER"
+  | "ASK_CLARIFY"
+  | "COUNTER"
+  | "ACCEPT"
+  | "ESCALATE"
+  | "WALK_AWAY"
+  | "SMALL_TALK";
 
 /**
  * Template structure with substitution variables
@@ -54,9 +55,9 @@ export interface TemplateVariables {
  */
 const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   GREET: {
-    intent: 'GREET',
+    intent: "GREET",
     requiresSubstitution: true,
-    variables: ['counterparty'],
+    variables: ["counterparty"],
     templates: [
       "Hello {counterparty}! Thanks for reaching out. I'm looking forward to discussing this opportunity with you.",
       "Hi {counterparty}, great to connect with you. Let's explore how we can work together on this.",
@@ -69,9 +70,9 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   ASK_FOR_OFFER: {
-    intent: 'ASK_FOR_OFFER',
+    intent: "ASK_FOR_OFFER",
     requiresSubstitution: true,
-    variables: ['counterparty', 'productName', 'quantity'],
+    variables: ["counterparty", "productName", "quantity"],
     templates: [
       "Thanks for connecting, {counterparty}. To move forward, could you please share your pricing and payment terms for this opportunity?",
       "I'd like to understand your proposal better. Could you provide your unit price and payment terms for the {quantity} units we're looking at?",
@@ -84,9 +85,9 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   ASK_CLARIFY: {
-    intent: 'ASK_CLARIFY',
+    intent: "ASK_CLARIFY",
     requiresSubstitution: true,
-    variables: ['counterparty', 'reason'],
+    variables: ["counterparty", "reason"],
     templates: [
       "Thanks for that, {counterparty}. I need a bit more clarity on {reason}. Could you provide more details?",
       "I appreciate your response, but I'm unclear on {reason}. Could you elaborate on that point?",
@@ -99,14 +100,14 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   COUNTER: {
-    intent: 'COUNTER',
+    intent: "COUNTER",
     requiresSubstitution: true,
     variables: [
-      'currentPrice',
-      'targetPrice',
-      'paymentTerms',
-      'reason',
-      'counterparty',
+      "currentPrice",
+      "targetPrice",
+      "paymentTerms",
+      "reason",
+      "counterparty",
     ],
     templates: [
       "Thank you for your offer of ${currentPrice}, {counterparty}. Based on our analysis and market conditions, I'd like to propose ${targetPrice} with {paymentTerms}. {reason}",
@@ -120,9 +121,9 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   ACCEPT: {
-    intent: 'ACCEPT',
+    intent: "ACCEPT",
     requiresSubstitution: true,
-    variables: ['counterparty', 'currentPrice', 'paymentTerms'],
+    variables: ["counterparty", "currentPrice", "paymentTerms"],
     templates: [
       "Excellent, {counterparty}! I'm pleased to accept your offer of ${currentPrice} with {paymentTerms}. This works well for both of us. I'll prepare the necessary documentation.",
       "Great news, {counterparty}! Your proposal of ${currentPrice} with {paymentTerms} is acceptable. Let's move forward with finalizing this agreement.",
@@ -135,9 +136,9 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   ESCALATE: {
-    intent: 'ESCALATE',
+    intent: "ESCALATE",
     requiresSubstitution: true,
-    variables: ['counterparty', 'reason'],
+    variables: ["counterparty", "reason"],
     templates: [
       "{counterparty}, I appreciate our discussion, but I think we need additional expertise here. {reason} I'm going to bring in a colleague to help us move forward effectively.",
       "Thanks for your engagement, {counterparty}. Given {reason}, I'd like to involve my team lead to ensure we're making the best decision for both parties.",
@@ -150,9 +151,9 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   WALK_AWAY: {
-    intent: 'WALK_AWAY',
+    intent: "WALK_AWAY",
     requiresSubstitution: true,
-    variables: ['counterparty', 'reason'],
+    variables: ["counterparty", "reason"],
     templates: [
       "{counterparty}, I appreciate the time we've spent on this, but {reason} I don't think we can reach an agreement that works for both of us. I wish you the best in finding another partner.",
       "Thank you for your efforts, {counterparty}. Unfortunately, {reason} we're not able to move forward with this deal. I appreciate your understanding.",
@@ -165,9 +166,9 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
   },
 
   SMALL_TALK: {
-    intent: 'SMALL_TALK',
+    intent: "SMALL_TALK",
     requiresSubstitution: true,
-    variables: ['counterparty'],
+    variables: ["counterparty"],
     templates: [
       "Thanks for sharing, {counterparty}! I appreciate the conversation. Now, let's focus on the business at hand. What are your thoughts on the pricing and terms?",
       "That's great to hear, {counterparty}! I enjoy our exchanges. Let's circle back to the negotiation - could you share your proposal?",
@@ -185,7 +186,7 @@ const CONVERSATION_TEMPLATES: Record<ConvoIntent, ConversationTemplate> = {
  * Uses SHA-256 for consistent, reproducible results
  */
 function hashString(input: string): number {
-  const hash = createHash('sha256').update(input).digest('hex');
+  const hash = createHash("sha256").update(input).digest("hex");
   // Convert first 8 characters of hex to integer
   return parseInt(hash.substring(0, 8), 16);
 }
@@ -201,7 +202,7 @@ function hashString(input: string): number {
 export function selectTemplate(
   dealId: string,
   round: number,
-  intent: ConvoIntent
+  intent: ConvoIntent,
 ): string {
   const templateSet = CONVERSATION_TEMPLATES[intent];
   if (!templateSet) {
@@ -237,7 +238,7 @@ export function getTemplatesForIntent(intent: ConvoIntent): string[] {
  */
 export function substituteVariables(
   template: string,
-  variables: TemplateVariables
+  variables: TemplateVariables,
 ): string {
   let result = template;
 
@@ -246,7 +247,7 @@ export function substituteVariables(
     if (value !== undefined && value !== null) {
       const placeholder = `{${key}}`;
       const replacement = String(value);
-      result = result.replace(new RegExp(placeholder, 'g'), replacement);
+      result = result.replace(new RegExp(placeholder, "g"), replacement);
     }
   });
 
@@ -254,8 +255,8 @@ export function substituteVariables(
   const unreplacedVars = result.match(/\{[a-zA-Z]+\}/g);
   if (unreplacedVars) {
     // Log warning but don't fail - some variables may be optional
-    console.warn(
-      `Template has unreplaced variables: ${unreplacedVars.join(', ')}`
+    logger.warn(
+      `Template has unreplaced variables: ${unreplacedVars.join(", ")}`,
     );
   }
 
@@ -277,7 +278,7 @@ export function generateConversationMessage(
   dealId: string,
   round: number,
   intent: ConvoIntent,
-  variables: TemplateVariables
+  variables: TemplateVariables,
 ): string {
   // Select template deterministically
   const template = selectTemplate(dealId, round, intent);
@@ -297,7 +298,7 @@ export function generateConversationMessage(
  */
 export function validateTemplateVariables(
   intent: ConvoIntent,
-  variables: TemplateVariables
+  variables: TemplateVariables,
 ): boolean {
   const templateSet = CONVERSATION_TEMPLATES[intent];
   if (!templateSet || !templateSet.requiresSubstitution) {
@@ -306,12 +307,12 @@ export function validateTemplateVariables(
 
   const requiredVars = templateSet.variables || [];
   const missingVars = requiredVars.filter(
-    (varName) => variables[varName as keyof TemplateVariables] === undefined
+    (varName) => variables[varName as keyof TemplateVariables] === undefined,
   );
 
   if (missingVars.length > 0) {
-    console.warn(
-      `Missing required variables for ${intent}: ${missingVars.join(', ')}`
+    logger.warn(
+      `Missing required variables for ${intent}: ${missingVars.join(", ")}`,
     );
     return false;
   }
@@ -354,6 +355,6 @@ export function getAllIntents(): ConvoIntent[] {
 export function getTotalTemplateCount(): number {
   return Object.values(CONVERSATION_TEMPLATES).reduce(
     (sum, template) => sum + template.templates.length,
-    0
+    0,
   );
 }

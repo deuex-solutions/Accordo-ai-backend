@@ -34,7 +34,6 @@ import {
 import { buildConfigFromRequisition } from "../chatbot.service.js";
 import type { NegotiationConfig } from "../engine/utility.js";
 import type {
-  Offer,
   Decision,
   Explainability,
   ExtendedOffer,
@@ -53,7 +52,6 @@ import {
   mergeWithLastOffer,
   determineIntent,
   updateConversationState,
-  shouldAutoStartConversation,
   getDefaultGreeting,
 } from "./conversation-manager.js";
 import {
@@ -91,10 +89,7 @@ import {
 import {
   generateMesoOptions,
   shouldUseMeso,
-  buildPreferenceProfile,
   type MesoResult,
-  type MesoOption,
-  MESO_PHASE_CONFIG,
 } from "../engine/meso.js";
 import { resolveNegotiationConfig as resolveMesoConfig } from "../engine/weighted-utility.js";
 import type {
@@ -427,8 +422,7 @@ export async function processConversationMessage(
       );
 
       // Save vendor message
-      const vendorMsgRecord = await models.ChatbotMessage.create({
-        id: uuidv4(),
+      await models.ChatbotMessage.create({        id: uuidv4(),
         dealId: deal.id,
         role: "VENDOR",
         content: vendorMessage,
@@ -674,7 +668,7 @@ export async function processConversationMessage(
           (vendorOffer.total_price - maxAcceptableForProximity) /
           maxAcceptableForProximity;
 
-        if (overagePercent > 0.10) {
+        if (overagePercent > 0.1) {
           // Beyond 10% above max and round 7+ — escalate to senior team
           logger.info(
             "[ConversationService] Graduated-escalate: vendor >10% above max_acceptable after round 7+",
@@ -938,7 +932,7 @@ export async function processConversationMessage(
     ) {
       const earlyOverMaxPct =
         (earlyVendorPrice - earlyMaxAcceptable) / earlyMaxAcceptable;
-      if (earlyOverMaxPct <= 0.10) {
+      if (earlyOverMaxPct <= 0.1) {
         if (
           earlyEndgamePhase === "COUNTERING_AT_MAX" &&
           earlyEndgameCounterRounds >= 2
@@ -1264,11 +1258,7 @@ export async function processConversationMessage(
     const endgamePhase: string = convoState.endgamePhase ?? "NORMAL";
     const endgameCounterRounds: number = convoState.endgameCounterRounds ?? 0;
 
-    if (
-      maxAcceptablePrice != null &&
-      vendorPrice != null &&
-      vendorPrice > 0
-    ) {
+    if (maxAcceptablePrice != null && vendorPrice != null && vendorPrice > 0) {
       const overMaxPercent =
         (vendorPrice - maxAcceptablePrice) / maxAcceptablePrice;
 
@@ -1282,7 +1272,7 @@ export async function processConversationMessage(
         escapeHatchApplied = "accept";
       }
       // ── Vendor within 10% above max ──
-      else if (overMaxPercent <= 0.10) {
+      else if (overMaxPercent <= 0.1) {
         if (endgamePhase === "FINAL_MESO_SHOWN") {
           // After final MESO, vendor countered within 10% → ESCALATE
           decision.action = "ESCALATE";
@@ -1514,7 +1504,11 @@ export async function processConversationMessage(
       hasRecentOpener(dealId, negotiationIntent.action, accordoReplyContent)
     ) {
       // Try programmatic opener rewrite first — preserves the body of the message
-      const rewritten = rewriteOpener(dealId, negotiationIntent.action, accordoReplyContent);
+      const rewritten = rewriteOpener(
+        dealId,
+        negotiationIntent.action,
+        accordoReplyContent,
+      );
       if (!hasRecentOpener(dealId, negotiationIntent.action, rewritten)) {
         logger.info(
           "[ConversationService] Repeated opener rewritten programmatically",
@@ -1582,7 +1576,7 @@ export async function processConversationMessage(
     );
 
     // 19. Save vendor message
-    const vendorMessageRecord = await models.ChatbotMessage.create({
+    await models.ChatbotMessage.create({
       id: uuidv4(),
       dealId: deal.id,
       role: "VENDOR",

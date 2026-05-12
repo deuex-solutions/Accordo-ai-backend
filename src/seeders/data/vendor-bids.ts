@@ -5,11 +5,11 @@
  */
 
 import { generateUUID } from '../helpers/id-generator.js';
-import { daysFromDate, daysFromNow } from '../helpers/date-utils.js';
-import { calculateBidScore, rankVendorBids, DEFAULT_SCORING_WEIGHTS, type ScoringWeights, type BidData } from '../helpers/price-utils.js';
+import { daysFromNow } from '../helpers/date-utils.js';
+import { calculateBidScore, rankVendorBids, type ScoringWeights, type BidData } from '../helpers/price-utils.js';
 import { allRequisitions, type RequisitionData } from './requisitions.js';
 import { allChatbotDeals, allContracts, type ChatbotDealData, type ContractData } from './contracts.js';
-import { getLastMessage, getVendorOffers } from './chat-messages.js';
+import { getVendorOffers } from './chat-messages.js';
 import { getVendorRating, vendorCompanies } from './companies.js';
 
 export interface VendorBidData {

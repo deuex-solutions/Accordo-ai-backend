@@ -1,84 +1,72 @@
 /**
  * Local Embedding Provider
- * Uses @huggingface/transformers (ONNX) for CPU-based embeddings in Node.js.
- * Default model: Xenova/bge-large-en-v1.5 (1024 dimensions native).
+ * Calls a local Ollama server (default http://localhost:11434) via /api/embeddings.
+ * Default model: gpt-oss:20b (configurable via EMBEDDING_MODEL).
+ *
+ * Replaces the previous @huggingface/transformers (ONNX) implementation. For
+ * production, set EMBEDDING_PROVIDER=bedrock with a custom-imported gpt-oss:20b
+ * model ARN — same model family, different transport.
  */
 
-import logger from '../../../config/logger.js';
-import { EmbeddingProvider } from './embedding-provider.interface.js';
-import type { EmbeddingProviderConfig } from './embedding-provider.interface.js';
-import type { EmbeddingServiceHealth } from '../vector.types.js';
+import axios, { AxiosInstance } from "axios";
+import env from "../../../config/env.js";
+import logger from "../../../config/logger.js";
+import { EmbeddingProvider } from "./embedding-provider.interface.js";
+import type { EmbeddingProviderConfig } from "./embedding-provider.interface.js";
+import type { EmbeddingServiceHealth } from "../vector.types.js";
 
-// The feature-extraction pipeline returns a Tensor, but the generic pipeline type
-// returns a wide union. We use a typed wrapper to access .data and .dims safely.
-interface TensorResult {
-  data: Float32Array;
-  dims: number[];
+interface OllamaEmbeddingResponse {
+  embedding: number[];
 }
 
-type FeatureExtractionPipeline = (
-  text: string,
-  options?: Record<string, unknown>
-) => Promise<TensorResult>;
-
 export class LocalEmbeddingProvider extends EmbeddingProvider {
-  readonly providerName = 'local';
-  private pipeline: FeatureExtractionPipeline | null = null;
+  readonly providerName = "local";
+  private client: AxiosInstance;
   private nativeDimension: number = 0;
+  private readonly baseURL: string;
+
+  constructor(config: EmbeddingProviderConfig) {
+    super(config);
+    this.baseURL = env.llm.baseURL;
+    this.client = axios.create({
+      baseURL: this.baseURL,
+      timeout: this.config.timeout,
+    });
+  }
 
   async initialize(): Promise<void> {
-    logger.info(`Loading local embedding model: ${this.config.model} (this may take a moment on first run)...`);
+    logger.info(
+      `Initializing local embedding provider via Ollama at ${this.baseURL} (model: ${this.config.model})`,
+    );
 
-    // Dynamic import — ESM, large library, lazy-loaded
-    const { pipeline, env } = await import('@huggingface/transformers');
+    const probe = await this.requestEmbedding("test");
+    this.nativeDimension = probe.length;
 
-    // Disable remote model downloads warning in production
-    env.allowLocalModels = true;
-
-    const pipe = await pipeline('feature-extraction', this.config.model, {
-      dtype: 'q8' as never,
-    });
-    this.pipeline = pipe as unknown as FeatureExtractionPipeline;
-
-    // Determine native dimension by running a test embedding
-    const testOutput = await this.pipeline('test', {
-      pooling: 'cls',
-      normalize: true,
-    });
-    this.nativeDimension = testOutput.dims[testOutput.dims.length - 1];
+    if (this.nativeDimension < this.config.dimension) {
+      logger.warn(
+        `Native embedding dimension (${this.nativeDimension}) is smaller than configured target (${this.config.dimension}). ` +
+          `Vectors will be returned at native length; downstream code expecting ${this.config.dimension} dims may break.`,
+      );
+    }
 
     logger.info(
-      `Local embedding model loaded: ${this.config.model} (native dim: ${this.nativeDimension}, target dim: ${this.config.dimension})`
+      `Local embedding provider ready (native dim: ${this.nativeDimension}, target dim: ${this.config.dimension})`,
     );
   }
 
   async embed(text: string, instruction?: string): Promise<number[]> {
-    if (!this.pipeline) {
-      throw new Error('Local embedding provider not initialized');
-    }
-
-    // BGE models use instruction prefixes
     const input = instruction ? `${instruction}: ${text}` : text;
+    const raw = await this.requestEmbedding(input);
 
-    const output = await this.pipeline(input, {
-      pooling: 'cls',
-      normalize: true,
-    });
-
-    let embedding = Array.from(output.data).slice(0, this.nativeDimension);
-
-    // Truncate + re-normalize if target dimension < native dimension
-    if (this.config.dimension < this.nativeDimension) {
-      embedding = this.truncateAndNormalize(embedding, this.config.dimension);
+    if (this.config.dimension > 0 && this.config.dimension < raw.length) {
+      return this.truncateAndNormalize(raw, this.config.dimension);
     }
-
-    return embedding;
+    return raw;
   }
 
   async embedBatch(texts: string[], instruction?: string): Promise<number[][]> {
     if (texts.length === 0) return [];
-
-    // Serial processing — CPU has no parallelism benefit
+    // Ollama's embeddings endpoint takes one prompt per call. Serial is fine on CPU.
     const results: number[][] = [];
     for (const text of texts) {
       results.push(await this.embed(text, instruction));
@@ -88,42 +76,52 @@ export class LocalEmbeddingProvider extends EmbeddingProvider {
 
   async checkHealth(): Promise<EmbeddingServiceHealth> {
     try {
-      if (!this.pipeline) {
-        return {
-          status: 'initializing',
-          model: this.config.model,
-          dimension: this.config.dimension,
-          device: 'cpu',
-          gpu_available: false,
-        };
-      }
-
-      // Quick test embed
-      await this.embed('health check');
-
+      await this.requestEmbedding("health check");
       return {
-        status: 'healthy',
+        status: "healthy",
         model: this.config.model,
         dimension: this.config.dimension,
-        device: 'cpu',
+        device: "ollama",
         gpu_available: false,
       };
     } catch (error) {
-      logger.error('Local embedding health check failed:', error);
+      logger.error("Local embedding health check failed:", error);
       return {
-        status: 'unavailable',
+        status: "unavailable",
         model: this.config.model,
         dimension: this.config.dimension,
-        device: 'cpu',
+        device: "ollama",
         gpu_available: false,
       };
     }
   }
 
-  private truncateAndNormalize(embedding: number[], targetDim: number): number[] {
+  private async requestEmbedding(prompt: string): Promise<number[]> {
+    const { data } = await this.client.post<OllamaEmbeddingResponse>(
+      "/api/embeddings",
+      {
+        model: this.config.model,
+        prompt,
+      },
+    );
+    if (
+      !data?.embedding ||
+      !Array.isArray(data.embedding) ||
+      data.embedding.length === 0
+    ) {
+      throw new Error(
+        `Ollama returned empty embedding for model "${this.config.model}". Is the model pulled? Try: ollama pull ${this.config.model}`,
+      );
+    }
+    return data.embedding;
+  }
+
+  private truncateAndNormalize(
+    embedding: number[],
+    targetDim: number,
+  ): number[] {
     const truncated = embedding.slice(0, targetDim);
 
-    // Re-normalize after truncation
     let norm = 0;
     for (let i = 0; i < truncated.length; i++) {
       norm += truncated[i] * truncated[i];

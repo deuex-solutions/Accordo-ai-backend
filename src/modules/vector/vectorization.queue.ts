@@ -29,7 +29,7 @@ interface QueueStats {
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 const MAX_CONCURRENT = 3;
-const PROCESSING_TIMEOUT_MS = 30000;
+// removed dead: const PROCESSING_TIMEOUT_MS = 30000;
 
 class VectorizationQueue {
   private queue: VectorizationTask[] = [];

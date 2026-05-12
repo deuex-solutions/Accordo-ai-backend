@@ -146,7 +146,7 @@ export async function retryWithJitter<T>(
   baseDelay: number = 1000
 ): Promise<T> {
   return retryWithBackoff(fn, maxRetries, baseDelay, {
-    onRetry: async (attempt) => {
+    onRetry: async (_attempt) => {
       // Add random jitter (0-50% of base delay)
       const jitter = Math.random() * baseDelay * 0.5;
       await sleep(jitter);
@@ -514,7 +514,7 @@ function validateOffer(offer: any): Offer | null {
  * @param value - Counter value
  * @returns Clamped value (0 to 100)
  */
-function clampCounter(value: number): number {
+function _clampCounter(value: number): number {
   if (typeof value !== 'number' || isNaN(value)) {
     return 0;
   }

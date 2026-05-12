@@ -17,7 +17,6 @@ import type {
   Offer,
   ExtendedOffer,
   ResolvedNegotiationConfig,
-  WizardConfig,
   NegotiationState,
   MesoSelectionRecord,
   MesoCycleState,

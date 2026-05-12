@@ -265,7 +265,7 @@ export function generateVendorScenarios(
  * @param quantity - Order quantity
  * @param pmMaxPrice - PM's maximum acceptable price (for reference in message)
  */
-function generateHardScenarioMessages(vendorPrice: number, quantity: number, pmMaxPrice: number): string[] {
+function generateHardScenarioMessages(vendorPrice: number, quantity: number, _pmMaxPrice: number): string[] {
   return [
     `Thank you for your interest. For ${quantity} units, our price is $${vendorPrice.toFixed(2)} per unit with payment due within 15 days. This includes our premium quality guarantee and priority support.`,
     `I appreciate the inquiry. Given current market conditions and our quality standards, we can offer $${vendorPrice.toFixed(2)} per unit with Net 15 terms. Delivery can be arranged within 6 weeks.`,
@@ -280,7 +280,7 @@ function generateHardScenarioMessages(vendorPrice: number, quantity: number, pmM
  * @param quantity - Order quantity
  * @param pmMaxPrice - PM's maximum acceptable price (for reference in message)
  */
-function generateMediumScenarioMessages(vendorPrice: number, quantity: number, pmMaxPrice: number): string[] {
+function generateMediumScenarioMessages(vendorPrice: number, _quantity: number, _pmMaxPrice: number): string[] {
   return [
     `I've reviewed your offer carefully. We can meet at $${vendorPrice.toFixed(2)} per unit with Net 45 payment terms. This is a fair compromise that works for both parties.`,
     `Thank you for your proposal. Let me offer $${vendorPrice.toFixed(2)} per unit with Net 45 terms. We can arrange delivery within 4 weeks.`,
@@ -295,7 +295,7 @@ function generateMediumScenarioMessages(vendorPrice: number, quantity: number, p
  * @param pmMaxPrice - PM's maximum acceptable price (for reference)
  * @param pmTerms - PM's preferred payment terms
  */
-function generateSoftScenarioMessages(vendorPrice: number, quantity: number, pmMaxPrice: number, pmTerms: string): string[] {
+function generateSoftScenarioMessages(vendorPrice: number, _quantity: number, _pmMaxPrice: number, pmTerms: string): string[] {
   return [
     `I want to make this work. I can offer $${vendorPrice.toFixed(2)} per unit with your ${pmTerms} terms. Let's finalize this deal.`,
     `We'd be happy to work with you. My best offer is $${vendorPrice.toFixed(2)} per unit, accepting your payment terms. Shall we proceed?`,

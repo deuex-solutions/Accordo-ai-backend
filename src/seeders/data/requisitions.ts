@@ -4,12 +4,12 @@
  * Each RFQ has 1-4 products and 2-4 attached vendors
  */
 
-import { daysFromNow, daysFromDate, randomPastYearDate, generateDeadlines } from '../helpers/date-utils.js';
-import { generateRfqId, generateUUID } from '../helpers/id-generator.js';
+import { daysFromNow, generateDeadlines } from '../helpers/date-utils.js';
+import { generateRfqId } from '../helpers/id-generator.js';
 import { DEFAULT_SCORING_WEIGHTS, type ScoringWeights } from '../helpers/price-utils.js';
 import { allProjects } from './projects.js';
-import { allProducts, getProductsByCategory, type ProductData } from './products.js';
-import { vendorCompanies, type CompanyData } from './companies.js';
+import { getProductsByCategory, type ProductData } from './products.js';
+
 
 export interface RequisitionProductData {
   productId: number;

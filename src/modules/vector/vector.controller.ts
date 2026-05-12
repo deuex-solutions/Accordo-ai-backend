@@ -245,7 +245,7 @@ export async function embedDeal(req: Request, res: Response, next: NextFunction)
  * Get vector statistics
  * GET /api/vector/stats
  */
-export async function getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getStats(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const stats = await vectorService.getVectorStats();
 
@@ -264,7 +264,7 @@ export async function getStats(req: Request, res: Response, next: NextFunction):
  * Get embedding service health
  * GET /api/vector/health
  */
-export async function getHealth(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getHealth(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const health = await embeddingClient.checkHealth();
 
@@ -316,7 +316,7 @@ export async function startMigration(req: Request, res: Response, next: NextFunc
  * Get migration status
  * GET /api/vector/migrate/status
  */
-export async function getMigrationStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getMigrationStatus(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const status = await migrationJob.getMigrationStatus();
 
@@ -335,7 +335,7 @@ export async function getMigrationStatus(req: Request, res: Response, next: Next
  * Cancel ongoing migration
  * POST /api/vector/migrate/cancel
  */
-export async function cancelMigration(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function cancelMigration(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     await migrationJob.cancelMigration();
 

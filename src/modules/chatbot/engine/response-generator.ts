@@ -29,7 +29,6 @@ import {
   type ConcernMessage,
 } from "./concern-extractor.js";
 import {
-  formatDeliveryDate,
   formatDeliveryShort,
   type DeliveryConfig,
 } from "./delivery-utility.js";
@@ -37,7 +36,6 @@ import type {
   Offer,
   Decision,
   AccumulatedOffer,
-  OfferComponent,
 } from "./types.js";
 import type { NegotiationConfig } from "./utility.js";
 import { getCurrencySymbol } from "../../../negotiation/intent/build-negotiation-intent.js";

@@ -4,13 +4,13 @@
  * selection_won, selection_lost, po_created, escalation
  */
 
-import { generateUUID, generateUniqueToken } from '../helpers/id-generator.js';
+import { generateUniqueToken } from '../helpers/id-generator.js';
 import { daysFromDate, daysFromNow } from '../helpers/date-utils.js';
 import { allContracts, type ContractData } from './contracts.js';
 import { allBidComparisons, type BidComparisonData } from './vendor-bids.js';
 import { allNotifications, allPurchaseOrders, type VendorNotificationData, type PurchaseOrderData } from './selections.js';
 import { allRequisitions } from './requisitions.js';
-import { vendorUsers, enterpriseUsers, getUserById } from './users.js';
+import { vendorUsers, enterpriseUsers } from './users.js';
 import { vendorCompanies } from './companies.js';
 
 export interface EmailLogData {

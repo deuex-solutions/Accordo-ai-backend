@@ -11,7 +11,7 @@
  * @module stallDetector
  */
 
-import type { ExtendedOffer, NegotiationState } from './types.js';
+import type { ExtendedOffer } from './types.js';
 
 // ============================================
 // TYPES

@@ -21,13 +21,9 @@ import {
 } from "./engine/decide.js";
 import {
   computeExplainability,
-  totalUtility,
   type NegotiationConfig,
 } from "./engine/utility.js";
-import {
-  formatCurrency,
-  type SupportedCurrency,
-} from "../../services/currency.service.js";
+import { type SupportedCurrency } from "../../services/currency.service.js";
 import {
   getCurrencySymbol,
   buildNegotiationIntent,
@@ -50,14 +46,11 @@ import type {
   BehavioralSignals,
   AdaptiveStrategyResult,
   AdaptiveFeaturesConfig,
-  MesoCycleState,
-  FinalOfferState,
   NegotiationPhase,
   ExtendedOffer,
 } from "./engine/types.js";
 import {
   createEmptyNegotiationState,
-  createEmptyMesoCycleState,
   createEmptyFinalOfferState,
 } from "./engine/types.js";
 import {
@@ -72,7 +65,6 @@ import {
   mergeOffers,
   shouldResetAccumulation,
   createAccumulatedOffer,
-  isOfferComplete,
   getMissingComponents,
   getProvidedComponents,
 } from "./engine/offer-accumulator.js";
@@ -90,12 +82,11 @@ import {
   calculateWeightedUtility,
   convertLegacyConfig,
   getUtilitySummary,
-  extractValueFromOffer,
 } from "./engine/weighted-utility.js";
-import { DEFAULT_THRESHOLDS } from "./engine/types.js";
+
 import type { ChatbotDeal } from "../../models/chatbot-deal.js";
 import type { ChatbotMessage } from "../../models/chatbot-message.js";
-import { chatCompletion } from "../../services/llm.service.js";
+
 import {
   captureVendorBid,
   checkAndTriggerComparison,
@@ -128,7 +119,6 @@ import {
   updateFinalOfferStateOnConfirm,
   updateFinalOfferStateOnMesoShown,
   checkEscalationTriggers,
-  MESO_PHASE_CONFIG,
   type MesoResult,
   type MesoOption,
   type PreviousMesoRound,
@@ -143,7 +133,6 @@ import {
 } from "./engine/stall-detector.js";
 import { checkScopeGuard } from "./engine/scope-guard.js";
 import {
-  buildPartialResult,
   classifyError,
   getErrorFallbackResponse,
 } from "./engine/error-recovery.js";
@@ -663,7 +652,7 @@ export const createDealWithConfigService = async (
 
     // Both targetUnitPrice and maxAcceptablePrice from the wizard are total contract values
     // (not per-unit prices). Do NOT multiply by quantity.
-    const orderQty = priceQuantity.minOrderQuantity || 1;
+    // removed dead: const _orderQty = priceQuantity.minOrderQuantity || 1;
     const targetTotalPrice = priceQuantity.targetUnitPrice;
     const maxTotalPrice = priceQuantity.maxAcceptablePrice;
 
@@ -1431,16 +1420,12 @@ export const getSmartDefaultsService = async (
     });
 
     // Calculate averages from historical data
-    let avgPaymentDays = 45;
-    let avgVolumeDiscount = 5;
     let avgDeliveryDays = 14;
     let source: SmartDefaultsResponse["source"] = "industry_default";
     let confidence = 0.5;
 
     if (historicalDeals.length > 0) {
       // Use historical data if available
-      avgPaymentDays = 45;
-      avgVolumeDiscount = 8;
       avgDeliveryDays = 21;
       source = "vendor_history";
       confidence = 0.8;
@@ -1571,7 +1556,7 @@ const generateAccordoResponseText = (
     delivery_days?: number | null;
   } | null,
 ): string => {
-  const { action, counterOffer, utilityScore } = decision;
+  const { action, counterOffer } = decision;
   const currencyCode = (config as any).currency || "USD";
 
   // Format delivery if available in counterOffer
@@ -1828,7 +1813,9 @@ export const processVendorMessageService = async (
         (config.parameters as any)?.unit_price?.max_acceptable ??
         null;
       const acceptedPrice =
-        extractedOffer?.total_price ?? decision.counterOffer?.total_price ?? null;
+        extractedOffer?.total_price ??
+        decision.counterOffer?.total_price ??
+        null;
       if (
         safetyMaxPrice != null &&
         acceptedPrice != null &&
@@ -1899,6 +1886,7 @@ export const processVendorMessageService = async (
           if (deal.requisitionId) {
             return checkAndTriggerComparison(deal.requisitionId);
           }
+          return undefined;
         })
         .catch((bidError) => {
           logger.error(
@@ -2952,8 +2940,7 @@ export const generatePMResponseAsyncService = async (
       order: [["round", "DESC"]],
       limit: 1,
     });
-    const previousMesoRoundsCount = await models.MesoRound.count({
-      where: { dealId: deal.id },
+    await models.MesoRound.count({      where: { dealId: deal.id },
     });
 
     // ========================================================================
@@ -3308,7 +3295,9 @@ export const generatePMResponseAsyncService = async (
         (config.parameters as any)?.unit_price?.max_acceptable ??
         null;
       const acceptedPrice =
-        extractedOffer?.total_price ?? decision.counterOffer?.total_price ?? null;
+        extractedOffer?.total_price ??
+        decision.counterOffer?.total_price ??
+        null;
       if (
         safetyMaxPrice != null &&
         acceptedPrice != null &&
@@ -3384,6 +3373,7 @@ export const generatePMResponseAsyncService = async (
           if (deal.requisitionId) {
             return checkAndTriggerComparison(deal.requisitionId);
           }
+          return undefined;
         })
         .catch((bidError) => {
           logger.error(
@@ -3668,6 +3658,7 @@ export const generatePMFallbackResponseService = async (
           if (deal.requisitionId) {
             return checkAndTriggerComparison(deal.requisitionId);
           }
+          return undefined;
         })
         .catch((bidError) => {
           logger.error(
@@ -4939,7 +4930,7 @@ export const getRequisitionsWithDealsService = async (
     // If 'all', no filter on archivedAt
 
     // Get requisitions with project info
-    const { count: total, rows: requisitions } =
+    const { count: _total, rows: requisitions } =
       await models.Requisition.findAndCountAll({
         where: whereClause,
         include: [
@@ -7393,8 +7384,7 @@ export const processOthersSelectionService = async (
     const vendorMessageId = uuidv4();
     const currentRound = deal.round + 1;
 
-    const vendorMessage = await models.ChatbotMessage.create({
-      id: vendorMessageId,
+    await models.ChatbotMessage.create({      id: vendorMessageId,
       dealId: input.dealId,
       role: "VENDOR",
       content: vendorMessageContent,

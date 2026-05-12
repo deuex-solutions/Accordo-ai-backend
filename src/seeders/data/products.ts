@@ -4,7 +4,7 @@
  * Price range: $100 - $10,000
  */
 
-import { randomPrice } from '../helpers/price-utils.js';
+
 
 export interface ProductData {
   id: number;

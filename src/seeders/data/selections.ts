@@ -7,9 +7,9 @@
 import { generateUUID, generatePoNumber } from '../helpers/id-generator.js';
 import { daysFromDate, daysFromNow } from '../helpers/date-utils.js';
 import { allRequisitions, type RequisitionData } from './requisitions.js';
-import { allBidComparisons, allVendorBids, getBidsByRequisition, type VendorBidData, type BidComparisonData } from './vendor-bids.js';
+import { allBidComparisons, getBidsByRequisition, type VendorBidData, type BidComparisonData } from './vendor-bids.js';
 import { vendorCompanies } from './companies.js';
-import { getApprovers, enterpriseUsers } from './users.js';
+import { enterpriseUsers } from './users.js';
 
 export interface VendorSelectionData {
   id: string;
@@ -218,7 +218,7 @@ awardedRequisitions.forEach(requisition => {
   });
 
   // Create PO for selected vendor
-  const vendor = vendorCompanies.find(v => v.id === selectedBid.vendorCompanyId);
+  // removed dead: const _vendor = vendorCompanies.find(v => v.id === selectedBid.vendorCompanyId);
   const poDate = daysFromDate(selectionDate, 2);
 
   allPurchaseOrders.push({

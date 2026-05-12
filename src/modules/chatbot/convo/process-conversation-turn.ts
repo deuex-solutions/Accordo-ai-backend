@@ -11,8 +11,6 @@ import { ChatbotDeal } from '../../../models/chatbot-deal.js';
 import { ChatbotTemplate } from '../../../models/chatbot-template.js';
 import {
   generateConversationMessage,
-  substituteVariables,
-  selectTemplate,
   type ConvoIntent,
   type TemplateVariables,
 } from './conversation-templates.js';

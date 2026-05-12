@@ -2,7 +2,7 @@
  * Vector Service - Main service for vectorization, search, and RAG operations
  */
 
-import { Op, literal, fn, col } from 'sequelize';
+import { Op, fn, col } from 'sequelize';
 import {
   MessageEmbedding,
   DealEmbedding,
@@ -10,29 +10,25 @@ import {
   VectorMigrationStatus,
   ChatbotMessage,
   ChatbotDeal,
-  sequelize,
 } from '../../models/index.js';
 import { embeddingClient } from './embedding.client.js';
 import env from '../../config/env.js';
 import logger from '../../config/logger.js';
 import type {
-  VectorSearchFilters,
   VectorSearchOptions,
   MessageSearchResult,
   DealSearchResult,
   PatternSearchResult,
   VectorizationResult,
-  BatchVectorizationResult,
   AIContextResult,
   RAGContext,
   VectorStats,
-  MigrationProgress,
   PreparedContent,
   MessageContent,
   DealSummaryContent,
 } from './vector.types.js';
 
-const VECTOR_DIMENSION = env.vector.embeddingDimension;
+// removed dead: const VECTOR_DIMENSION = env.vector.embeddingDimension;
 const DEFAULT_TOP_K = 5;
 const DEFAULT_SIMILARITY_THRESHOLD = 0.7;
 

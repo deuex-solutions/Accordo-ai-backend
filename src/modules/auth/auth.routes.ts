@@ -11,7 +11,6 @@ import {
   refreshToken,
   logout,
   getRoles,
-  validateToken,
 } from "./auth.controller.js";
 import {
   authMiddleware,

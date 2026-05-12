@@ -5,7 +5,7 @@
  * behavioral learning across deals.
  */
 
-import type { Sequelize, Transaction } from 'sequelize';
+import type { Transaction } from 'sequelize';
 import type {
   VendorNegotiationProfile,
   PreferredTermsJson,
@@ -146,7 +146,7 @@ export async function updateProfileAfterDeal(
   outcome: DealOutcome,
   transaction?: Transaction
 ): Promise<VendorNegotiationProfile> {
-  const { VendorNegotiationProfile } = await import('../../../models/vendor-negotiation-profile.js');
+  const {} = await import('../../../models/vendor-negotiation-profile.js');
 
   const profile = await getOrCreateProfile(outcome.vendorId);
 

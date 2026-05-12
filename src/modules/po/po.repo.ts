@@ -1,6 +1,6 @@
 import models from '../../models/index.js';
 import type { Po } from '../../models/po.js';
-import type { WhereOptions, FindOptions } from 'sequelize';
+import type { WhereOptions } from 'sequelize';
 
 export interface PoData {
   requisitionId?: number;

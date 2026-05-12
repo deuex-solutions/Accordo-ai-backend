@@ -2,16 +2,13 @@ import { Router } from 'express';
 import * as controller from './chatbot.controller.js';
 import * as templateController from './template.controller.js';
 import * as vendorSimulatorController from './vendor/vendor-simulator.controller.js';
-import { authMiddleware, checkPermission } from '../../middlewares/auth.middleware.js';
+import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import {
   validateBody,
   validateParams,
   validateQuery,
-  createDealSchema,
   createDealWithConfigSchema,
-  smartDefaultsQuerySchema,
   processMessageSchema,
-  createSystemMessageSchema,
   dealIdSchema,
   listDealsQuerySchema,
   rfqIdSchema,

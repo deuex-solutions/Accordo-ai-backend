@@ -46,7 +46,6 @@ import logger from '../config/logger.js';
 import {
   allCompanies,
   allUsers,
-  ROLE_PASSWORDS,
   allProducts,
   allProjects,
   allRequisitions,

@@ -9,6 +9,7 @@
     "dev:clean": "npm run dev:kill && npm run dev",
     "dev:kill": "pkill -f 'tsx watch' || pkill -f nodemon || pkill -f ts-node-dev || true",
     "build": "tsc",
+    "build:prod": "tsc -p tsconfig.prod.json",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
     "lint": "eslint src/**/*.ts",
@@ -29,13 +30,14 @@
     "test:coverage": "vitest --coverage",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:unit:watch": "vitest --config vitest.unit.config.ts",
-    "test:unit:coverage": "vitest run --config vitest.unit.config.ts --coverage"
+    "test:unit:coverage": "vitest run --config vitest.unit.config.ts --coverage",
+    "prepare": "husky"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.983.0",
-    "@huggingface/transformers": "^3.8.1",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
@@ -54,7 +56,6 @@
     "sequelize": "^6.37.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "tesseract.js": "^7.0.0",
     "tiktoken": "^1.0.22",
     "toobusy-js": "^0.5.1",
     "winston": "^3.17.0",
@@ -64,6 +65,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
@@ -86,6 +88,7 @@
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-n": "^16.6.2",
     "eslint-plugin-promise": "^6.3.1",
+    "husky": "^9.1.7",
     "sequelize-cli": "^6.6.2",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
@@ -93,5 +96,8 @@
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vitest": "^4.0.18"
+  },
+  "optionalDependencies": {
+    "tesseract.js": "^7.0.0"
   }
 }

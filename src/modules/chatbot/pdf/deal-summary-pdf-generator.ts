@@ -7,31 +7,30 @@
  * Created: January 2026
  */
 
-import PDFDocument from 'pdfkit';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import logger from '../../../config/logger.js';
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
+import logger from "../../../config/logger.js";
 
 // Ensure uploads directory exists
-const PDF_DIR = path.join(process.cwd(), 'uploads', 'pdfs');
+const PDF_DIR = path.join(process.cwd(), "uploads", "pdfs");
 if (!fs.existsSync(PDF_DIR)) {
   fs.mkdirSync(PDF_DIR, { recursive: true });
 }
 
 // Colors matching existing PDF style
 const COLORS = {
-  primary: '#0066cc',
-  success: '#28a745',
-  danger: '#dc3545',
-  warning: '#ffc107',
-  info: '#17a2b8',
-  text: '#333333',
-  textLight: '#666666',
-  textMuted: '#999999',
-  border: '#dee2e6',
-  background: '#f8f9fa',
-  white: '#ffffff',
+  primary: "#0066cc",
+  success: "#28a745",
+  danger: "#dc3545",
+  warning: "#ffc107",
+  info: "#17a2b8",
+  text: "#333333",
+  textLight: "#666666",
+  textMuted: "#999999",
+  border: "#dee2e6",
+  background: "#f8f9fa",
+  white: "#ffffff",
 };
 
 // Status colors
@@ -92,28 +91,34 @@ export interface DealSummaryPDFInput {
 /**
  * Generate a Deal Summary PDF
  */
-export async function generateDealSummaryPDF(input: DealSummaryPDFInput): Promise<Buffer> {
-  const { deal, finalOffer, metrics, timeline, messages, rfqId, generatedAt } = input;
+export async function generateDealSummaryPDF(
+  input: DealSummaryPDFInput,
+): Promise<Buffer> {
+  const { deal, finalOffer, metrics, timeline, messages, rfqId, generatedAt } =
+    input;
+
+  // pdfkit is dynamically imported so it isn't loaded on app boot.
+  const { default: PDFDocument } = await import("pdfkit");
 
   return new Promise((resolve, reject) => {
     try {
       const chunks: Buffer[] = [];
 
       const doc = new PDFDocument({
-        size: 'A4',
+        size: "A4",
         margin: 50,
         bufferPages: true,
         info: {
           Title: `Deal Summary - ${deal.vendorName}`,
-          Author: 'Accordo AI',
-          Subject: 'Negotiation Deal Summary Report',
-          Keywords: 'procurement, negotiation, deal summary',
+          Author: "Accordo AI",
+          Subject: "Negotiation Deal Summary Report",
+          Keywords: "procurement, negotiation, deal summary",
         },
       });
 
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+      doc.on("data", (chunk) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
 
       // Page 1: Cover & Summary (always rendered)
       renderCoverPage(doc, deal, rfqId, generatedAt);
@@ -122,7 +127,9 @@ export async function generateDealSummaryPDF(input: DealSummaryPDFInput): Promis
       renderUtilityScore(doc, metrics.utilityScore);
 
       // Page 2: Analytics & Charts (only if we have data to show)
-      const hasPriceData = timeline.some(r => r.vendorPrice || r.accordoPrice);
+      const hasPriceData = timeline.some(
+        (r) => r.vendorPrice || r.accordoPrice,
+      );
       if (hasPriceData || timeline.length > 0) {
         doc.addPage();
         renderAnalyticsPage(doc, timeline, metrics);
@@ -153,12 +160,16 @@ export async function generateDealSummaryPDF(input: DealSummaryPDFInput): Promis
 /**
  * Save PDF to file and return filepath
  */
-export async function saveDealSummaryPDF(input: DealSummaryPDFInput): Promise<string> {
+export async function saveDealSummaryPDF(
+  input: DealSummaryPDFInput,
+): Promise<string> {
   const buffer = await generateDealSummaryPDF(input);
 
   // Generate descriptive filename
-  const vendorNameClean = input.deal.vendorName.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30);
-  const dateStr = new Date().toISOString().split('T')[0];
+  const vendorNameClean = input.deal.vendorName
+    .replace(/[^a-zA-Z0-9]/g, "-")
+    .substring(0, 30);
+  const dateStr = new Date().toISOString().split("T")[0];
   const filename = `Deal-Summary-${vendorNameClean}-RFQ${input.rfqId}-${dateStr}-${uuidv4().slice(0, 8)}.pdf`;
   const filepath = path.join(PDF_DIR, filename);
 
@@ -172,8 +183,10 @@ export async function saveDealSummaryPDF(input: DealSummaryPDFInput): Promise<st
  * Generate filename for the PDF
  */
 export function generatePDFFilename(vendorName: string, rfqId: number): string {
-  const vendorNameClean = vendorName.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30);
-  const dateStr = new Date().toISOString().split('T')[0];
+  const vendorNameClean = vendorName
+    .replace(/[^a-zA-Z0-9]/g, "-")
+    .substring(0, 30);
+  const dateStr = new Date().toISOString().split("T")[0];
   return `Deal-Summary-${vendorNameClean}-RFQ${rfqId}-${dateStr}.pdf`;
 }
 
@@ -183,23 +196,32 @@ export function generatePDFFilename(vendorName: string, rfqId: number): string {
 
 function renderCoverPage(
   doc: PDFKit.PDFDocument,
-  deal: DealSummaryPDFInput['deal'],
+  deal: DealSummaryPDFInput["deal"],
   rfqId: number,
-  generatedAt: Date
+  generatedAt: Date,
 ): void {
   // Title
-  doc.fontSize(28).fillColor(COLORS.primary).text('DEAL SUMMARY REPORT', { align: 'center' });
+  doc
+    .fontSize(28)
+    .fillColor(COLORS.primary)
+    .text("DEAL SUMMARY REPORT", { align: "center" });
   doc.moveDown(0.5);
 
   // Subtitle
-  doc.fontSize(12).fillColor(COLORS.textLight).text('Negotiation Outcome Analysis', { align: 'center' });
+  doc
+    .fontSize(12)
+    .fillColor(COLORS.textLight)
+    .text("Negotiation Outcome Analysis", { align: "center" });
   doc.moveDown(1.5);
 
   // Deal Title Box
   const boxY = doc.y;
   doc.rect(50, boxY, 495, 80).fill(COLORS.background).stroke(COLORS.border);
 
-  doc.fontSize(16).fillColor(COLORS.text).text(deal.title, 60, boxY + 15, { width: 475 });
+  doc
+    .fontSize(16)
+    .fillColor(COLORS.text)
+    .text(deal.title, 60, boxY + 15, { width: 475 });
   doc.fontSize(11).fillColor(COLORS.textLight);
   doc.text(`RFQ ID: ${rfqId}`, 60, boxY + 40);
   doc.text(`Vendor: ${deal.vendorName}`, 60, boxY + 55);
@@ -209,7 +231,10 @@ function renderCoverPage(
 
   // Generation info
   doc.fontSize(10).fillColor(COLORS.textMuted);
-  doc.text(`Generated: ${generatedAt.toLocaleDateString()} at ${generatedAt.toLocaleTimeString()}`, { align: 'center' });
+  doc.text(
+    `Generated: ${generatedAt.toLocaleDateString()} at ${generatedAt.toLocaleTimeString()}`,
+    { align: "center" },
+  );
 
   // Divider
   doc.moveDown(1);
@@ -218,11 +243,14 @@ function renderCoverPage(
 
 function renderDealOverview(
   doc: PDFKit.PDFDocument,
-  deal: DealSummaryPDFInput['deal'],
-  metrics: DealSummaryPDFInput['metrics']
+  deal: DealSummaryPDFInput["deal"],
+  metrics: DealSummaryPDFInput["metrics"],
 ): void {
   doc.moveDown(1);
-  doc.fontSize(14).fillColor(COLORS.text).text('DEAL OVERVIEW', { underline: true });
+  doc
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text("DEAL OVERVIEW", { underline: true });
   doc.moveDown(0.5);
 
   const startY = doc.y;
@@ -232,14 +260,42 @@ function renderDealOverview(
 
   // Status box
   const statusColor = STATUS_COLORS[deal.status] || COLORS.info;
-  drawStatBox(doc, 50, startY, boxWidth, boxHeight, 'Status', deal.status.replace('_', ' '), statusColor);
+  drawStatBox(
+    doc,
+    50,
+    startY,
+    boxWidth,
+    boxHeight,
+    "Status",
+    deal.status.replace("_", " "),
+    statusColor,
+  );
 
   // Rounds box
-  drawStatBox(doc, 50 + boxWidth + spacing, startY, boxWidth, boxHeight, 'Rounds Used', `${metrics.totalRounds}/${metrics.maxRounds}`, COLORS.info);
+  drawStatBox(
+    doc,
+    50 + boxWidth + spacing,
+    startY,
+    boxWidth,
+    boxHeight,
+    "Rounds Used",
+    `${metrics.totalRounds}/${metrics.maxRounds}`,
+    COLORS.info,
+  );
 
   // Duration box
-  const durationText = metrics.durationDays !== null ? `${metrics.durationDays} days` : 'N/A';
-  drawStatBox(doc, 50 + (boxWidth + spacing) * 2, startY, boxWidth, boxHeight, 'Duration', durationText, COLORS.textLight);
+  const durationText =
+    metrics.durationDays !== null ? `${metrics.durationDays} days` : "N/A";
+  drawStatBox(
+    doc,
+    50 + (boxWidth + spacing) * 2,
+    startY,
+    boxWidth,
+    boxHeight,
+    "Duration",
+    durationText,
+    COLORS.textLight,
+  );
 
   doc.y = startY + boxHeight + 15;
 
@@ -253,22 +309,31 @@ function renderDealOverview(
   doc.text(`Mode: ${deal.mode}`, 50);
 }
 
-function renderFinalOffer(doc: PDFKit.PDFDocument, finalOffer: DealSummaryPDFInput['finalOffer']): void {
+function renderFinalOffer(
+  doc: PDFKit.PDFDocument,
+  finalOffer: DealSummaryPDFInput["finalOffer"],
+): void {
   doc.moveDown(1);
   drawDivider(doc);
   doc.moveDown(0.5);
 
-  doc.fontSize(14).fillColor(COLORS.text).text('FINAL OFFER', { underline: true });
+  doc
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text("FINAL OFFER", { underline: true });
   doc.moveDown(0.5);
 
   const startY = doc.y;
 
   // Final offer table
   const tableData = [
-    ['Unit Price', formatCurrency(finalOffer.unitPrice)],
-    ['Total Value', formatCurrency(finalOffer.totalValue)],
-    ['Payment Terms', finalOffer.paymentTerms || 'N/A'],
-    ['Delivery Date', finalOffer.deliveryDate ? formatDate(finalOffer.deliveryDate) : 'N/A'],
+    ["Unit Price", formatCurrency(finalOffer.unitPrice)],
+    ["Total Value", formatCurrency(finalOffer.totalValue)],
+    ["Payment Terms", finalOffer.paymentTerms || "N/A"],
+    [
+      "Delivery Date",
+      finalOffer.deliveryDate ? formatDate(finalOffer.deliveryDate) : "N/A",
+    ],
   ];
 
   let y = startY;
@@ -277,8 +342,14 @@ function renderFinalOffer(doc: PDFKit.PDFDocument, finalOffer: DealSummaryPDFInp
     doc.rect(50, y, 200, 25).fill(bgColor);
     doc.rect(250, y, 150, 25).fill(bgColor);
 
-    doc.fontSize(10).fillColor(COLORS.textLight).text(label, 55, y + 7);
-    doc.fontSize(11).fillColor(COLORS.text).text(value, 255, y + 7);
+    doc
+      .fontSize(10)
+      .fillColor(COLORS.textLight)
+      .text(label, 55, y + 7);
+    doc
+      .fontSize(11)
+      .fillColor(COLORS.text)
+      .text(value, 255, y + 7);
 
     y += 25;
   });
@@ -286,11 +357,17 @@ function renderFinalOffer(doc: PDFKit.PDFDocument, finalOffer: DealSummaryPDFInp
   doc.y = y + 10;
 }
 
-function renderUtilityScore(doc: PDFKit.PDFDocument, utilityScore: number | null): void {
+function renderUtilityScore(
+  doc: PDFKit.PDFDocument,
+  utilityScore: number | null,
+): void {
   if (utilityScore === null) return;
 
   doc.moveDown(0.5);
-  doc.fontSize(14).fillColor(COLORS.text).text('UTILITY SCORE', { underline: true });
+  doc
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text("UTILITY SCORE", { underline: true });
   doc.moveDown(0.5);
 
   const startY = doc.y;
@@ -303,34 +380,55 @@ function renderUtilityScore(doc: PDFKit.PDFDocument, utilityScore: number | null
 
   // Score bar
   const scoreWidth = (scorePercent / 100) * barWidth;
-  const scoreColor = scorePercent >= 70 ? COLORS.success : scorePercent >= 40 ? COLORS.warning : COLORS.danger;
+  const scoreColor =
+    scorePercent >= 70
+      ? COLORS.success
+      : scorePercent >= 40
+        ? COLORS.warning
+        : COLORS.danger;
   doc.rect(50, startY, scoreWidth, barHeight).fill(scoreColor);
 
   // Score text
-  doc.fontSize(14).fillColor(COLORS.text).text(`${scorePercent}%`, 360, startY + 5);
+  doc
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text(`${scorePercent}%`, 360, startY + 5);
 
   // Rating
-  const rating = scorePercent >= 80 ? 'Excellent' : scorePercent >= 60 ? 'Good' : scorePercent >= 40 ? 'Fair' : 'Poor';
-  doc.fontSize(10).fillColor(scoreColor).text(rating, 400, startY + 8);
+  const rating =
+    scorePercent >= 80
+      ? "Excellent"
+      : scorePercent >= 60
+        ? "Good"
+        : scorePercent >= 40
+          ? "Fair"
+          : "Poor";
+  doc
+    .fontSize(10)
+    .fillColor(scoreColor)
+    .text(rating, 400, startY + 8);
 
   doc.y = startY + barHeight + 15;
 }
 
 function renderAnalyticsPage(
   doc: PDFKit.PDFDocument,
-  timeline: DealSummaryPDFInput['timeline'],
-  metrics: DealSummaryPDFInput['metrics']
+  timeline: DealSummaryPDFInput["timeline"],
+  metrics: DealSummaryPDFInput["metrics"],
 ): void {
   // Skip if no timeline data
   if (timeline.length === 0) return;
 
-  doc.fontSize(20).fillColor(COLORS.primary).text('NEGOTIATION ANALYTICS', { align: 'center' });
+  doc
+    .fontSize(20)
+    .fillColor(COLORS.primary)
+    .text("NEGOTIATION ANALYTICS", { align: "center" });
   doc.moveDown(1);
   drawDivider(doc);
   doc.moveDown(1);
 
   // Price Progression Chart (only if we have price data)
-  const hasPriceData = timeline.some(r => r.vendorPrice || r.accordoPrice);
+  const hasPriceData = timeline.some((r) => r.vendorPrice || r.accordoPrice);
   if (hasPriceData) {
     renderPriceProgressionChart(doc, timeline);
     doc.moveDown(1.5);
@@ -340,8 +438,14 @@ function renderAnalyticsPage(
   renderRoundComparisonTable(doc, timeline);
 }
 
-function renderPriceProgressionChart(doc: PDFKit.PDFDocument, timeline: DealSummaryPDFInput['timeline']): void {
-  doc.fontSize(14).fillColor(COLORS.text).text('Price Progression', { underline: true });
+function renderPriceProgressionChart(
+  doc: PDFKit.PDFDocument,
+  timeline: DealSummaryPDFInput["timeline"],
+): void {
+  doc
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text("Price Progression", { underline: true });
   doc.moveDown(0.5);
 
   // Extract prices from timeline
@@ -354,13 +458,21 @@ function renderPriceProgressionChart(doc: PDFKit.PDFDocument, timeline: DealSumm
   });
 
   if (vendorPrices.length === 0 && accordoPrices.length === 0) {
-    doc.fontSize(10).fillColor(COLORS.textMuted).text('Price data not available for chart visualization.', { align: 'center' });
+    doc
+      .fontSize(10)
+      .fillColor(COLORS.textMuted)
+      .text("Price data not available for chart visualization.", {
+        align: "center",
+      });
     return;
   }
 
   const allPrices = [...vendorPrices, ...accordoPrices].filter((p) => p > 0);
   if (allPrices.length === 0) {
-    doc.fontSize(10).fillColor(COLORS.textMuted).text('No price data to display.', { align: 'center' });
+    doc
+      .fontSize(10)
+      .fillColor(COLORS.textMuted)
+      .text("No price data to display.", { align: "center" });
     return;
   }
 
@@ -390,10 +502,17 @@ function renderPriceProgressionChart(doc: PDFKit.PDFDocument, timeline: DealSumm
   // Draw vendor line (red)
   if (vendorPrices.length > 1) {
     doc.strokeColor(COLORS.danger).lineWidth(2);
-    doc.moveTo(chartX, chartY + chartHeight - ((vendorPrices[0] - minPrice) / priceRange) * chartHeight);
+    doc.moveTo(
+      chartX,
+      chartY +
+        chartHeight -
+        ((vendorPrices[0] - minPrice) / priceRange) * chartHeight,
+    );
     vendorPrices.forEach((price, i) => {
-      const x = chartX + (i / Math.max(vendorPrices.length - 1, 1)) * chartWidth;
-      const y = chartY + chartHeight - ((price - minPrice) / priceRange) * chartHeight;
+      const x =
+        chartX + (i / Math.max(vendorPrices.length - 1, 1)) * chartWidth;
+      const y =
+        chartY + chartHeight - ((price - minPrice) / priceRange) * chartHeight;
       doc.lineTo(x, y);
     });
     doc.stroke();
@@ -402,10 +521,17 @@ function renderPriceProgressionChart(doc: PDFKit.PDFDocument, timeline: DealSumm
   // Draw accordo line (blue)
   if (accordoPrices.length > 1) {
     doc.strokeColor(COLORS.primary).lineWidth(2);
-    doc.moveTo(chartX, chartY + chartHeight - ((accordoPrices[0] - minPrice) / priceRange) * chartHeight);
+    doc.moveTo(
+      chartX,
+      chartY +
+        chartHeight -
+        ((accordoPrices[0] - minPrice) / priceRange) * chartHeight,
+    );
     accordoPrices.forEach((price, i) => {
-      const x = chartX + (i / Math.max(accordoPrices.length - 1, 1)) * chartWidth;
-      const y = chartY + chartHeight - ((price - minPrice) / priceRange) * chartHeight;
+      const x =
+        chartX + (i / Math.max(accordoPrices.length - 1, 1)) * chartWidth;
+      const y =
+        chartY + chartHeight - ((price - minPrice) / priceRange) * chartHeight;
       doc.lineTo(x, y);
     });
     doc.stroke();
@@ -413,24 +539,35 @@ function renderPriceProgressionChart(doc: PDFKit.PDFDocument, timeline: DealSumm
 
   // Legend
   doc.y = chartY + chartHeight + 25;
-  doc.fontSize(9).fillColor(COLORS.danger).text('● Vendor Offers', chartX, doc.y);
-  doc.fillColor(COLORS.primary).text('● Accordo Counters', chartX + 120, doc.y - 11);
+  doc
+    .fontSize(9)
+    .fillColor(COLORS.danger)
+    .text("● Vendor Offers", chartX, doc.y);
+  doc
+    .fillColor(COLORS.primary)
+    .text("● Accordo Counters", chartX + 120, doc.y - 11);
 
   doc.y += 15;
 }
 
-function renderRoundComparisonTable(doc: PDFKit.PDFDocument, timeline: DealSummaryPDFInput['timeline']): void {
+function renderRoundComparisonTable(
+  doc: PDFKit.PDFDocument,
+  timeline: DealSummaryPDFInput["timeline"],
+): void {
   // Skip if no timeline data
   if (timeline.length === 0) return;
 
   if (doc.y > 550) doc.addPage();
 
-  doc.fontSize(14).fillColor(COLORS.text).text('Round-by-Round Comparison', { underline: true });
+  doc
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text("Round-by-Round Comparison", { underline: true });
   doc.moveDown(0.5);
 
   const tableX = 50;
   let y = doc.y;
-  const headers = ['Round', 'Vendor Offer', 'Accordo Response', 'Decision'];
+  const headers = ["Round", "Vendor Offer", "Accordo Response", "Decision"];
   const colWidths = [50, 180, 180, 80];
   const rowHeight = 30;
 
@@ -463,18 +600,29 @@ function renderRoundComparisonTable(doc: PDFKit.PDFDocument, timeline: DealSumma
     x += colWidths[0];
 
     // Vendor offer (truncated)
-    const vendorText = round.vendorOffer.substring(0, 50) + (round.vendorOffer.length > 50 ? '...' : '');
+    const vendorText =
+      round.vendorOffer.substring(0, 50) +
+      (round.vendorOffer.length > 50 ? "..." : "");
     doc.text(vendorText, x, y + 10, { width: colWidths[1] - 10 });
     x += colWidths[1];
 
     // Accordo response (truncated)
-    const accordoText = round.accordoResponse.substring(0, 50) + (round.accordoResponse.length > 50 ? '...' : '');
+    const accordoText =
+      round.accordoResponse.substring(0, 50) +
+      (round.accordoResponse.length > 50 ? "..." : "");
     doc.text(accordoText, x, y + 10, { width: colWidths[2] - 10 });
     x += colWidths[2];
 
     // Decision with color
-    const actionColor = round.action === 'ACCEPT' ? COLORS.success : round.action === 'WALK_AWAY' ? COLORS.danger : COLORS.primary;
-    doc.fillColor(actionColor).text(round.action.replace('_', ' '), x, y + 10, { width: colWidths[3] - 10 });
+    const actionColor =
+      round.action === "ACCEPT"
+        ? COLORS.success
+        : round.action === "WALK_AWAY"
+          ? COLORS.danger
+          : COLORS.primary;
+    doc.fillColor(actionColor).text(round.action.replace("_", " "), x, y + 10, {
+      width: colWidths[3] - 10,
+    });
 
     y += rowHeight;
   });
@@ -482,11 +630,17 @@ function renderRoundComparisonTable(doc: PDFKit.PDFDocument, timeline: DealSumma
   doc.y = y + 10;
 }
 
-function renderTimelinePage(doc: PDFKit.PDFDocument, timeline: DealSummaryPDFInput['timeline']): void {
+function renderTimelinePage(
+  doc: PDFKit.PDFDocument,
+  timeline: DealSummaryPDFInput["timeline"],
+): void {
   // Skip if no timeline data
   if (timeline.length === 0) return;
 
-  doc.fontSize(20).fillColor(COLORS.primary).text('NEGOTIATION TIMELINE', { align: 'center' });
+  doc
+    .fontSize(20)
+    .fillColor(COLORS.primary)
+    .text("NEGOTIATION TIMELINE", { align: "center" });
   doc.moveDown(1);
   drawDivider(doc);
   doc.moveDown(1);
@@ -495,27 +649,59 @@ function renderTimelinePage(doc: PDFKit.PDFDocument, timeline: DealSummaryPDFInp
     if (doc.y > 650) doc.addPage();
 
     // Round header
-    const actionColor = round.action === 'ACCEPT' ? COLORS.success : round.action === 'WALK_AWAY' ? COLORS.danger : COLORS.primary;
+    const actionColor =
+      round.action === "ACCEPT"
+        ? COLORS.success
+        : round.action === "WALK_AWAY"
+          ? COLORS.danger
+          : COLORS.primary;
 
     doc.circle(60, doc.y + 8, 12).fill(COLORS.primary);
-    doc.fontSize(10).fillColor(COLORS.white).text(`${round.round}`, 55, doc.y + 3);
+    doc
+      .fontSize(10)
+      .fillColor(COLORS.white)
+      .text(`${round.round}`, 55, doc.y + 3);
 
-    doc.fontSize(12).fillColor(COLORS.text).text(`Round ${round.round}`, 80, doc.y - 2);
-    doc.fontSize(9).fillColor(actionColor).text(round.action.replace('_', ' '), 150, doc.y - 10);
+    doc
+      .fontSize(12)
+      .fillColor(COLORS.text)
+      .text(`Round ${round.round}`, 80, doc.y - 2);
+    doc
+      .fontSize(9)
+      .fillColor(actionColor)
+      .text(round.action.replace("_", " "), 150, doc.y - 10);
 
     doc.moveDown(1);
 
     // Vendor message
-    doc.fontSize(9).fillColor(COLORS.textLight).text('VENDOR:', 50);
+    doc.fontSize(9).fillColor(COLORS.textLight).text("VENDOR:", 50);
     doc.rect(50, doc.y, 495, 40).fill(COLORS.background).stroke(COLORS.border);
-    doc.fontSize(9).fillColor(COLORS.text).text(round.vendorOffer.substring(0, 200) + (round.vendorOffer.length > 200 ? '...' : ''), 55, doc.y + 5, { width: 485 });
+    doc
+      .fontSize(9)
+      .fillColor(COLORS.text)
+      .text(
+        round.vendorOffer.substring(0, 200) +
+          (round.vendorOffer.length > 200 ? "..." : ""),
+        55,
+        doc.y + 5,
+        { width: 485 },
+      );
     doc.y += 45;
 
     // Accordo response
     if (round.accordoResponse) {
-      doc.fontSize(9).fillColor(COLORS.primary).text('ACCORDO:', 50);
-      doc.rect(50, doc.y, 495, 40).fill('#e8f4fc').stroke(COLORS.primary);
-      doc.fontSize(9).fillColor(COLORS.text).text(round.accordoResponse.substring(0, 200) + (round.accordoResponse.length > 200 ? '...' : ''), 55, doc.y + 5, { width: 485 });
+      doc.fontSize(9).fillColor(COLORS.primary).text("ACCORDO:", 50);
+      doc.rect(50, doc.y, 495, 40).fill("#e8f4fc").stroke(COLORS.primary);
+      doc
+        .fontSize(9)
+        .fillColor(COLORS.text)
+        .text(
+          round.accordoResponse.substring(0, 200) +
+            (round.accordoResponse.length > 200 ? "..." : ""),
+          55,
+          doc.y + 5,
+          { width: 485 },
+        );
       doc.y += 45;
     }
 
@@ -524,39 +710,68 @@ function renderTimelinePage(doc: PDFKit.PDFDocument, timeline: DealSummaryPDFInp
     // Connecting line (except last)
     if (index < timeline.length - 1) {
       doc.strokeColor(COLORS.border).lineWidth(1);
-      doc.moveTo(60, doc.y - 10).lineTo(60, doc.y + 10).stroke();
+      doc
+        .moveTo(60, doc.y - 10)
+        .lineTo(60, doc.y + 10)
+        .stroke();
       doc.moveDown(0.5);
     }
   });
 }
 
-function renderChatTranscript(doc: PDFKit.PDFDocument, messages: DealSummaryPDFInput['messages']): void {
+function renderChatTranscript(
+  doc: PDFKit.PDFDocument,
+  messages: DealSummaryPDFInput["messages"],
+): void {
   // Skip if no messages
   if (messages.length === 0) return;
 
-  doc.fontSize(20).fillColor(COLORS.primary).text('FULL CHAT TRANSCRIPT', { align: 'center' });
+  doc
+    .fontSize(20)
+    .fillColor(COLORS.primary)
+    .text("FULL CHAT TRANSCRIPT", { align: "center" });
   doc.moveDown(1);
   drawDivider(doc);
   doc.moveDown(1);
 
-  doc.fontSize(10).fillColor(COLORS.textMuted).text(`Total Messages: ${messages.length}`, { align: 'center' });
+  doc
+    .fontSize(10)
+    .fillColor(COLORS.textMuted)
+    .text(`Total Messages: ${messages.length}`, { align: "center" });
   doc.moveDown(1);
 
   messages.forEach((message) => {
     if (doc.y > 680) doc.addPage();
 
-    const isVendor = message.role === 'VENDOR';
-    const roleColor = isVendor ? COLORS.danger : message.role === 'ACCORDO' ? COLORS.primary : COLORS.textMuted;
-    const bgColor = isVendor ? '#fef2f2' : message.role === 'ACCORDO' ? '#eff6ff' : COLORS.background;
+    const isVendor = message.role === "VENDOR";
+    const roleColor = isVendor
+      ? COLORS.danger
+      : message.role === "ACCORDO"
+        ? COLORS.primary
+        : COLORS.textMuted;
+    const bgColor = isVendor
+      ? "#fef2f2"
+      : message.role === "ACCORDO"
+        ? "#eff6ff"
+        : COLORS.background;
 
     // Role and timestamp
     doc.fontSize(8).fillColor(roleColor).text(message.role, 50);
-    doc.fontSize(7).fillColor(COLORS.textMuted).text(formatDateTime(message.createdAt), 50);
+    doc
+      .fontSize(7)
+      .fillColor(COLORS.textMuted)
+      .text(formatDateTime(message.createdAt), 50);
 
     // Message content
-    const contentHeight = Math.min(80, Math.ceil(message.content.length / 80) * 12 + 10);
+    const contentHeight = Math.min(
+      80,
+      Math.ceil(message.content.length / 80) * 12 + 10,
+    );
     doc.rect(50, doc.y, 495, contentHeight).fill(bgColor);
-    doc.fontSize(9).fillColor(COLORS.text).text(message.content, 55, doc.y + 5, { width: 485 });
+    doc
+      .fontSize(9)
+      .fillColor(COLORS.text)
+      .text(message.content, 55, doc.y + 5, { width: 485 });
     doc.y += contentHeight + 5;
 
     doc.moveDown(0.3);
@@ -574,19 +789,19 @@ function addPageNumbers(doc: PDFKit.PDFDocument): void {
 
     // Confidential notice - height constrains the text box to prevent auto-pagination
     doc.fontSize(7).fillColor(COLORS.textMuted);
-    doc.text('CONFIDENTIAL - Accordo AI - For Internal Use Only', 50, 785, {
-      align: 'center',
+    doc.text("CONFIDENTIAL - Accordo AI - For Internal Use Only", 50, 785, {
+      align: "center",
       width: 495,
       height: 10,
-      lineBreak: false
+      lineBreak: false,
     });
 
     // Page number - height constrains the text box to prevent auto-pagination
     doc.text(`Page ${i + 1} of ${pages.count}`, 50, 795, {
-      align: 'center',
+      align: "center",
       width: 495,
       height: 10,
-      lineBreak: false
+      lineBreak: false,
     });
   }
 }
@@ -608,37 +823,43 @@ function drawStatBox(
   height: number,
   label: string,
   value: string,
-  color: string
+  color: string,
 ): void {
   doc.rect(x, y, width, height).fill(COLORS.background).stroke(COLORS.border);
-  doc.fontSize(18).fillColor(color).text(value, x, y + 12, { width, align: 'center' });
-  doc.fontSize(9).fillColor(COLORS.textMuted).text(label, x, y + 36, { width, align: 'center' });
+  doc
+    .fontSize(18)
+    .fillColor(color)
+    .text(value, x, y + 12, { width, align: "center" });
+  doc
+    .fontSize(9)
+    .fillColor(COLORS.textMuted)
+    .text(label, x, y + 36, { width, align: "center" });
 }
 
 function formatCurrency(value: number | null): string {
-  if (value === null) return 'N/A';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  if (value === null) return "N/A";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 function formatDateTime(dateString: string): string {
-  return new Date(dateString).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  return new Date(dateString).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }

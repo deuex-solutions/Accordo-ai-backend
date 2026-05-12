@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Pre-commit: catch type errors before they land on a branch.
+# Lint is excluded here because the type-aware lint pass is slow (~2s per file);
+# rely on CI for that. Type-check is fast enough for every commit.
+npm run type-check

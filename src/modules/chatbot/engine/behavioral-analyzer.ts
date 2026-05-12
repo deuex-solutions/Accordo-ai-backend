@@ -379,7 +379,7 @@ function computeConvergenceRate(priceGapTrend: number[]): number {
  * Detect stalling: vendor offers barely changing for 2+ consecutive rounds.
  * Stalling = |concession| < 2% of the gap for 2+ consecutive rounds.
  */
-function detectStalling(vendorPrices: number[], pmCounterPrices: number[]): boolean {
+function detectStalling(vendorPrices: number[], _pmCounterPrices: number[]): boolean {
   if (vendorPrices.length < 3) return false;
 
   // Check last 2 concessions
