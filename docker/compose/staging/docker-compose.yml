@@ -1,10 +1,10 @@
-# Copy .env.example to .env in this directory before `docker compose up`.
-# Usage: docker compose -f docker/compose/staging/docker-compose.yml up -d
+networks:
+  accordo-staging-network:
+    name: accordo-staging-network
 
 services:
   accordo-postgres-staging:
     image: postgres:17-alpine
-    container_name: accordo-postgres-staging
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USERNAME}
@@ -12,7 +12,7 @@ services:
     ports:
       - "${POSTGRES_PUBLISH_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - accordo-staging-postgres_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -23,6 +23,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - accordo-staging-network
 
   accordo-backend-staging:
     build:
@@ -31,8 +33,6 @@ services:
       target: runtime
       args:
         PORT: ${PORT}
-    image: accordo-backend:staging
-    container_name: accordo-backend-staging
     env_file: .env
     environment:
       NODE_ENV: ${NODE_ENV}
@@ -73,8 +73,8 @@ services:
     ports:
       - "${PORT}:${PORT}"
     volumes:
-      - uploads_data:/app/uploads
-      - logs_data:/app/logs
+      - accordo-staging-uploads_data:/app/uploads
+      - accordo-staging-logs_data:/app/logs
     depends_on:
       accordo-postgres-staging:
         condition: service_healthy
@@ -88,9 +88,11 @@ services:
       timeout: 10s
       start_period: 40s
       retries: 3
+    networks:
+      - accordo-staging-network
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  uploads_data:
-  logs_data:
+  accordo-staging-postgres_data:
+  accordo-staging-uploads_data:
+  accordo-staging-logs_data:
