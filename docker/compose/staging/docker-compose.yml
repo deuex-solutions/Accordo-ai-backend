@@ -1,56 +1,98 @@
-# Staging: run from this directory. Place .env here.
-# Usage: docker compose -f docker/compose/staging/docker-compose.yml up -d
-# Or:    cd docker/compose/staging && docker compose up -d
+networks:
+  accordo-staging-network:
+    name: accordo-staging-network
 
 services:
-  postgres:
+  accordo-postgres-staging:
     image: postgres:17-alpine
-    container_name: accordo-postgres-staging
     environment:
-      POSTGRES_DB: ${DB_NAME:-accordo}
-      POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${POSTGRES_PUBLISH_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - accordo-staging-postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      test:
+        [
+          "CMD-SHELL",
+          'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - accordo-staging-network
 
-  backend:
+  accordo-backend-staging:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: Dockerfile
       target: runtime
-    image: accordo-backend:staging
-    container_name: accordo-backend-staging
+      args:
+        PORT: ${PORT}
     env_file: .env
     environment:
-      NODE_ENV: staging
-      PORT: 5002
-      DB_HOST: postgres
-      DB_PORT: 5432
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL: ${DB_SSL}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET}
+      JWT_REFRESH_TOKEN_SECRET: ${JWT_REFRESH_TOKEN_SECRET}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      REDIS_URL: ${REDIS_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS}
+      OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_TIMEOUT: ${LLM_TIMEOUT}
+      EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL}
+      VENDOR_PORTAL_URL: ${VENDOR_PORTAL_URL}
+      CHATBOT_FRONTEND_URL: ${CHATBOT_FRONTEND_URL}
+      CHATBOT_API_URL: ${CHATBOT_API_URL}
     ports:
-      - "${PORT:-5002}:5002"
+      - "${PORT}:${PORT}"
     volumes:
-      - uploads_data:/app/uploads
-      - logs_data:/app/logs
+      - accordo-staging-uploads_data:/app/uploads
+      - accordo-staging-logs_data:/app/logs
     depends_on:
-      postgres:
+      accordo-postgres-staging:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:5002/api/health"]
+      test:
+        [
+          "CMD-SHELL",
+          'wget -q -O- "http://127.0.0.1:$$PORT/api/health" > /dev/null || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       start_period: 40s
       retries: 3
+    networks:
+      - accordo-staging-network
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  uploads_data:
-  logs_data:
+  accordo-staging-postgres_data:
+  accordo-staging-uploads_data:
+  accordo-staging-logs_data:
