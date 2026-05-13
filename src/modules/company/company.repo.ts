@@ -1,8 +1,8 @@
-import { QueryTypes } from 'sequelize';
-import models, { sequelize } from '../../models/index.js';
-import type { Company } from '../../models/company.js';
-import type { User } from '../../models/user.js';
-import type { Transaction, FindOptions } from 'sequelize';
+import { QueryTypes } from "sequelize";
+import models, { sequelize } from "../../models/index.js";
+import type { Company } from "../../models/company.js";
+import type { User } from "../../models/user.js";
+import type { Transaction, FindOptions } from "sequelize";
 
 /**
  * Company repository for database operations
@@ -16,18 +16,29 @@ interface CompanyQueryOptions extends FindOptions<Company> {
 
 interface CompanyRepository {
   getCompanyByUser: (userId: number) => Promise<Company | null>;
-  createCompany: (companyData: Partial<Company>, transaction?: Transaction | null) => Promise<Company>;
-  getAllCompanies: (queryOptions: CompanyQueryOptions) => Promise<{ rows: Company[]; count: number }>;
+  createCompany: (
+    companyData: Partial<Company>,
+    transaction?: Transaction | null,
+  ) => Promise<Company>;
+  getAllCompanies: (
+    queryOptions: CompanyQueryOptions,
+  ) => Promise<{ rows: Company[]; count: number }>;
   getCompany: (companyId: number) => Promise<Company | null>;
-  updateCompany: (companyId: number, companyData: Partial<Company>, transaction?: Transaction | null) => Promise<[affectedCount: number]>;
+  updateCompany: (
+    companyId: number,
+    companyData: Partial<Company>,
+    transaction?: Transaction | null,
+  ) => Promise<[affectedCount: number]>;
   deleteCompany: (companyId: number) => Promise<number>;
-  getAddresses: (userId: number) => Promise<{
-    id: string;
-    name: string;
-    address: string;
-    type: 'company' | 'project';
-    isDefault: boolean;
-  }[]>;
+  getAddresses: (userId: number) => Promise<
+    {
+      id: string;
+      name: string;
+      address: string;
+      type: "company" | "project";
+      isDefault: boolean;
+    }[]
+  >;
 }
 
 const repo: CompanyRepository = {
@@ -35,11 +46,16 @@ const repo: CompanyRepository = {
     return models.Company.findOne({ where: { userId } as any });
   },
 
-  createCompany: async (companyData: Partial<Company> = {}, transaction: Transaction | null = null): Promise<Company> => {
+  createCompany: async (
+    companyData: Partial<Company> = {},
+    transaction: Transaction | null = null,
+  ): Promise<Company> => {
     return models.Company.create(companyData, { transaction });
   },
 
-  getAllCompanies: async (queryOptions: CompanyQueryOptions): Promise<{ rows: Company[]; count: number }> => {
+  getAllCompanies: async (
+    queryOptions: CompanyQueryOptions,
+  ): Promise<{ rows: Company[]; count: number }> => {
     return models.Company.findAndCountAll(queryOptions);
   },
 
@@ -48,24 +64,24 @@ const repo: CompanyRepository = {
       include: [
         {
           model: models.User,
-          as: 'Users',
+          as: "Users",
         },
         {
           model: models.VendorCompany,
-          as: 'VendorCompanies',
+          as: "VendorCompanies",
           required: false,
           include: [
             {
               model: models.User,
-              as: 'Vendor',
-              where: { userType: 'vendor' },
+              as: "Vendor",
+              where: { userType: "vendor" },
               required: false,
             },
           ],
         },
         {
           model: models.Address,
-          as: 'Addresses',
+          as: "Addresses",
           required: false,
         },
       ],
@@ -76,16 +92,27 @@ const repo: CompanyRepository = {
     }
 
     // Manually fetch vendor users for this company
-    const vendors = await models.User.findAll({
+    let vendors = await models.User.findAll({
       where: {
         companyId: companyId,
-        userType: 'vendor',
+        userType: "vendor",
       },
     });
 
     // Get plain object and manually add Vendor array
     const companyData = company.get({ plain: true }) as any;
-    companyData.Vendor = vendors.map(v => v.get({ plain: true }));
+
+    // Fallback: if no User has companyId set directly, source vendors from
+    // the VendorCompany join (some vendor users are only linked via the
+    // through table, with User.companyId left null).
+    if (vendors.length === 0 && Array.isArray(companyData.VendorCompanies)) {
+      const joinedVendors = companyData.VendorCompanies.map(
+        (vc: any) => vc.Vendor,
+      ).filter((v: any) => v && v.userType === "vendor");
+      companyData.Vendor = joinedVendors;
+    } else {
+      companyData.Vendor = vendors.map((v) => v.get({ plain: true }));
+    }
 
     // Return the enhanced plain object cast as Company
     return companyData as Company;
@@ -94,9 +121,12 @@ const repo: CompanyRepository = {
   updateCompany: async (
     companyId: number,
     companyData: Partial<Company>,
-    transaction: Transaction | null = null
+    transaction: Transaction | null = null,
   ): Promise<[affectedCount: number]> => {
-    return models.Company.update(companyData, { where: { id: companyId }, transaction });
+    return models.Company.update(companyData, {
+      where: { id: companyId },
+      transaction,
+    });
   },
 
   deleteCompany: async (companyId: number): Promise<number> => {
@@ -107,19 +137,27 @@ const repo: CompanyRepository = {
    * Get delivery addresses from companies and projects
    * Returns a combined list of addresses from the user's company and associated projects
    */
-  getAddresses: async (userId: number): Promise<{
-    id: string;
-    name: string;
-    address: string;
-    type: 'company' | 'project';
-    isDefault: boolean;
-  }[]> => {
+  getAddresses: async (
+    userId: number,
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      address: string;
+      type: "company" | "project";
+      isDefault: boolean;
+    }[]
+  > => {
     const user = await models.User.findByPk(userId);
-    const isAdmin = user?.userType === 'super_admin';
+    const isAdmin = user?.userType === "super_admin";
 
     // Build company filter
-    const companyFilter = (!isAdmin && user?.companyId) ? `AND c.id = ${user.companyId}` : '';
-    const projectFilter = (!isAdmin && user?.companyId) ? `AND p."companyId" = ${user.companyId}` : '';
+    const companyFilter =
+      !isAdmin && user?.companyId ? `AND c.id = ${user.companyId}` : "";
+    const projectFilter =
+      !isAdmin && user?.companyId
+        ? `AND p."companyId" = ${user.companyId}`
+        : "";
 
     // Get company addresses
     const companyQuery = `
@@ -159,7 +197,7 @@ const repo: CompanyRepository = {
       id: string;
       name: string;
       address: string;
-      type: 'company' | 'project';
+      type: "company" | "project";
       isDefault: boolean;
     }[];
 

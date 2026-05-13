@@ -10,7 +10,10 @@ import {
   getUser,
   deleteUser,
 } from "./user.controller.js";
-import { authMiddleware, checkPermission } from "../../middlewares/auth.middleware.js";
+import {
+  authMiddleware,
+  checkPermission,
+} from "../../middlewares/auth.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { cleanJson } from "../../middlewares/clean.middleware.js";
 
@@ -32,8 +35,9 @@ userRouter.post(
   authMiddleware,
   upload.any(),
   cleanJson,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
-  createUser
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  createUser,
 );
 
 /**
@@ -45,8 +49,9 @@ userRouter.post(
   authMiddleware,
   upload.any(),
   cleanJson,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 2),
-  updateProfile
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 2),
+  updateProfile,
 );
 
 /**
@@ -56,8 +61,9 @@ userRouter.post(
 userRouter.get(
   "/get/:userid",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getUser
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getUser,
 );
 
 /**
@@ -67,8 +73,9 @@ userRouter.get(
 userRouter.get(
   "/get-all",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getAllUsers
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getAllUsers,
 );
 
 /**
@@ -78,8 +85,9 @@ userRouter.get(
 userRouter.post(
   "/assign-role",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 2),
-  assignRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 2),
+  assignRole,
 );
 
 /**
@@ -89,8 +97,9 @@ userRouter.post(
 userRouter.get(
   "/user-role-permission/:userid",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getUserRolePermission
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getUserRolePermission,
 );
 
 /**
@@ -100,8 +109,41 @@ userRouter.get(
 userRouter.delete(
   "/delete/:userid",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 4),
-  deleteUser
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 4),
+  deleteUser,
+);
+
+// RESTful aliases (frontend uses these; verbose paths above kept for back-compat)
+userRouter.post(
+  "/",
+  authMiddleware,
+  upload.any(),
+  cleanJson,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  createUser,
+);
+userRouter.get(
+  "/",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getAllUsers,
+);
+userRouter.get(
+  "/:userid",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getUser,
+);
+userRouter.delete(
+  "/:userid",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 4),
+  deleteUser,
 );
 
 export default userRouter;

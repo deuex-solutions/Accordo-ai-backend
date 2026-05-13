@@ -7,7 +7,10 @@ import {
   updateRole,
   deleteRole,
 } from "./role.controller.js";
-import { authMiddleware, checkPermission } from "../../middlewares/auth.middleware.js";
+import {
+  authMiddleware,
+  checkPermission,
+} from "../../middlewares/auth.middleware.js";
 
 const roleRouter = Router();
 const moduleId = 6;
@@ -19,8 +22,9 @@ const moduleId = 6;
 roleRouter.post(
   "/create",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
-  createRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  createRole,
 );
 
 /**
@@ -30,8 +34,9 @@ roleRouter.post(
 roleRouter.get(
   "/get-all",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getAllRoles
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getAllRoles,
 );
 
 /**
@@ -41,8 +46,9 @@ roleRouter.get(
 roleRouter.get(
   "/get/:roleid",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
-  getRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getRole,
 );
 
 /**
@@ -52,8 +58,9 @@ roleRouter.get(
 roleRouter.put(
   "/update/:roleid",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 2),
-  updateRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 2),
+  updateRole,
 );
 
 /**
@@ -63,8 +70,46 @@ roleRouter.put(
 roleRouter.delete(
   "/delete/:roleid",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
-  deleteRole
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  deleteRole,
+);
+
+// RESTful aliases (frontend uses these; verbose paths above kept for back-compat)
+roleRouter.post(
+  "/",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  createRole,
+);
+roleRouter.get(
+  "/",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getAllRoles,
+);
+roleRouter.get(
+  "/:roleid",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 1),
+  getRole,
+);
+roleRouter.put(
+  "/:roleid",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 2),
+  updateRole,
+);
+roleRouter.delete(
+  "/:roleid",
+  authMiddleware,
+  (req: Request, res: Response, next: NextFunction) =>
+    checkPermission(req, res, next, moduleId, 3),
+  deleteRole,
 );
 
 export default roleRouter;
