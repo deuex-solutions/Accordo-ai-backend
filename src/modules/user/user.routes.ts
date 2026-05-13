@@ -3,8 +3,6 @@ import type { Request, Response, NextFunction } from "express";
 import {
   getUserProfileController,
   createUser,
-  assignRole,
-  getUserRolePermission,
   updateProfile,
   getAllUsers,
   getUser,
@@ -31,7 +29,7 @@ userRouter.get("/profile", authMiddleware, getUserProfileController);
  * Requires: Authentication + Create permission (level 3)
  */
 userRouter.post(
-  "/create",
+  "/",
   authMiddleware,
   upload.any(),
   cleanJson,
@@ -55,23 +53,11 @@ userRouter.post(
 );
 
 /**
- * Get a specific user by ID
- * Requires: Authentication + Read permission (level 1)
- */
-userRouter.get(
-  "/get/:userid",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getUser,
-);
-
-/**
  * Get all users with pagination and filtering
  * Requires: Authentication + Read permission (level 1)
  */
 userRouter.get(
-  "/get-all",
+  "/",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 1),
@@ -79,27 +65,15 @@ userRouter.get(
 );
 
 /**
- * Assign a role to a user
- * Requires: Authentication + Update permission (level 2)
- */
-userRouter.post(
-  "/assign-role",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 2),
-  assignRole,
-);
-
-/**
- * Get user role permissions
+ * Get a specific user by ID
  * Requires: Authentication + Read permission (level 1)
  */
 userRouter.get(
-  "/user-role-permission/:userid",
+  "/:userId",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 1),
-  getUserRolePermission,
+  getUser,
 );
 
 /**
@@ -107,39 +81,7 @@ userRouter.get(
  * Requires: Authentication + Delete permission (level 4)
  */
 userRouter.delete(
-  "/delete/:userid",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 4),
-  deleteUser,
-);
-
-// RESTful aliases (frontend uses these; verbose paths above kept for back-compat)
-userRouter.post(
-  "/",
-  authMiddleware,
-  upload.any(),
-  cleanJson,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 3),
-  createUser,
-);
-userRouter.get(
-  "/",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getAllUsers,
-);
-userRouter.get(
-  "/:userid",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getUser,
-);
-userRouter.delete(
-  "/:userid",
+  "/:userId",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 4),

@@ -13,40 +13,23 @@ import { cleanJson } from "../../middlewares/clean.middleware.js";
 
 const companyRouter = Router();
 
-companyRouter.post(
-  "/create",
-  authMiddleware,
-  upload.any(),
-  cleanJson,
-  createCompany,
-);
-
-companyRouter.put(
-  "/update/:companyid",
-  authMiddleware,
-  upload.any(),
-  cleanJson,
-  updateCompany,
-);
-
-companyRouter.get("/get-all", authMiddleware, getAllCompany);
-companyRouter.get("/get/:companyid", authMiddleware, getCompany);
-companyRouter.delete("/delete/:companyid", authMiddleware, deleteCompany);
+companyRouter.post("/", authMiddleware, upload.any(), cleanJson, createCompany);
+companyRouter.get("/", authMiddleware, getAllCompany);
 
 // Get delivery addresses for deal creation wizard
 companyRouter.get("/addresses", authMiddleware, getAddresses);
 
-// RESTful aliases (frontend uses these; verbose paths above kept for back-compat)
-companyRouter.post("/", authMiddleware, upload.any(), cleanJson, createCompany);
-companyRouter.get("/", authMiddleware, getAllCompany);
-companyRouter.get("/:companyid", authMiddleware, getCompany);
+// Parameterized routes must come after static routes
+companyRouter.get("/:companyId", authMiddleware, getCompany);
+
 companyRouter.put(
-  "/:companyid",
+  "/:companyId",
   authMiddleware,
   upload.any(),
   cleanJson,
   updateCompany,
 );
-companyRouter.delete("/:companyid", authMiddleware, deleteCompany);
+
+companyRouter.delete("/:companyId", authMiddleware, deleteCompany);
 
 export default companyRouter;

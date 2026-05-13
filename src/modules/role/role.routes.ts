@@ -20,7 +20,7 @@ const moduleId = 6;
  * Requires: Authentication + Create permission (level 3)
  */
 roleRouter.post(
-  "/create",
+  "/",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 3),
@@ -32,7 +32,7 @@ roleRouter.post(
  * Requires: Authentication + Read permission (level 1)
  */
 roleRouter.get(
-  "/get-all",
+  "/",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 1),
@@ -44,7 +44,7 @@ roleRouter.get(
  * Requires: Authentication + Read permission (level 1)
  */
 roleRouter.get(
-  "/get/:roleid",
+  "/:roleId",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 1),
@@ -56,7 +56,7 @@ roleRouter.get(
  * Requires: Authentication + Update permission (level 2)
  */
 roleRouter.put(
-  "/update/:roleid",
+  "/:roleId",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 2),
@@ -68,44 +68,7 @@ roleRouter.put(
  * Requires: Authentication + Delete permission (level 3)
  */
 roleRouter.delete(
-  "/delete/:roleid",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 3),
-  deleteRole,
-);
-
-// RESTful aliases (frontend uses these; verbose paths above kept for back-compat)
-roleRouter.post(
-  "/",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 3),
-  createRole,
-);
-roleRouter.get(
-  "/",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getAllRoles,
-);
-roleRouter.get(
-  "/:roleid",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getRole,
-);
-roleRouter.put(
-  "/:roleid",
-  authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 2),
-  updateRole,
-);
-roleRouter.delete(
-  "/:roleid",
+  "/:roleId",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) =>
     checkPermission(req, res, next, moduleId, 3),

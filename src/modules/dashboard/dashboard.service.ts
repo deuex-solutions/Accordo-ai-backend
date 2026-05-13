@@ -1,8 +1,8 @@
-import repo from './dashboard.repo.js';
-import userRepo from '../user/user.repo.js';
-import { CustomError } from '../../utils/custom-error.js';
-import type { Requisition } from '../../models/requisition.js';
-import type { Contract } from '../../models/contract.js';
+import repo from "./dashboard.repo.js";
+import userRepo from "../user/user.repo.js";
+import { CustomError } from "../../utils/custom-error.js";
+import type { Requisition } from "../../models/requisition.js";
+import type { Contract } from "../../models/contract.js";
 
 // ============================================================================
 // Existing service (kept as-is)
@@ -29,7 +29,7 @@ const calculateActualPrice = (requisition: any): number => {
 
   let total = 0;
   (requisition.Contract || []).forEach((contract: any) => {
-    if (contract.status !== 'Accepted') {
+    if (contract.status !== "Accepted") {
       return;
     }
 
@@ -67,14 +67,19 @@ const groupBy = <T, K>(array: T[], keyFn: (item: T) => K): Map<K, number> => {
   return map;
 };
 
-const formatDate = (date: Date): string => new Date(date).toISOString().slice(0, 10);
+const formatDate = (date: Date): string =>
+  new Date(date).toISOString().slice(0, 10);
 
 const getWeekOfYear = (date: Date): number => {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const d = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+  );
   const dayNum = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  const week = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
   return week;
 };
 
@@ -83,41 +88,57 @@ const buildTimeWiseCounts = (requisitions: any[], dayYear: string | number) => {
   const deliveryDates = requisitions.map((req) => new Date(req.deliveryDate));
 
   if (parsedDayYear === 1) {
-    const monthly = groupBy(deliveryDates, (date) => date.toISOString().slice(0, 7));
-    return Array.from(monthly.entries()).map(([delivery_month, requisition_count]) => ({
-      delivery_month,
-      requisition_count,
-    }));
+    const monthly = groupBy(deliveryDates, (date) =>
+      date.toISOString().slice(0, 7),
+    );
+    return Array.from(monthly.entries()).map(
+      ([delivery_month, requisition_count]) => ({
+        delivery_month,
+        requisition_count,
+      }),
+    );
   }
 
   if (parsedDayYear === 5) {
     const yearly = groupBy(deliveryDates, (date) => date.getUTCFullYear());
-    return Array.from(yearly.entries()).map(([delivery_year, requisition_count]) => ({
-      delivery_year,
-      requisition_count,
-    }));
+    return Array.from(yearly.entries()).map(
+      ([delivery_year, requisition_count]) => ({
+        delivery_year,
+        requisition_count,
+      }),
+    );
   }
 
   const daily = groupBy(deliveryDates, (date) => formatDate(date));
   const weekly = groupBy(deliveryDates, (date) => getWeekOfYear(date));
 
   return {
-    dailyReqCount: Array.from(daily.entries()).map(([delivery_date, requisition_count]) => ({
-      delivery_date,
-      requisition_count,
-    })),
-    weeklyReqCount: Array.from(weekly.entries()).map(([delivery_week, requisition_count]) => ({
-      delivery_week,
-      requisition_count,
-    })),
+    dailyReqCount: Array.from(daily.entries()).map(
+      ([delivery_date, requisition_count]) => ({
+        delivery_date,
+        requisition_count,
+      }),
+    ),
+    weeklyReqCount: Array.from(weekly.entries()).map(
+      ([delivery_week, requisition_count]) => ({
+        delivery_week,
+        requisition_count,
+      }),
+    ),
   };
 };
 
 const buildCategorySummary = (requisitions: any[]) => {
-  const categoryTotals = new Map<string, { total_price: number; actual_price: number }>();
+  const categoryTotals = new Map<
+    string,
+    { total_price: number; actual_price: number }
+  >();
   requisitions.forEach((req) => {
-    const category = req.category || 'Unknown';
-    const current = categoryTotals.get(category) || { total_price: 0, actual_price: 0 };
+    const category = req.category || "Unknown";
+    const current = categoryTotals.get(category) || {
+      total_price: 0,
+      actual_price: 0,
+    };
     current.total_price += parseNumber(req.totalPrice);
     current.actual_price += calculateActualPrice(req);
     categoryTotals.set(category, current);
@@ -131,7 +152,7 @@ const buildCategorySummary = (requisitions: any[]) => {
 };
 
 const buildStatusCounts = (requisitions: any[]) => {
-  const counts = groupBy(requisitions, (req) => req.status || 'Unknown');
+  const counts = groupBy(requisitions, (req) => req.status || "Unknown");
   return Array.from(counts.entries()).map(([status, requisition_count]) => ({
     status,
     requisition_count,
@@ -140,7 +161,7 @@ const buildStatusCounts = (requisitions: any[]) => {
 
 const buildRfqSummaries = (requisitions: any[]) => {
   const sorted = [...requisitions].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
   const latest = sorted.slice(0, 2);
 
@@ -168,7 +189,7 @@ const computeTotals = (requisitions: any[]) => {
 
   requisitions.forEach((req) => {
     const hasAcceptedContract = (req.Contract || []).some(
-      (contract: any) => contract.status === 'Accepted'
+      (contract: any) => contract.status === "Accepted",
     );
     if (!hasAcceptedContract) {
       return;
@@ -192,16 +213,24 @@ const getStartDate = (dayYear: string | number): Date => {
   return now;
 };
 
-export const getDashboardService = async (userId: number, dayYear: string | number) => {
+export const getDashboardService = async (
+  userId: number,
+  dayYear: string | number,
+) => {
   try {
     const user = await userRepo.getUserProfile(userId);
     if (!user?.companyId) {
-      throw new CustomError('User company not found', 404);
+      throw new CustomError("User company not found", 404);
     }
 
     const fromDate = getStartDate(dayYear);
-    const requisitions = await repo.findRequisitionsForCompany(user.companyId, fromDate);
-    const plainRequisitions = requisitions.map((req) => req.get({ plain: true }));
+    const requisitions = await repo.findRequisitionsForCompany(
+      user.companyId,
+      fromDate,
+    );
+    const plainRequisitions = requisitions.map((req) =>
+      req.get({ plain: true }),
+    );
 
     const totals = computeTotals(plainRequisitions);
     const rfqIds = buildRfqSummaries(plainRequisitions);
@@ -227,7 +256,7 @@ export const getDashboardService = async (userId: number, dayYear: string | numb
 // New stats service
 // ============================================================================
 
-type Period = '7d' | '30d' | '90d' | '1y' | 'all';
+type Period = "7d" | "30d" | "90d" | "1y" | "all";
 
 interface DateRange {
   from: Date;
@@ -235,15 +264,15 @@ interface DateRange {
 }
 
 const PERIOD_DAYS: Record<string, number> = {
-  '7d': 7,
-  '30d': 30,
-  '90d': 90,
-  '1y': 365,
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+  "1y": 365,
 };
 
 const getPeriodRange = (period: Period): DateRange => {
   const to = new Date();
-  if (period === 'all') {
+  if (period === "all") {
     return { from: new Date(2000, 0, 1), to };
   }
   const days = PERIOD_DAYS[period] || 30;
@@ -253,7 +282,7 @@ const getPeriodRange = (period: Period): DateRange => {
 };
 
 const getPreviousPeriodRange = (period: Period): DateRange | null => {
-  if (period === 'all') return null;
+  if (period === "all") return null;
   const days = PERIOD_DAYS[period] || 30;
   const to = new Date();
   to.setDate(to.getDate() - days);
@@ -267,7 +296,9 @@ const getPreviousPeriodRange = (period: Period): DateRange | null => {
 const computeSavings = (requisitions: any[]): number => {
   let total = 0;
   requisitions.forEach((req) => {
-    const hasAccepted = (req.Contract || []).some((c: any) => c.status === 'Accepted');
+    const hasAccepted = (req.Contract || []).some(
+      (c: any) => c.status === "Accepted",
+    );
     if (!hasAccepted) return;
     const budget = parseNumber(req.totalPrice);
     const actual = calculateActualPrice(req);
@@ -276,12 +307,19 @@ const computeSavings = (requisitions: any[]): number => {
   return total;
 };
 
-const computeAvgDealImprovement = (requisitions: any[], vendorBids: any[]): number => {
+const computeAvgDealImprovement = (
+  requisitions: any[],
+  vendorBids: any[],
+): number => {
   // Try from vendor bids first (priceReductionPercent)
   const reductions: number[] = [];
   vendorBids.forEach((bid: any) => {
     const metrics = bid.chatSummaryMetrics;
-    if (metrics && typeof metrics.priceReductionPercent === 'number' && metrics.priceReductionPercent > 0) {
+    if (
+      metrics &&
+      typeof metrics.priceReductionPercent === "number" &&
+      metrics.priceReductionPercent > 0
+    ) {
       reductions.push(metrics.priceReductionPercent);
     }
   });
@@ -292,7 +330,9 @@ const computeAvgDealImprovement = (requisitions: any[], vendorBids: any[]): numb
   // Fallback: compute from requisitions
   const improvements: number[] = [];
   requisitions.forEach((req) => {
-    const hasAccepted = (req.Contract || []).some((c: any) => c.status === 'Accepted');
+    const hasAccepted = (req.Contract || []).some(
+      (c: any) => c.status === "Accepted",
+    );
     if (!hasAccepted) return;
     const budget = parseNumber(req.totalPrice);
     if (budget <= 0) return;
@@ -304,18 +344,25 @@ const computeAvgDealImprovement = (requisitions: any[], vendorBids: any[]): numb
   return improvements.reduce((a, b) => a + b, 0) / improvements.length;
 };
 
-const computeDelta = (current: number, previous: number, mode: 'percent' | 'absolute'): { delta: number; trend: 'up' | 'down' | 'neutral' } => {
-  if (mode === 'absolute') {
+const computeDelta = (
+  current: number,
+  previous: number,
+  mode: "percent" | "absolute",
+): { delta: number; trend: "up" | "down" | "neutral" } => {
+  if (mode === "absolute") {
     const delta = current - previous;
-    return { delta, trend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral' };
+    return { delta, trend: delta > 0 ? "up" : delta < 0 ? "down" : "neutral" };
   }
   if (previous === 0) {
-    return { delta: current > 0 ? 100 : 0, trend: current > 0 ? 'up' : 'neutral' };
+    return {
+      delta: current > 0 ? 100 : 0,
+      trend: current > 0 ? "up" : "neutral",
+    };
   }
   const delta = ((current - previous) / previous) * 100;
   return {
     delta: Math.round(delta * 10) / 10,
-    trend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral',
+    trend: delta > 0 ? "up" : delta < 0 ? "down" : "neutral",
   };
 };
 
@@ -324,11 +371,11 @@ const computeDelta = (current: number, previous: number, mode: 'percent' | 'abso
 const buildPipeline = (deals: any[]) => {
   const pipeline = { negotiating: 0, accepted: 0, walkedAway: 0, escalated: 0 };
   deals.forEach((deal: any) => {
-    const status = deal.status || deal.get?.('status');
-    if (status === 'NEGOTIATING') pipeline.negotiating++;
-    else if (status === 'ACCEPTED') pipeline.accepted++;
-    else if (status === 'WALKED_AWAY') pipeline.walkedAway++;
-    else if (status === 'ESCALATED') pipeline.escalated++;
+    const status = deal.status || deal.get?.("status");
+    if (status === "NEGOTIATING") pipeline.negotiating++;
+    else if (status === "ACCEPTED") pipeline.accepted++;
+    else if (status === "WALKED_AWAY") pipeline.walkedAway++;
+    else if (status === "ESCALATED") pipeline.escalated++;
   });
   return pipeline;
 };
@@ -362,9 +409,13 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
       d.setDate(start.getDate() + i);
       allBuckets.push({
         key: d.toISOString().slice(0, 10),
-        label: days <= 7
-          ? d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
-          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label:
+          days <= 7
+            ? d.toLocaleDateString("en-US", {
+                weekday: "short",
+                day: "numeric",
+              })
+            : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       });
     }
   } else if (days <= 90) {
@@ -374,7 +425,10 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
     while (weekStart <= now) {
       allBuckets.push({
         key: weekStart.toISOString().slice(0, 10),
-        label: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: weekStart.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
       });
       weekStart.setDate(weekStart.getDate() + 7);
     }
@@ -384,7 +438,10 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
     while (cursor <= now) {
       allBuckets.push({
         key: cursor.toISOString().slice(0, 7),
-        label: cursor.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        label: cursor.toLocaleDateString("en-US", {
+          month: "short",
+          year: "2-digit",
+        }),
       });
       cursor.setMonth(cursor.getMonth() + 1);
     }
@@ -407,12 +464,18 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
     }
   };
 
-  // Fill buckets with actual savings data
+  // Fill buckets with actual savings data — use accepted contract date
   requisitions.forEach((req) => {
-    const hasAccepted = (req.Contract || []).some((c: any) => c.status === 'Accepted');
-    if (!hasAccepted) return;
-    const savings = parseNumber(req.savingsInPrice) || Math.max(0, parseNumber(req.totalPrice) - calculateActualPrice(req));
-    const date = new Date(req.createdAt);
+    const acceptedContract = (req.Contract || []).find(
+      (c: any) => c.status === "Accepted",
+    );
+    if (!acceptedContract) return;
+    const savings =
+      parseNumber(req.savingsInPrice) ||
+      Math.max(0, parseNumber(req.totalPrice) - calculateActualPrice(req));
+    const date = new Date(
+      acceptedContract.updatedAt || acceptedContract.createdAt || req.createdAt,
+    );
     const key = getBucketKey(date);
     if (bucketValues.has(key)) {
       bucketValues.set(key, (bucketValues.get(key) || 0) + savings);
@@ -433,7 +496,8 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
   // Summary stats
   const total = runningTotal;
   const nonZeroBuckets = data.filter((v) => v > 0).length;
-  const avgPerBucket = nonZeroBuckets > 0 ? Math.round(total / nonZeroBuckets) : 0;
+  const avgPerBucket =
+    nonZeroBuckets > 0 ? Math.round(total / nonZeroBuckets) : 0;
   let peakValue = 0;
   let peakIdx = 0;
   data.forEach((v, i) => {
@@ -451,7 +515,7 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
       total,
       avgPerBucket,
       peakValue: Math.round(peakValue),
-      peakLabel: labels[peakIdx] || '',
+      peakLabel: labels[peakIdx] || "",
     },
   };
 };
@@ -463,7 +527,7 @@ const buildSpendByCategory = (requisitions: any[]) => {
   let grandTotal = 0;
 
   requisitions.forEach((req) => {
-    const cat = req.category || 'Unknown';
+    const cat = req.category || "Unknown";
     const price = parseNumber(req.totalPrice);
     totals.set(cat, (totals.get(cat) || 0) + price);
     grandTotal += price;
@@ -482,27 +546,27 @@ const buildSpendByCategory = (requisitions: any[]) => {
 
 const buildActivityFeed = (deals: any[], requisitions: any[]) => {
   const statusToType: Record<string, string> = {
-    NEGOTIATING: 'deal_started',
-    ACCEPTED: 'deal_accepted',
-    WALKED_AWAY: 'deal_walked_away',
-    ESCALATED: 'deal_escalated',
+    NEGOTIATING: "deal_started",
+    ACCEPTED: "deal_accepted",
+    WALKED_AWAY: "deal_walked_away",
+    ESCALATED: "deal_escalated",
   };
 
   const activities: any[] = [];
 
   deals.forEach((deal: any) => {
     const d = deal.get ? deal.get({ plain: true }) : deal;
-    const type = statusToType[d.status] || 'deal_started';
+    const type = statusToType[d.status] || "deal_started";
     const reqData = d.Requisition || {};
     const vendorData = d.Vendor || {};
 
     activities.push({
       id: d.id,
       type,
-      title: d.title || reqData.subject || 'Deal update',
-      description: `${vendorData.name || 'Vendor'} — ${d.status?.toLowerCase()?.replace('_', ' ') || 'updated'}`,
+      title: d.title || reqData.subject || "Deal update",
+      description: `${vendorData.name || "Vendor"} — ${d.status?.toLowerCase()?.replace("_", " ") || "updated"}`,
       timestamp: d.updatedAt || d.createdAt,
-      entityType: 'deal',
+      entityType: "deal",
       rfqId: reqData.id || d.requisitionId,
       vendorId: vendorData.id || d.vendorId,
       dealId: d.id,
@@ -513,24 +577,32 @@ const buildActivityFeed = (deals: any[], requisitions: any[]) => {
     const r = req.get ? req.get({ plain: true }) : req;
     activities.push({
       id: `req-${r.id}`,
-      type: 'requisition_created',
+      type: "requisition_created",
       title: r.subject || `RFQ ${r.rfqId}`,
-      description: `New requisition created — ${r.category || 'General'}`,
+      description: `New requisition created — ${r.category || "General"}`,
       timestamp: r.createdAt,
-      entityType: 'requisition',
+      entityType: "requisition",
       rfqId: r.id,
     });
   });
 
   return activities
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    )
     .slice(0, 15);
 };
 
 // ---- Needs attention ----
 
 const buildNeedsAttention = async (companyId: number, fromDate?: Date) => {
-  const [stalledDeals, approachingDeals, escalatedDeals, unresponsiveContracts] = await Promise.all([
+  const [
+    stalledDeals,
+    approachingDeals,
+    escalatedDeals,
+    unresponsiveContracts,
+  ] = await Promise.all([
     repo.findStalledDeals(companyId, 3, fromDate),
     repo.findApproachingDeadlines(companyId, 5, fromDate),
     repo.findEscalatedDeals(companyId, fromDate),
@@ -540,13 +612,15 @@ const buildNeedsAttention = async (companyId: number, fromDate?: Date) => {
   const stalledNegotiations = stalledDeals.map((deal: any) => {
     const d = deal.get ? deal.get({ plain: true }) : deal;
     const lastActivity = d.lastMessageAt || d.updatedAt;
-    const daysSince = Math.floor((Date.now() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24));
+    const daysSince = Math.floor(
+      (Date.now() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24),
+    );
     return {
       dealId: d.id,
       rfqId: d.Requisition?.id || d.requisitionId,
       vendorId: d.Vendor?.id || d.vendorId,
-      title: d.title || d.Requisition?.subject || 'Untitled',
-      vendorName: d.Vendor?.name || 'Unknown vendor',
+      title: d.title || d.Requisition?.subject || "Untitled",
+      vendorName: d.Vendor?.name || "Unknown vendor",
       lastActivityAt: lastActivity,
       daysSinceActivity: daysSince,
     };
@@ -567,12 +641,14 @@ const buildNeedsAttention = async (companyId: number, fromDate?: Date) => {
       const deadlineDate = new Date(deadline);
       if (isNaN(deadlineDate.getTime())) return null;
       if (deadlineDate <= now || deadlineDate > futureDate) return null;
-      const daysRemaining = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = Math.ceil(
+        (deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
       return {
         dealId: d.id,
         rfqId: d.Requisition?.id || d.requisitionId,
         vendorId: d.vendorId,
-        title: d.title || d.Requisition?.subject || 'Untitled',
+        title: d.title || d.Requisition?.subject || "Untitled",
         deadline: deadline,
         daysRemaining,
       };
@@ -585,20 +661,22 @@ const buildNeedsAttention = async (companyId: number, fromDate?: Date) => {
       dealId: d.id,
       rfqId: d.Requisition?.id || d.requisitionId,
       vendorId: d.Vendor?.id || d.vendorId,
-      title: d.title || d.Requisition?.subject || 'Untitled',
-      vendorName: d.Vendor?.name || 'Unknown vendor',
+      title: d.title || d.Requisition?.subject || "Untitled",
+      vendorName: d.Vendor?.name || "Unknown vendor",
       escalatedAt: d.updatedAt,
-      reason: 'Max rounds exceeded',
+      reason: "Max rounds exceeded",
     };
   });
 
   const unresponsiveVendors = unresponsiveContracts.map((contract: any) => {
     const c = contract.get ? contract.get({ plain: true }) : contract;
-    const daysSince = Math.floor((Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+    const daysSince = Math.floor(
+      (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+    );
     return {
       vendorId: c.vendorId,
-      vendorName: c.Vendor?.name || 'Unknown vendor',
-      dealId: c.chatbotDealId || '',
+      vendorName: c.Vendor?.name || "Unknown vendor",
+      dealId: c.chatbotDealId || "",
       rfqId: c.Requisition?.id || c.requisitionId,
       lastNotifiedAt: c.createdAt,
       daysSinceNotification: daysSince,
@@ -617,11 +695,14 @@ const buildNeedsAttention = async (companyId: number, fromDate?: Date) => {
 // Main getStats service
 // ============================================================================
 
-export const getStatsService = async (userId: number, period: Period = '30d') => {
+export const getStatsService = async (
+  userId: number,
+  period: Period = "30d",
+) => {
   try {
     const user = await userRepo.getUserProfile(userId);
     if (!user?.companyId) {
-      throw new CustomError('User company not found', 404);
+      throw new CustomError("User company not found", 404);
     }
 
     const companyId = user.companyId;
@@ -633,44 +714,98 @@ export const getStatsService = async (userId: number, period: Period = '30d') =>
       currentRequisitions,
       previousRequisitions,
       allDeals,
+      periodDeals,
       previousDeals,
+      allRequisitions,
       vendorBids,
       recentDeals,
       recentReqs,
     ] = await Promise.all([
-      repo.findRequisitionsInPeriod(companyId, currentRange.from, currentRange.to),
+      repo.findRequisitionsInPeriod(
+        companyId,
+        currentRange.from,
+        currentRange.to,
+      ),
       previousRange
-        ? repo.findRequisitionsInPeriod(companyId, previousRange.from, previousRange.to)
+        ? repo.findRequisitionsInPeriod(
+            companyId,
+            previousRange.from,
+            previousRange.to,
+          )
         : Promise.resolve([]),
+      repo.findDealsForCompany(companyId),
       repo.findDealsForCompany(companyId, currentRange.from, currentRange.to),
       previousRange
-        ? repo.findDealsForCompany(companyId, previousRange.from, previousRange.to)
+        ? repo.findDealsForCompany(
+            companyId,
+            previousRange.from,
+            previousRange.to,
+          )
         : Promise.resolve([]),
-      repo.findVendorBidsForCompany(companyId, currentRange.from, currentRange.to),
+      repo.findRequisitionsInPeriod(
+        companyId,
+        new Date(2000, 0, 1),
+        new Date(),
+      ),
+      repo.findVendorBidsForCompany(
+        companyId,
+        currentRange.from,
+        currentRange.to,
+      ),
       repo.findRecentDeals(companyId, 15, currentRange.from, currentRange.to),
-      repo.findRecentRequisitions(companyId, 10, currentRange.from, currentRange.to),
+      repo.findRecentRequisitions(
+        companyId,
+        10,
+        currentRange.from,
+        currentRange.to,
+      ),
     ]);
 
     const plainCurrent = currentRequisitions.map((r) => r.get({ plain: true }));
-    const plainPrevious = previousRequisitions.map((r: any) => r.get({ plain: true }));
+    const plainPrevious = previousRequisitions.map((r: any) =>
+      r.get({ plain: true }),
+    );
+    const plainAllRequisitions = allRequisitions.map((r) =>
+      r.get({ plain: true }),
+    );
     const plainBids = vendorBids.map((b) => b.get({ plain: true }));
 
     // ---- KPIs ----
     const currentSavings = computeSavings(plainCurrent);
     const previousSavings = computeSavings(plainPrevious);
-    const savingsDelta = computeDelta(currentSavings, previousSavings, 'percent');
+    const savingsDelta = computeDelta(
+      currentSavings,
+      previousSavings,
+      "percent",
+    );
 
-    const activeNegotiations = allDeals.filter((d: any) => d.status === 'NEGOTIATING').length;
-    const prevActiveCount = previousDeals.filter((d: any) => d.status === 'NEGOTIATING').length;
-    const activeNegDelta = computeDelta(activeNegotiations, prevActiveCount, 'absolute');
+    const activeNegotiations = periodDeals.filter(
+      (d: any) => d.status === "NEGOTIATING",
+    ).length;
+    const prevActiveCount = previousDeals.filter(
+      (d: any) => d.status === "NEGOTIATING",
+    ).length;
+    const activeNegDelta = computeDelta(
+      activeNegotiations,
+      prevActiveCount,
+      "absolute",
+    );
 
     const totalRequisitions = plainCurrent.length;
     const prevRequisitions = plainPrevious.length;
-    const reqDelta = computeDelta(totalRequisitions, prevRequisitions, 'percent');
+    const reqDelta = computeDelta(
+      totalRequisitions,
+      prevRequisitions,
+      "percent",
+    );
 
     const avgImprovement = computeAvgDealImprovement(plainCurrent, plainBids);
     const prevAvgImprovement = computeAvgDealImprovement(plainPrevious, []);
-    const improvDelta = computeDelta(avgImprovement, prevAvgImprovement, 'absolute');
+    const improvDelta = computeDelta(
+      avgImprovement,
+      prevAvgImprovement,
+      "absolute",
+    );
 
     const kpis = {
       totalSavings: { value: Math.round(currentSavings), ...savingsDelta },
@@ -686,14 +821,21 @@ export const getStatsService = async (userId: number, period: Period = '30d') =>
     const negotiationPipeline = buildPipeline(allDeals);
 
     // ---- Savings timeline ----
-    const savingsTimeline = buildSavingsTimeline(plainCurrent, period);
+    const savingsTimeline = buildSavingsTimeline(plainAllRequisitions, period);
     const prevSavingsTimeline = previousRange
       ? buildSavingsTimeline(plainPrevious, period)
-      : { labels: [], data: [], cumulative: [], summary: { total: 0, avgPerBucket: 0, peakValue: 0, peakLabel: '' } };
+      : {
+          labels: [],
+          data: [],
+          cumulative: [],
+          summary: { total: 0, avgPerBucket: 0, peakValue: 0, peakLabel: "" },
+        };
 
     // Pad previous period cumulative to match current period length
     const prevCumulative = prevSavingsTimeline.cumulative;
-    const paddedPrevCumulative = savingsTimeline.labels.map((_: any, i: number) => prevCumulative[i] ?? 0);
+    const paddedPrevCumulative = savingsTimeline.labels.map(
+      (_: any, i: number) => prevCumulative[i] ?? 0,
+    );
 
     const savingsOverTime = {
       labels: savingsTimeline.labels,
@@ -704,13 +846,16 @@ export const getStatsService = async (userId: number, period: Period = '30d') =>
     };
 
     // ---- Spend by category ----
-    const spendByCategory = buildSpendByCategory(plainCurrent);
+    const spendByCategory = buildSpendByCategory(plainAllRequisitions);
 
     // ---- Activity feed ----
     const recentActivity = buildActivityFeed(recentDeals, recentReqs);
 
     // ---- Needs attention ----
-    const needsAttention = await buildNeedsAttention(companyId, currentRange.from);
+    const needsAttention = await buildNeedsAttention(
+      companyId,
+      currentRange.from,
+    );
 
     return {
       kpis,

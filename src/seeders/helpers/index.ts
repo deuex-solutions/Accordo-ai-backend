@@ -2,6 +2,6 @@
  * Export all helper functions
  */
 
-export * from './dateUtils.js';
-export * from './priceUtils.js';
-export * from './idGenerator.js';
+export * from './date-utils.js';
+export * from './price-utils.js';
+export * from './id-generator.js';

@@ -60,7 +60,7 @@ export const getRequisition = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const requisitionId = Number(req.params.requisitionid);
+    const requisitionId = Number(req.params.requisitionId);
     if (Number.isNaN(requisitionId)) {
       res.status(400).json({ message: 'Invalid requisition ID' });
       return;
@@ -82,7 +82,7 @@ export const updateRequisition = async (
     console.log('updateRequisition controller - body keys:', Object.keys(req.body));
     console.log('updateRequisition controller - body:', req.body);
 
-    const requisitionId = Number(req.params.requisitionid);
+    const requisitionId = Number(req.params.requisitionId);
     if (Number.isNaN(requisitionId)) {
       res.status(400).json({ message: 'Invalid requisition ID' });
       return;
@@ -145,7 +145,7 @@ export const deleteRequisition = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const requisitionId = Number(req.params.requisitionid);
+    const requisitionId = Number(req.params.requisitionId);
     if (Number.isNaN(requisitionId)) {
       res.status(400).json({ message: 'Invalid requisition ID' });
       return;

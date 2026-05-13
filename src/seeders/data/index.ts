@@ -114,7 +114,7 @@ export {
   getShortConversations,
   getMediumConversations,
   getLongConversations,
-} from './chatMessages.js';
+} from './chat-messages.js';
 
 // Vendor Bids and Comparisons
 export {
@@ -138,7 +138,7 @@ export {
   getComparisonsWithCloseCompetition,
   getClearWinnerScenarios,
   getTradeOffScenarios,
-} from './vendorBids.js';
+} from './vendor-bids.js';
 
 // Selections and Purchase Orders
 export {
@@ -182,7 +182,7 @@ export {
   getFailedEmails,
   getEmailsByDateRange,
   getEmailStats,
-} from './emailLogs.js';
+} from './email-logs.js';
 
 // Training Data and Embeddings
 export {
@@ -203,7 +203,7 @@ export {
   getActivePatterns,
   getPatternsByType,
   getTrainingDataStats,
-} from './trainingData.js';
+} from './training-data.js';
 
 // Summary statistics - static values based on seed configuration
 export const getSeedDataSummary = () => {

@@ -3,8 +3,8 @@
  * Each enterprise company gets 3 projects with different statuses
  */
 
-import { daysFromNow, randomPastYearDate } from '../helpers/dateUtils.js';
-import { generateProjectId } from '../helpers/idGenerator.js';
+import { daysFromNow, randomPastYearDate } from '../helpers/date-utils.js';
+import { generateProjectId } from '../helpers/id-generator.js';
 import { enterpriseCompanies } from './companies.js';
 
 export interface ProjectData {

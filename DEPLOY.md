@@ -2,11 +2,12 @@
 
 ## Prerequisites
 
-- Node.js 20 LTS
-- npm 9+
+- Node.js 20+ (Alpine in Docker)
+- npm 10+
 - PostgreSQL 15+ (or a managed provider: Render, Neon, Supabase)
 - Ollama (optional — LLM fallback; OpenAI works without it)
-- Docker & Docker Compose (for containerized deployment)
+- Docker & Docker Compose (for containerised deployment)
+- A reachable `Accordo-auth` service on port 5003 (issues and validates JWTs). Both services must share `JWT_ACCESS_TOKEN_SECRET` and the same Postgres database.
 
 ---
 
@@ -16,60 +17,63 @@ Copy `.env.example` → `.env` and configure the sections below. Only critical v
 
 ### Required
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `5002` | Server listen port |
-| `NODE_ENV` | `development` | `development` / `production` |
-| `JWT_SECRET` | — | **Must change.** Used for signing JWTs |
-| `JWT_ACCESS_TOKEN_SECRET` | — | Access token signing key |
-| `JWT_REFRESH_TOKEN_SECRET` | — | Refresh token signing key |
+| Variable                   | Default       | Description                                                       |
+| -------------------------- | ------------- | ----------------------------------------------------------------- |
+| `PORT`                     | `5002`        | Server listen port                                                |
+| `NODE_ENV`                 | `development` | `development` / `production` — `production` disables auto-migrate |
+| `JWT_SECRET`               | —             | **Must change.** Fallback for the two specific secrets below      |
+| `JWT_ACCESS_TOKEN_SECRET`  | —             | Access token signing key. **Must match `Accordo-auth`'s value.**  |
+| `JWT_REFRESH_TOKEN_SECRET` | —             | Refresh token signing key. **Must match `Accordo-auth`'s value.** |
+| `AUTH_SERVICE_SECRET`      | —             | Optional; enables apiKey/apiSecret service-to-service auth        |
 
 ### Database (pick one)
 
 **Option A — Individual vars (local PostgreSQL):**
 
-| Variable | Default |
-|---|---|
-| `DB_HOST` | `127.0.0.1` |
-| `DB_PORT` | `5432` |
-| `DB_NAME` | `accordo` |
-| `DB_USERNAME` | `postgres` |
-| `DB_PASSWORD` | `postgres` |
+| Variable      | Default     |
+| ------------- | ----------- |
+| `DB_HOST`     | `127.0.0.1` |
+| `DB_PORT`     | `5432`      |
+| `DB_NAME`     | `accordo`   |
+| `DB_USERNAME` | `postgres`  |
+| `DB_PASSWORD` | `postgres`  |
 
 **Option B — Connection string (managed providers):**
 
-| Variable | Description |
-|---|---|
+| Variable       | Description                                                        |
+| -------------- | ------------------------------------------------------------------ |
 | `DATABASE_URL` | Full connection string. SSL auto-detected for Render/Neon/Supabase |
 
 Additional flags: `DB_SSL`, `DB_SSL_REJECT_UNAUTHORIZED`, `DB_LOGGING`.
 
 ### LLM
 
-| Variable | Default | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | — | OpenAI key (primary LLM provider) |
-| `OPENAI_MODEL` | `gpt-3.5-turbo` | Model for response generation |
-| `LLM_BASE_URL` | `http://localhost:11434` | Ollama URL (auto-fallback when OpenAI fails) |
-| `LLM_MODEL` | `qwen3` | Ollama model name |
+| Variable                | Default                  | Description                                                          |
+| ----------------------- | ------------------------ | -------------------------------------------------------------------- |
+| `OPENAI_API_KEY`        | —                        | Optional; primary provider when set, auto-falls back to Ollama       |
+| `OPENAI_MODEL`          | `gpt-4o-mini`            | OpenAI model for response generation                                 |
+| `LLM_BASE_URL`          | `http://localhost:11434` | Ollama URL (in Docker: `http://host.docker.internal:11434`)          |
+| `LLM_MODEL`             | `qwen3`                  | Ollama model                                                         |
+| `LLM_NEGOTIATION_MODEL` | —                        | Optional override; only used for negotiations                        |
+| `EMBEDDING_PROVIDER`    | `local`                  | `local` (ONNX) / `openai` / `bedrock` — choice of embedding provider |
 
 ### Email (AWS SES SMTP)
 
-| Variable | Description |
-|---|---|
-| `SMTP_HOST` | SES endpoint (e.g. `email-smtp.ap-south-1.amazonaws.com`) |
-| `SMTP_PORT` | `465` |
-| `SMTP_USER` | SES SMTP username |
-| `SMTP_PASS` | SES SMTP password |
-| `SMTP_FROM_EMAIL` | Verified sender address |
+| Variable          | Description                                               |
+| ----------------- | --------------------------------------------------------- |
+| `SMTP_HOST`       | SES endpoint (e.g. `email-smtp.ap-south-1.amazonaws.com`) |
+| `SMTP_PORT`       | `465`                                                     |
+| `SMTP_USER`       | SES SMTP username                                         |
+| `SMTP_PASS`       | SES SMTP password                                         |
+| `SMTP_FROM_EMAIL` | Verified sender address                                   |
 
 ### Frontend URLs
 
-| Variable | Default | Description |
-|---|---|---|
-| `VENDOR_PORTAL_URL` | `http://localhost:5001/vendor` | Vendor portal base URL (for email links) |
-| `CHATBOT_FRONTEND_URL` | `http://localhost:5001` | Frontend base URL |
-| `CHATBOT_API_URL` | `http://localhost:5002/api` | Backend API URL (used in emails) |
+| Variable               | Default                        | Description                              |
+| ---------------------- | ------------------------------ | ---------------------------------------- |
+| `VENDOR_PORTAL_URL`    | `http://localhost:5001/vendor` | Vendor portal base URL (for email links) |
+| `CHATBOT_FRONTEND_URL` | `http://localhost:5001`        | Frontend base URL                        |
+| `CHATBOT_API_URL`      | `http://localhost:5002/api`    | Backend API URL (used in emails)         |
 
 ---
 
@@ -97,12 +101,12 @@ The server listens on `0.0.0.0:5002` by default.
 
 ### What happens on startup
 
-1. Connects to PostgreSQL (creates DB if missing)
-2. Runs all pending Sequelize migrations (43 migration files)
-3. Syncs models (`alter: false` — non-destructive, only creates missing tables)
-4. Seeds development data (only when `NODE_ENV=development` or `FORCE_SEED=true`)
-5. Starts the bid-comparison deadline scheduler (cron)
-6. Registers graceful shutdown handlers (SIGTERM/SIGINT)
+1. Connects to PostgreSQL (creates the database if missing).
+2. **In dev**: runs all pending Sequelize migrations (8 consolidated `.cjs` files in `migrations/`). **In production (`NODE_ENV=production`)**: auto-migrate is **disabled** — run `npm run migrate` manually before each deploy.
+3. Syncs models (`alter: false` — non-destructive, only creates missing tables).
+4. Seeds development data (only when `NODE_ENV=development` or `FORCE_SEED=true`).
+5. Starts the bid-comparison deadline scheduler (cron).
+6. Registers graceful shutdown handlers (SIGTERM/SIGINT) that close the HTTP server, stop the cron, and disconnect the Sequelize pool.
 
 ---
 
@@ -115,6 +119,7 @@ docker compose --profile prod up -d --build
 ```
 
 This runs a multi-stage build:
+
 1. **deps** — installs `node_modules` with native build tools
 2. **builder** — compiles TypeScript → `dist/`
 3. **runtime** — lean Node 20 Alpine image, runs `npm start`
@@ -219,14 +224,16 @@ http://localhost:5002/api-docs.json
 
 ---
 
-## CI/CD Checklist
+## CI/CD checklist
 
 1. `npm ci` — clean install
 2. `npm run lint` — ESLint
-3. `npm run test:unit` — 441 unit tests (no DB required)
-4. `npm test` — integration tests (requires test DB)
-5. `npm run build` — TypeScript compilation
-6. Deploy compiled `dist/` or build Docker image
+3. `npm run type-check` — TypeScript without emit
+4. `npm run test:unit` — 1100+ unit tests (no DB required)
+5. `npm test` — integration tests (requires test DB; setup file enforces a test-only DB name)
+6. `npm run build` — TypeScript compilation
+7. **Run `npm run migrate` against the production DB** — auto-migrate is disabled in production, so this step is required before traffic shifts to the new build.
+8. Deploy compiled `dist/` or build the Docker `prod` target.
 
 ---
 
@@ -234,10 +241,10 @@ http://localhost:5002/api-docs.json
 
 Logs are written to `logs/` with daily rotation:
 
-| Directory | Retention | Content |
-|---|---|---|
-| `logs/combined/` | 14 days | All log levels |
-| `logs/error/` | 30 days | Errors only |
+| Directory        | Retention | Content        |
+| ---------------- | --------- | -------------- |
+| `logs/combined/` | 14 days   | All log levels |
+| `logs/error/`    | 30 days   | Errors only    |
 
 Format: JSON structured logs with timestamps. Console output is colorized in development.
 
@@ -245,13 +252,17 @@ Format: JSON structured logs with timestamps. Console output is colorized in dev
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| `ECONNREFUSED` on DB | Ensure PostgreSQL is running and credentials are correct |
-| Migrations fail | Check `DB_NAME` exists; the app creates it automatically but needs `DB_ADMIN_DATABASE` access |
-| OpenAI 401/429 | Verify `OPENAI_API_KEY`; system auto-falls back to Ollama → templates |
-| Ollama connection refused | Start Ollama (`ollama serve`) or set `LLM_BASE_URL` correctly |
-| Email not sending | Verify SES SMTP credentials and sender email is verified in AWS |
-| 503 responses | Server under CPU pressure (toobusy-js). Scale up or reduce load |
-| `FORCE_SEED` not working | Only runs when `NODE_ENV=development` OR `FORCE_SEED=true` explicitly |
-| Port 5002 in use | Change `PORT` in `.env` |
+| Problem                                 | Fix                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ECONNREFUSED` on DB                    | PostgreSQL not running or wrong creds.                                                              |
+| Migrations fail                         | `DB_NAME` doesn't exist; the app creates it automatically but needs `DB_ADMIN_DATABASE` access.     |
+| Migrations missing in production        | Auto-migrate is disabled when `NODE_ENV=production`. Run `npm run migrate` manually.                |
+| `JsonWebTokenError: invalid signature`  | `JWT_ACCESS_TOKEN_SECRET` differs from `Accordo-auth`'s value. Sync them.                           |
+| OpenAI 401/429                          | Bad `OPENAI_API_KEY`; system auto-falls back to Ollama → templates.                                 |
+| Ollama connection refused               | Start `ollama serve` or set `LLM_BASE_URL` (in Docker: `http://host.docker.internal:11434`).        |
+| Email not sending                       | SES SMTP creds wrong or sender not verified in AWS SES.                                             |
+| Contract create: `id must be unique`    | Sequelize sequence drift: `SELECT setval('"Contracts_id_seq"', (SELECT MAX(id) FROM "Contracts"));` |
+| 503 responses                           | `toobusy-js` shedding under CPU pressure. Scale up or reduce load.                                  |
+| `FORCE_SEED` not running                | Only fires when `NODE_ENV=development` or `FORCE_SEED=true`.                                        |
+| Port 5002 in use                        | Change `PORT` in `.env` (and the Docker port mapping).                                              |
+| Vendor sees raw "1 days" / "$355000.00" | Frontend not consuming `formattedLabels` payload — pull the latest frontend.                        |

@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   generatePromptAddenda,
   type AddendaContext,
-} from '../../../src/modules/chatbot/engine/promptAddenda.js';
+} from '../../../src/modules/chatbot/engine/prompt-addenda.js';
 
 // ─────────────────────────────────────────────
 // Helpers

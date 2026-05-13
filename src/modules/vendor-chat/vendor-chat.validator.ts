@@ -111,6 +111,26 @@ export const finalOfferConfirmSchema = Joi.object({
   isConfirmedFinal: Joi.boolean().required(),
 });
 
+// ============================================================================
+// Structured Prompt Schemas (April 2026)
+// Feature 1: initial discount ask; Feature 2: payment terms dropdown
+// ============================================================================
+
+export const submitDiscountSchema = Joi.object({
+  uniqueToken: Joi.string().required().min(10).max(100),
+  percent: Joi.number().required().integer().min(0).max(100),
+});
+
+export const submitPaymentTermsSchema = Joi.object({
+  uniqueToken: Joi.string().required().min(10).max(100),
+  // 0 = Immediately; otherwise 1..365 (see Q8 in the design discussion)
+  days: Joi.number()
+    .required()
+    .integer()
+    .min(0)
+    .max(365),
+});
+
 export default {
   submitQuoteSchema,
   editQuoteSchema,
@@ -121,4 +141,6 @@ export default {
   mesoSelectSchema,
   mesoOthersSchema,
   finalOfferConfirmSchema,
+  submitDiscountSchema,
+  submitPaymentTermsSchema,
 };

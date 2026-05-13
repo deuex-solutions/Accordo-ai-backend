@@ -23,8 +23,45 @@ import type {
   MesoCycleState,
   FinalOfferState,
   NegotiationPhase,
-} from './types.js';
-import { calculateWeightedUtilityFromResolved } from './weightedUtility.js';
+} from "./types.js";
+import { calculateWeightedUtilityFromResolved } from "./weighted-utility.js";
+import { humanRoundPrice } from "../../../negotiation/intent/build-negotiation-intent.js";
+import {
+  formatCurrency,
+  type SupportedCurrency,
+} from "../../../services/currency.service.js";
+
+// ============================================
+// Currency helpers
+// ============================================
+
+/** Default currency used when a deal does not specify one. */
+const DEFAULT_CURRENCY: SupportedCurrency = "USD";
+
+/**
+ * Format a price for inclusion in a MESO option description or tradeoff.
+ * Uses the deal's currency (from NegotiationConfig.currency) so every
+ * MESO card stays consistent with the requisition and chat.
+ */
+function formatMesoPrice(
+  amount: number | null | undefined,
+  currency: SupportedCurrency,
+): string {
+  if (amount == null) return "N/A";
+  return formatCurrency(amount, currency);
+}
+
+/**
+ * Pluralize delivery/warranty labels — avoids "1 days" or "1 months" in MESO card text.
+ */
+function fmtDays(n: number | null | undefined): string {
+  const v = n ?? 0;
+  return v === 1 ? "1-day" : `${v}-day`;
+}
+function fmtMonths(n: number | null | undefined): string {
+  const v = n ?? 0;
+  return v === 1 ? "1-month" : `${v}-month`;
+}
 
 // ============================================
 // VENDOR PREFERENCE PROFILE (Learning-Based MESO)
@@ -43,7 +80,14 @@ export interface VendorPreferenceProfile {
   /** Inferred weight for warranty (0-1) */
   warrantyWeight: number;
   /** Last selected offer type */
-  lastSelectedOfferType: 'offer_1' | 'offer_2' | 'offer_3' | 'price' | 'terms' | 'balanced' | null;
+  lastSelectedOfferType:
+    | "offer_1"
+    | "offer_2"
+    | "offer_3"
+    | "price"
+    | "terms"
+    | "balanced"
+    | null;
   /** History of selections with offer details */
   selectionHistory: MesoSelectionRecord[];
   /** Number of times vendor selected price-focused */
@@ -74,7 +118,9 @@ export function createEmptyPreferenceProfile(): VendorPreferenceProfile {
 /**
  * Build vendor preference profile from negotiation state
  */
-export function buildPreferenceProfile(state: NegotiationState | null): VendorPreferenceProfile {
+export function buildPreferenceProfile(
+  state: NegotiationState | null,
+): VendorPreferenceProfile {
   const profile = createEmptyPreferenceProfile();
 
   if (!state || !state.mesoSelections || state.mesoSelections.length === 0) {
@@ -86,11 +132,11 @@ export function buildPreferenceProfile(state: NegotiationState | null): VendorPr
   // Count selections by type
   for (const selection of state.mesoSelections) {
     const type = selection.selectedType;
-    if (type === 'offer_1' || type === 'price') {
+    if (type === "offer_1" || type === "price") {
       profile.priceSelectionCount++;
-    } else if (type === 'offer_2' || type === 'terms') {
+    } else if (type === "offer_2" || type === "terms") {
       profile.termsSelectionCount++;
-    } else if (type === 'offer_3' || type === 'balanced') {
+    } else if (type === "offer_3" || type === "balanced") {
       profile.balancedSelectionCount++;
     }
   }
@@ -98,8 +144,10 @@ export function buildPreferenceProfile(state: NegotiationState | null): VendorPr
   // Calculate weights based on selection frequency
   const totalSelections = state.mesoSelections.length;
   if (totalSelections > 0) {
-    profile.priceWeight = 0.5 + (profile.priceSelectionCount / totalSelections) * 0.3;
-    profile.termsWeight = 0.5 + (profile.termsSelectionCount / totalSelections) * 0.3;
+    profile.priceWeight =
+      0.5 + (profile.priceSelectionCount / totalSelections) * 0.3;
+    profile.termsWeight =
+      0.5 + (profile.termsSelectionCount / totalSelections) * 0.3;
     // Balanced selections indicate no strong preference, keep at 0.5
   }
 
@@ -138,9 +186,15 @@ export interface MesoOption {
   /** Description of trade-offs in this option */
   description: string;
   /** Which parameters are emphasized */
-  emphasis: ('price' | 'payment_terms' | 'delivery' | 'warranty')[];
+  emphasis: ("price" | "payment_terms" | "delivery" | "warranty")[];
   /** Trade-offs made in this option */
   tradeoffs: string[];
+  /** Pre-formatted labels for frontend display (May 2026) */
+  formattedLabels?: {
+    deliveryLabel: string;    // e.g. "1-day delivery" or "30-day delivery"
+    warrantyLabel: string;    // e.g. "1-month warranty" or "12-month warranty"
+    paymentLabel: string;     // e.g. "Net 30"
+  };
 }
 
 /**
@@ -157,6 +211,12 @@ export interface MesoResult {
   success: boolean;
   /** Reason for failure if not successful */
   reason?: string;
+  /**
+   * Currency for all options (from the deal's NegotiationConfig).
+   * The frontend uses this to format the numeric Price field on every card,
+   * and the backend uses it to build `description` and `tradeoffs` strings.
+   */
+  currency: SupportedCurrency;
 
   // Flow control flags (February 2026 - MESO + Others flow)
   /** Whether to show "Others" button (false for final MESO) */
@@ -227,7 +287,9 @@ export function generateMesoOptions(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  targetUtility: number = 0.65
+  targetUtility: number = 0.65,
+  currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const options: MesoOption[] = [];
   const variance_target = 0.02; // 2% variance
@@ -238,17 +300,26 @@ export function generateMesoOptions(
     // "Value-focused" - lowest price, fastest delivery, shorter warranty
     // ============================================
 
-    const offer1 = generatePriceFocusedOffer(config, vendorOffer, round, targetUtility);
+    const offer1 = generatePriceFocusedOffer(
+      config,
+      vendorOffer,
+      round,
+      targetUtility,
+      lastAccordoCounterPrice,
+    );
     const offer1Utility = calculateWeightedUtilityFromResolved(offer1, config);
 
     options.push({
       id: `meso_${round}_offer1`,
       offer: offer1,
       utility: offer1Utility.totalUtility,
-      label: 'Offer 1',
-      description: `Best price ($${offer1.total_price?.toLocaleString()}) with fast ${offer1.delivery_days}-day delivery`,
-      emphasis: ['price', 'delivery'],
-      tradeoffs: [`${offer1.warranty_months || 0} months warranty`, `Net ${offer1.payment_terms_days} payment`],
+      label: "Offer 1",
+      description: `${formatMesoPrice(offer1.total_price, currency)}, ${fmtDays(offer1.delivery_days)} delivery, Net ${offer1.payment_terms_days}`,
+      emphasis: ["price", "delivery"],
+      tradeoffs: [
+        `${offer1.warranty_months || 0} ${(offer1.warranty_months || 0) === 1 ? "month" : "months"} warranty`,
+        `Net ${offer1.payment_terms_days} payment`,
+      ],
     });
 
     // ============================================
@@ -256,17 +327,26 @@ export function generateMesoOptions(
     // "Cash flow friendly" - longest payment terms
     // ============================================
 
-    const offer2 = generateTermsFocusedOffer(config, vendorOffer, round, targetUtility);
+    const offer2 = generateTermsFocusedOffer(
+      config,
+      vendorOffer,
+      round,
+      targetUtility,
+      lastAccordoCounterPrice,
+    );
     const offer2Utility = calculateWeightedUtilityFromResolved(offer2, config);
 
     options.push({
       id: `meso_${round}_offer2`,
       offer: offer2,
       utility: offer2Utility.totalUtility,
-      label: 'Offer 2',
-      description: `Extended Net ${offer2.payment_terms_days} payment terms with ${offer2.warranty_months} months warranty`,
-      emphasis: ['payment_terms'],
-      tradeoffs: [`$${offer2.total_price?.toLocaleString()} price`, `${offer2.delivery_days}-day delivery`],
+      label: "Offer 2",
+      description: `${formatMesoPrice(offer2.total_price, currency)}, Net ${offer2.payment_terms_days}, ${fmtMonths(offer2.warranty_months)} warranty`,
+      emphasis: ["payment_terms"],
+      tradeoffs: [
+        `${formatMesoPrice(offer2.total_price, currency)} price`,
+        `${fmtDays(offer2.delivery_days)} delivery`,
+      ],
     });
 
     // ============================================
@@ -274,17 +354,26 @@ export function generateMesoOptions(
     // "Full service" - best delivery + extended warranty
     // ============================================
 
-    const offer3 = generateBalancedOffer(config, vendorOffer, round, targetUtility);
+    const offer3 = generateBalancedOffer(
+      config,
+      vendorOffer,
+      round,
+      targetUtility,
+      lastAccordoCounterPrice,
+    );
     const offer3Utility = calculateWeightedUtilityFromResolved(offer3, config);
 
     options.push({
       id: `meso_${round}_offer3`,
       offer: offer3,
       utility: offer3Utility.totalUtility,
-      label: 'Offer 3',
-      description: `Fast ${offer3.delivery_days}-day delivery with extended ${offer3.warranty_months} months warranty`,
-      emphasis: ['delivery', 'warranty'],
-      tradeoffs: [`$${offer3.total_price?.toLocaleString()} price`, `Net ${offer3.payment_terms_days} payment`],
+      label: "Offer 3",
+      description: `${formatMesoPrice(offer3.total_price, currency)}, ${fmtDays(offer3.delivery_days)} delivery, ${fmtMonths(offer3.warranty_months)} warranty`,
+      emphasis: ["delivery", "warranty"],
+      tradeoffs: [
+        `${formatMesoPrice(offer3.total_price, currency)} price`,
+        `Net ${offer3.payment_terms_days} payment`,
+      ],
     });
 
     // ============================================
@@ -293,7 +382,9 @@ export function generateMesoOptions(
 
     const utilities = options.map((o) => o.utility);
     const avgUtility = utilities.reduce((a, b) => a + b, 0) / utilities.length;
-    const maxVariance = Math.max(...utilities.map((u) => Math.abs(u - avgUtility)));
+    const maxVariance = Math.max(
+      ...utilities.map((u) => Math.abs(u - avgUtility)),
+    );
 
     // If variance is too high, adjust offers
     if (maxVariance > variance_target) {
@@ -303,20 +394,34 @@ export function generateMesoOptions(
 
     // Recalculate final variance
     const finalUtilities = options.map((o) => o.utility);
-    const finalAvg = finalUtilities.reduce((a, b) => a + b, 0) / finalUtilities.length;
-    const finalVariance = Math.max(...finalUtilities.map((u) => Math.abs(u - finalAvg)));
+    const finalAvg =
+      finalUtilities.reduce((a, b) => a + b, 0) / finalUtilities.length;
+    const finalVariance = Math.max(
+      ...finalUtilities.map((u) => Math.abs(u - finalAvg)),
+    );
+
+    // Dedup guard (May 2026): when the convergence floor clamps Option 1's
+    // price discount, multiple options can end up identical on all visible
+    // dimensions (price, delivery, payment_terms). Detect and force variation.
+    deduplicateMesoOptions(options, config);
+
+    // Re-render labels with FINAL prices (Apr 2026): variance adjustment
+    // can mutate offer.total_price after the original description was set.
+    renderMesoDescriptions(options, currency);
 
     return {
       options,
       targetUtility: finalAvg,
       variance: finalVariance,
       success: true,
+      currency,
       // Flow control flags for phased negotiation
       showOthers: true,
       isFinal: false,
       inputDisabled: true,
-      disabledMessage: 'Select an offer above or click "Others" to enter your counter-offer',
-      phase: 'MESO_PRESENTATION' as NegotiationPhase,
+      disabledMessage:
+        'Select an offer above or click "Others" to enter your counter-offer',
+      phase: "MESO_PRESENTATION" as NegotiationPhase,
     };
   } catch (error) {
     return {
@@ -324,12 +429,16 @@ export function generateMesoOptions(
       targetUtility,
       variance: 0,
       success: false,
-      reason: error instanceof Error ? error.message : 'Unknown error generating MESO options',
+      reason:
+        error instanceof Error
+          ? error.message
+          : "Unknown error generating MESO options",
+      currency,
       // Default flow control flags for failed generation
       showOthers: false,
       isFinal: false,
       inputDisabled: false,
-      phase: 'NORMAL_NEGOTIATION' as NegotiationPhase,
+      phase: "NORMAL_NEGOTIATION" as NegotiationPhase,
     };
   }
 }
@@ -344,30 +453,142 @@ export function generateMesoOptions(
 function calculateBasePrice(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
-  round: number
+  round: number,
+  lastAccordoCounterPrice?: number | null,
 ): number {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
   // Base aggressiveness by priority
-  const aggressiveness = priority === 'HIGH' ? 0.25 : priority === 'LOW' ? 0.45 : 0.35;
-  const roundAdjustment = Math.min(0.10, round * 0.02);
+  const aggressiveness =
+    priority === "HIGH" ? 0.25 : priority === "LOW" ? 0.45 : 0.35;
+  const roundAdjustment = Math.min(0.1, round * 0.02);
 
+  // Convergence-band path (Apr 2026, tolerance updated): when the vendor's
+  // offer is already within our acceptable range (with ~1.5% tolerance to
+  // handle small drift / rounding) AND we've made a prior counter, anchor
+  // the base price INSIDE [lastAccordoCounter, vendorOffer]. Bracketing the
+  // convergence zone — instead of restarting from config target — prevents
+  // MESO from offering options below where the negotiation already settled.
+  //
+  // Tolerance reason: when our last counter sits at e.g. £418,999.99 and
+  // maxAcceptable is £418,900, a strict `<= maxAcceptable` check disables
+  // the floor entirely. A 1.5% tolerance keeps the convergence anchor live
+  // even when prices drift fractionally above the configured ceiling.
+  const TOLERANCE = 0.015;
+  const ceilingWithTol = maxAcceptablePrice * (1 + TOLERANCE);
+  const vendorPrice = vendorOffer.total_price ?? null;
+  const hasFloor =
+    lastAccordoCounterPrice != null &&
+    lastAccordoCounterPrice > 0 &&
+    lastAccordoCounterPrice <= ceilingWithTol;
+  const vendorWithinBand =
+    vendorPrice != null &&
+    vendorPrice >= targetPrice &&
+    vendorPrice <= ceilingWithTol;
+
+  if (hasFloor && vendorWithinBand) {
+    const floor = lastAccordoCounterPrice as number;
+    const ceiling = vendorPrice as number;
+    const span = Math.max(0, ceiling - floor);
+    const innerProgress = 0.55 + Math.min(0.15, round * 0.03);
+    let basePrice = floor + span * innerProgress;
+    basePrice = Math.min(basePrice, ceiling);
+    basePrice = Math.max(basePrice, floor);
+    return humanRoundPrice(Math.round(basePrice * 100) / 100);
+  }
+
+  // Standard path (no convergence band): use the original formula.
   let basePrice = targetPrice + priceRange * (aggressiveness + roundAdjustment);
-
-  // Never exceed vendor's offer or max acceptable
-  if (vendorOffer.total_price != null) {
-    basePrice = Math.min(basePrice, vendorOffer.total_price);
+  if (vendorPrice != null) {
+    basePrice = Math.min(basePrice, vendorPrice);
   }
   basePrice = Math.min(basePrice, maxAcceptablePrice);
 
-  return Math.round(basePrice * 100) / 100;
+  // Apply convergence floor in case we have one but vendor is outside band.
+  if (hasFloor) {
+    basePrice = Math.max(basePrice, lastAccordoCounterPrice as number);
+  }
+
+  return humanRoundPrice(Math.round(basePrice * 100) / 100);
+}
+
+/**
+ * Re-render MESO descriptions with the FINAL prices/terms (Apr 2026).
+ * Variance normalization can change offer prices after the initial
+ * description was written, leaving stale prices while the
+ * actual offer is £365,159. Calling this after adjustOffersForVariance
+ * rewrites the labels so they always match the actual offer.
+ */
+export function renderMesoDescriptions(
+  options: MesoOption[],
+  currency: SupportedCurrency,
+): void {
+  // Render descriptions, tradeoffs, AND formattedLabels for each option
+  for (const opt of options) {
+    const o = opt.offer;
+    opt.description = `${formatMesoPrice(o.total_price, currency)}, ${fmtDays(o.delivery_days)} delivery, Net ${o.payment_terms_days}`;
+    opt.formattedLabels = {
+      deliveryLabel: `${fmtDays(o.delivery_days)} delivery`,
+      warrantyLabel: `${fmtMonths(o.warranty_months)} warranty`,
+      paymentLabel: `Net ${o.payment_terms_days}`,
+    };
+  }
+
+  // Per-option tradeoff arrays (highlight what each option trades away)
+  if (options[0]) {
+    const o = options[0].offer;
+    options[0].tradeoffs = [
+      `${o.warranty_months || 0} ${(o.warranty_months || 0) === 1 ? "month" : "months"} warranty`,
+      `Net ${o.payment_terms_days} payment`,
+    ];
+  }
+  if (options[1]) {
+    const o = options[1].offer;
+    options[1].tradeoffs = [
+      `${formatMesoPrice(o.total_price, currency)} price`,
+      `${fmtDays(o.delivery_days)} delivery`,
+    ];
+  }
+  if (options[2]) {
+    const o = options[2].offer;
+    options[2].tradeoffs = [
+      `${formatMesoPrice(o.total_price, currency)} price`,
+      `Net ${o.payment_terms_days} payment`,
+    ];
+  }
+}
+
+/**
+ * Shared convergence floor (Apr 2026): once we've made a counter, no MESO
+ * option price may regress below it. Used by both generateMesoOptions and
+ * generateDynamicMesoOptions paths so the floor is consistent.
+ *
+ * Applies a 1.5% tolerance against maxAcceptablePrice so the floor stays
+ * active even when our last counter has drifted fractionally above ceiling
+ * (e.g. £418,999.99 vs £418,900).
+ */
+export function applyConvergenceFloor(
+  basePrice: number,
+  config: ResolvedNegotiationConfig,
+  lastAccordoCounterPrice?: number | null,
+): number {
+  if (lastAccordoCounterPrice == null || lastAccordoCounterPrice <= 0) {
+    return basePrice;
+  }
+  const TOLERANCE = 0.015;
+  if (lastAccordoCounterPrice > config.maxAcceptablePrice * (1 + TOLERANCE)) {
+    return basePrice;
+  }
+  return Math.max(basePrice, lastAccordoCounterPrice);
 }
 
 /**
  * Calculate medium (midpoint) payment terms in days
  */
 function getMediumPaymentDays(config: ResolvedNegotiationConfig): number {
-  return Math.round((config.paymentTermsMinDays + config.paymentTermsMaxDays) / 2);
+  return Math.round(
+    (config.paymentTermsMinDays + config.paymentTermsMaxDays) / 2,
+  );
 }
 
 /**
@@ -376,16 +597,18 @@ function getMediumPaymentDays(config: ResolvedNegotiationConfig): number {
  */
 function getBestDeliveryDays(
   config: ResolvedNegotiationConfig,
-  vendorOffer: ExtendedOffer
+  vendorOffer: ExtendedOffer,
 ): number {
   const vendorDelivery = vendorOffer.delivery_days ?? 30;
 
   // If we have a preferred delivery date, calculate days from now
   if (config.preferredDeliveryDate) {
     const preferredDays = Math.ceil(
-      (config.preferredDeliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      (config.preferredDeliveryDate.getTime() - Date.now()) /
+        (1000 * 60 * 60 * 24),
     );
-    return Math.max(1, Math.min(preferredDays, vendorDelivery));
+    // Floor at 3 days — anything less doesn't make business sense in a MESO card
+    return Math.max(3, Math.min(preferredDays, vendorDelivery));
   }
 
   // Otherwise, aim for 10-20% faster than vendor's offer
@@ -398,19 +621,20 @@ function getBestDeliveryDays(
  */
 function getMediumDeliveryDays(
   config: ResolvedNegotiationConfig,
-  vendorOffer: ExtendedOffer
+  vendorOffer: ExtendedOffer,
 ): number {
   const vendorDelivery = vendorOffer.delivery_days ?? 30;
 
   // If we have a required delivery date, use it as ceiling
   if (config.deliveryDate) {
     const requiredDays = Math.ceil(
-      (config.deliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      (config.deliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
     );
-    return Math.min(vendorDelivery, requiredDays);
+    // Floor at 3 days — anything less doesn't make business sense
+    return Math.max(3, Math.min(vendorDelivery, requiredDays));
   }
 
-  return vendorDelivery;
+  return Math.max(3, vendorDelivery);
 }
 
 /**
@@ -421,15 +645,29 @@ function generatePriceFocusedOffer(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  targetUtility: number
+  targetUtility: number,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
-  const basePrice = calculateBasePrice(config, vendorOffer, round);
+  const basePrice = calculateBasePrice(
+    config,
+    vendorOffer,
+    round,
+    lastAccordoCounterPrice,
+  );
 
   // BEST price: 2.5% lower than base (within strict boundaries)
   const priceDiscount = 0.025; // 2.5%
   let bestPrice = basePrice * (1 - priceDiscount);
-  bestPrice = Math.max(config.targetPrice, bestPrice); // Don't go below target
-  bestPrice = Math.round(bestPrice * 100) / 100;
+  // Floor: max of config target, and (if set) the last Accordo counter — so
+  // MESO's "best price" option still respects the convergence floor.
+  const priceFloor =
+    lastAccordoCounterPrice != null &&
+    lastAccordoCounterPrice > 0 &&
+    lastAccordoCounterPrice <= config.maxAcceptablePrice
+      ? Math.max(config.targetPrice, lastAccordoCounterPrice)
+      : config.targetPrice;
+  bestPrice = Math.max(priceFloor, bestPrice);
+  bestPrice = humanRoundPrice(Math.round(bestPrice * 100) / 100);
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -459,10 +697,16 @@ function generateTermsFocusedOffer(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  targetUtility: number
+  targetUtility: number,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   // MEDIUM price (base price, no discount)
-  const mediumPrice = calculateBasePrice(config, vendorOffer, round);
+  const mediumPrice = calculateBasePrice(
+    config,
+    vendorOffer,
+    round,
+    lastAccordoCounterPrice,
+  );
 
   // BEST payment terms (longest, using wizard max)
   const bestPaymentDays = config.paymentTermsMaxDays;
@@ -492,10 +736,16 @@ function generateBalancedOffer(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  targetUtility: number
+  targetUtility: number,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   // MEDIUM price (base price, no discount)
-  const mediumPrice = calculateBasePrice(config, vendorOffer, round);
+  const mediumPrice = calculateBasePrice(
+    config,
+    vendorOffer,
+    round,
+    lastAccordoCounterPrice,
+  );
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -523,7 +773,7 @@ function adjustOffersForVariance(
   options: MesoOption[],
   config: ResolvedNegotiationConfig,
   targetUtility: number,
-  maxVariance: number
+  maxVariance: number,
 ): void {
   // Simple adjustment: scale prices to bring utilities closer
   for (const option of options) {
@@ -534,16 +784,106 @@ function adjustOffersForVariance(
       const priceAdjustment = utilityDiff * config.priceRange * 0.1;
 
       if (option.offer.total_price != null) {
-        option.offer.total_price = Math.round(
-          (option.offer.total_price + priceAdjustment) * 100
-        ) / 100;
+        option.offer.total_price = humanRoundPrice(
+          Math.round((option.offer.total_price + priceAdjustment) * 100) / 100,
+        );
+
+        // Ensure variance adjustment didn't push below target price floor
+        option.offer.total_price = Math.max(
+          option.offer.total_price,
+          config.targetPrice,
+        );
 
         // Recalculate utility
-        const newUtility = calculateWeightedUtilityFromResolved(option.offer, config);
+        const newUtility = calculateWeightedUtilityFromResolved(
+          option.offer,
+          config,
+        );
         option.utility = newUtility.totalUtility;
       }
     }
   }
+}
+
+// ============================================
+// MESO DEDUPLICATION (May 2026)
+// ============================================
+
+/**
+ * Detect and fix duplicate MESO options.
+ *
+ * Root cause: when the convergence floor clamps Option 1's price discount,
+ * it can match Option 3's base price. Both share the same delivery (best)
+ * and payment terms (medium), leaving only warranty as a differentiator —
+ * which may also get flattened by adjustOffersForVariance.
+ *
+ * Strategy: compare each pair on (price, delivery_days, payment_terms_days).
+ * If two match on all three, shift the later option's most flexible dimension:
+ *   1. Payment terms: shift by ±10 days (within config bounds)
+ *   2. Delivery days: shift by ±5 days (within bounds)
+ *   3. Price: shift by ±2% (within bounds)
+ */
+function deduplicateMesoOptions(
+  options: MesoOption[],
+  config: ResolvedNegotiationConfig,
+): void {
+  for (let i = 0; i < options.length; i++) {
+    for (let j = i + 1; j < options.length; j++) {
+      const a = options[i].offer;
+      const b = options[j].offer;
+
+      const samePrice = a.total_price === b.total_price;
+      const sameDelivery = a.delivery_days === b.delivery_days;
+      const samePayment = a.payment_terms_days === b.payment_terms_days;
+
+      if (samePrice && sameDelivery && samePayment) {
+        // Duplicate detected — force variation on option j
+        const shifted = forceVariation(options[j], config, options[i]);
+        options[j] = shifted;
+      }
+    }
+  }
+}
+
+/**
+ * Force a MESO option to differ from its duplicate by shifting the most
+ * flexible dimension first.
+ */
+function forceVariation(
+  dup: MesoOption,
+  config: ResolvedNegotiationConfig,
+  original: MesoOption,
+): MesoOption {
+  const offer = { ...dup.offer };
+
+  // Try 1: Shift payment terms by +10 days (longer terms = vendor-friendly)
+  const newPayment = (offer.payment_terms_days ?? 30) + 10;
+  if (newPayment <= config.paymentTermsMaxDays) {
+    offer.payment_terms_days = newPayment;
+    offer.payment_terms = `Net ${newPayment}`;
+    const newUtility = calculateWeightedUtilityFromResolved(offer, config);
+    return { ...dup, offer, utility: newUtility.totalUtility };
+  }
+
+  // Try 2: Shift payment terms by -10 days (shorter terms)
+  const shorterPayment = Math.max(config.paymentTermsMinDays, (offer.payment_terms_days ?? 30) - 10);
+  if (shorterPayment !== offer.payment_terms_days) {
+    offer.payment_terms_days = shorterPayment;
+    offer.payment_terms = `Net ${shorterPayment}`;
+    const newUtility = calculateWeightedUtilityFromResolved(offer, config);
+    return { ...dup, offer, utility: newUtility.totalUtility };
+  }
+
+  // Try 3: Shift delivery by +5 days (slower delivery = price room)
+  const slowerDelivery = (offer.delivery_days ?? 30) + 5;
+  offer.delivery_days = slowerDelivery;
+  // Compensate with a 1.5% price reduction
+  if (offer.total_price != null) {
+    const reducedPrice = humanRoundPrice(Math.round(offer.total_price * 0.985 * 100) / 100);
+    offer.total_price = Math.max(config.targetPrice, reducedPrice);
+  }
+  const newUtility = calculateWeightedUtilityFromResolved(offer, config);
+  return { ...dup, offer, utility: newUtility.totalUtility };
 }
 
 // ============================================
@@ -558,32 +898,32 @@ function adjustOffersForVariance(
  */
 export function inferPreferencesFromSelection(
   selection: MesoOption,
-  allOptions: MesoOption[]
+  allOptions: MesoOption[],
 ): MesoSelection {
   const preferenceAdjustments: Record<string, number> = {};
-  let primaryPreference = 'price';
+  let primaryPreference = "price";
   let confidence = 0.5;
 
   // Analyze selection emphasis
-  if (selection.emphasis.includes('price')) {
-    preferenceAdjustments['price'] = 0.1; // Increase price weight
-    preferenceAdjustments['payment_terms'] = -0.05;
-    primaryPreference = 'price';
+  if (selection.emphasis.includes("price")) {
+    preferenceAdjustments["price"] = 0.1; // Increase price weight
+    preferenceAdjustments["payment_terms"] = -0.05;
+    primaryPreference = "price";
     confidence = 0.7;
-  } else if (selection.emphasis.includes('payment_terms')) {
-    preferenceAdjustments['payment_terms'] = 0.1;
-    preferenceAdjustments['price'] = -0.05;
-    primaryPreference = 'payment_terms';
+  } else if (selection.emphasis.includes("payment_terms")) {
+    preferenceAdjustments["payment_terms"] = 0.1;
+    preferenceAdjustments["price"] = -0.05;
+    primaryPreference = "payment_terms";
     confidence = 0.7;
-  } else if (selection.emphasis.includes('delivery')) {
-    preferenceAdjustments['delivery'] = 0.1;
-    preferenceAdjustments['price'] = -0.03;
-    preferenceAdjustments['payment_terms'] = -0.03;
-    primaryPreference = 'delivery';
+  } else if (selection.emphasis.includes("delivery")) {
+    preferenceAdjustments["delivery"] = 0.1;
+    preferenceAdjustments["price"] = -0.03;
+    preferenceAdjustments["payment_terms"] = -0.03;
+    primaryPreference = "delivery";
     confidence = 0.65;
-  } else if (selection.emphasis.includes('warranty')) {
-    preferenceAdjustments['warranty'] = 0.1;
-    primaryPreference = 'warranty';
+  } else if (selection.emphasis.includes("warranty")) {
+    preferenceAdjustments["warranty"] = 0.1;
+    primaryPreference = "warranty";
     confidence = 0.6;
   }
 
@@ -660,7 +1000,9 @@ export interface ShouldUseMesoResult {
  * @param params - Parameters including round, mesoCycleState, and finalOfferState
  * @returns ShouldUseMesoResult with flow control flags
  */
-export function shouldUseMeso(params: ShouldUseMesoParams): ShouldUseMesoResult {
+export function shouldUseMeso(
+  params: ShouldUseMesoParams,
+): ShouldUseMesoResult {
   const { round, mesoCycleState, finalOfferState } = params;
 
   // Phase 1: Normal Negotiation (Rounds 1-5) - NO MESO
@@ -669,31 +1011,36 @@ export function shouldUseMeso(params: ShouldUseMesoParams): ShouldUseMesoResult 
       shouldShow: false,
       showOthers: false,
       isFinal: false,
-      phase: 'NORMAL_NEGOTIATION',
+      phase: "NORMAL_NEGOTIATION",
       inputDisabled: false,
     };
   }
 
   // Check for final MESO (stall confirmed)
-  if (finalOfferState?.vendorConfirmedFinal && !finalOfferState.finalMesoShown) {
+  if (
+    finalOfferState?.vendorConfirmedFinal &&
+    !finalOfferState.finalMesoShown
+  ) {
     return {
       shouldShow: true,
       showOthers: false, // Hide Others for final MESO
       isFinal: true,
-      phase: 'FINAL_MESO',
+      phase: "FINAL_MESO",
       inputDisabled: true,
-      disabledMessage: 'Select one of the final offers above to close the deal',
+      disabledMessage: "Select one of the final offers above to close the deal",
     };
   }
 
   // Check if in post-Others negotiation phase (4 rounds after Others)
   if (mesoCycleState?.inPostOthersPhase) {
-    if (mesoCycleState.roundsInCurrentCycle < MESO_PHASE_CONFIG.POST_OTHERS_ROUNDS) {
+    if (
+      mesoCycleState.roundsInCurrentCycle < MESO_PHASE_CONFIG.POST_OTHERS_ROUNDS
+    ) {
       return {
         shouldShow: false,
         showOthers: false,
         isFinal: false,
-        phase: 'POST_OTHERS',
+        phase: "POST_OTHERS",
         inputDisabled: false,
       };
     }
@@ -707,9 +1054,9 @@ export function shouldUseMeso(params: ShouldUseMesoParams): ShouldUseMesoResult 
       shouldShow: false,
       showOthers: false,
       isFinal: false,
-      phase: 'ESCALATED',
+      phase: "ESCALATED",
       inputDisabled: true,
-      disabledMessage: 'This negotiation has been escalated to a human PM',
+      disabledMessage: "This negotiation has been escalated to a human PM",
     };
   }
 
@@ -718,9 +1065,10 @@ export function shouldUseMeso(params: ShouldUseMesoParams): ShouldUseMesoResult 
     shouldShow: true,
     showOthers: true,
     isFinal: false,
-    phase: 'MESO_PRESENTATION',
+    phase: "MESO_PRESENTATION",
     inputDisabled: true,
-    disabledMessage: 'Select an offer above or click "Others" to enter your counter-offer',
+    disabledMessage:
+      'Select an offer above or click "Others" to enter your counter-offer',
   };
 }
 
@@ -731,7 +1079,7 @@ export function shouldUseMeso(params: ShouldUseMesoParams): ShouldUseMesoResult 
 export function shouldUseMesoLegacy(
   round: number,
   _maxRounds: number,
-  _previousMesoRounds: number = 0
+  _previousMesoRounds: number = 0,
 ): boolean {
   // For backwards compatibility, use simple round check
   return round > MESO_PHASE_CONFIG.INITIAL_NORMAL_ROUNDS;
@@ -750,9 +1098,9 @@ function getConcessionRate(round: number, isPrimary: boolean): number {
   if (round <= 5) {
     return isPrimary ? 0.025 : 0.015; // 2.5% primary, 1.5% secondary
   } else if (round <= 10) {
-    return isPrimary ? 0.015 : 0.01;  // 1.5% primary, 1% secondary
+    return isPrimary ? 0.015 : 0.01; // 1.5% primary, 1% secondary
   } else {
-    return isPrimary ? 0.01 : 0.005;  // 1% primary, 0.5% secondary
+    return isPrimary ? 0.01 : 0.005; // 1% primary, 0.5% secondary
   }
 }
 
@@ -777,7 +1125,9 @@ export function generateDynamicMesoOptions(
   round: number,
   negotiationState: NegotiationState | null,
   previousMeso: PreviousMesoRound | null = null,
-  targetUtility: number = 0.65
+  targetUtility: number = 0.65,
+  currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const options: MesoOption[] = [];
   const variance_target = 0.03; // 3% variance for dynamic MESO
@@ -795,9 +1145,15 @@ export function generateDynamicMesoOptions(
     const termsEmphasis = preferenceProfile.termsWeight;
 
     // Get previous round prices to ensure we generate different values
-    const prevOffer1Price = previousMeso?.options.find(o => o.id.includes('offer1'))?.offer.total_price;
-    const prevOffer2Price = previousMeso?.options.find(o => o.id.includes('offer2'))?.offer.total_price;
-    const prevOffer3Price = previousMeso?.options.find(o => o.id.includes('offer3'))?.offer.total_price;
+    const prevOffer1Price = previousMeso?.options.find((o) =>
+      o.id.includes("offer1"),
+    )?.offer.total_price;
+    const prevOffer2Price = previousMeso?.options.find((o) =>
+      o.id.includes("offer2"),
+    )?.offer.total_price;
+    const prevOffer3Price = previousMeso?.options.find((o) =>
+      o.id.includes("offer3"),
+    )?.offer.total_price;
 
     // ============================================
     // Option 1: Price-Focused (with dynamic adjustment)
@@ -809,7 +1165,8 @@ export function generateDynamicMesoOptions(
       round,
       primaryConcession,
       priceEmphasis,
-      prevOffer1Price
+      prevOffer1Price,
+      lastAccordoCounterPrice,
     );
     const offer1Utility = calculateWeightedUtilityFromResolved(offer1, config);
 
@@ -817,9 +1174,9 @@ export function generateDynamicMesoOptions(
       id: `meso_${round}_offer1`,
       offer: offer1,
       utility: offer1Utility.totalUtility,
-      label: 'Offer 1',
-      description: '',
-      emphasis: ['price'],
+      label: "Offer 1",
+      description: `${formatMesoPrice(offer1.total_price, currency)}, ${fmtDays(offer1.delivery_days)} delivery, Net ${offer1.payment_terms_days}`,
+      emphasis: ["price"],
       tradeoffs: [],
     });
 
@@ -833,7 +1190,8 @@ export function generateDynamicMesoOptions(
       round,
       primaryConcession,
       termsEmphasis,
-      prevOffer2Price
+      prevOffer2Price,
+      lastAccordoCounterPrice,
     );
     const offer2Utility = calculateWeightedUtilityFromResolved(offer2, config);
 
@@ -841,9 +1199,9 @@ export function generateDynamicMesoOptions(
       id: `meso_${round}_offer2`,
       offer: offer2,
       utility: offer2Utility.totalUtility,
-      label: 'Offer 2',
-      description: '',
-      emphasis: ['payment_terms'],
+      label: "Offer 2",
+      description: `${formatMesoPrice(offer2.total_price, currency)}, Net ${offer2.payment_terms_days}, ${fmtMonths(offer2.warranty_months)} warranty`,
+      emphasis: ["payment_terms"],
       tradeoffs: [],
     });
 
@@ -856,7 +1214,8 @@ export function generateDynamicMesoOptions(
       vendorOffer,
       round,
       secondaryConcession,
-      prevOffer3Price
+      prevOffer3Price,
+      lastAccordoCounterPrice,
     );
     const offer3Utility = calculateWeightedUtilityFromResolved(offer3, config);
 
@@ -864,9 +1223,9 @@ export function generateDynamicMesoOptions(
       id: `meso_${round}_offer3`,
       offer: offer3,
       utility: offer3Utility.totalUtility,
-      label: 'Offer 3',
-      description: '',
-      emphasis: ['delivery', 'warranty'],
+      label: "Offer 3",
+      description: `${formatMesoPrice(offer3.total_price, currency)}, ${fmtDays(offer3.delivery_days)} delivery, ${fmtMonths(offer3.warranty_months)} warranty`,
+      emphasis: ["delivery", "warranty"],
       tradeoffs: [],
     });
 
@@ -876,7 +1235,9 @@ export function generateDynamicMesoOptions(
 
     const utilities = options.map((o) => o.utility);
     const avgUtility = utilities.reduce((a, b) => a + b, 0) / utilities.length;
-    const maxVariance = Math.max(...utilities.map((u) => Math.abs(u - avgUtility)));
+    const maxVariance = Math.max(
+      ...utilities.map((u) => Math.abs(u - avgUtility)),
+    );
 
     if (maxVariance > variance_target) {
       adjustOffersForVariance(options, config, avgUtility, variance_target);
@@ -884,20 +1245,34 @@ export function generateDynamicMesoOptions(
 
     // Recalculate final variance
     const finalUtilities = options.map((o) => o.utility);
-    const finalAvg = finalUtilities.reduce((a, b) => a + b, 0) / finalUtilities.length;
-    const finalVariance = Math.max(...finalUtilities.map((u) => Math.abs(u - finalAvg)));
+    const finalAvg =
+      finalUtilities.reduce((a, b) => a + b, 0) / finalUtilities.length;
+    const finalVariance = Math.max(
+      ...finalUtilities.map((u) => Math.abs(u - finalAvg)),
+    );
+
+    // Dedup guard (May 2026): when the convergence floor clamps Option 1's
+    // price discount, multiple options can end up identical on all visible
+    // dimensions (price, delivery, payment_terms). Detect and force variation.
+    deduplicateMesoOptions(options, config);
+
+    // Re-render labels with FINAL prices (Apr 2026): variance adjustment
+    // can mutate offer.total_price after the original description was set.
+    renderMesoDescriptions(options, currency);
 
     return {
       options,
       targetUtility: finalAvg,
       variance: finalVariance,
       success: true,
+      currency,
       // Flow control flags for phased negotiation
       showOthers: true,
       isFinal: false,
       inputDisabled: true,
-      disabledMessage: 'Select an offer above or click "Others" to enter your counter-offer',
-      phase: 'MESO_PRESENTATION' as NegotiationPhase,
+      disabledMessage:
+        'Select an offer above or click "Others" to enter your counter-offer',
+      phase: "MESO_PRESENTATION" as NegotiationPhase,
     };
   } catch (error) {
     return {
@@ -905,12 +1280,16 @@ export function generateDynamicMesoOptions(
       targetUtility,
       variance: 0,
       success: false,
-      reason: error instanceof Error ? error.message : 'Unknown error generating dynamic MESO options',
+      reason:
+        error instanceof Error
+          ? error.message
+          : "Unknown error generating dynamic MESO options",
+      currency,
       // Default flow control flags for failed generation
       showOthers: false,
       isFinal: false,
       inputDisabled: false,
-      phase: 'NORMAL_NEGOTIATION' as NegotiationPhase,
+      phase: "NORMAL_NEGOTIATION" as NegotiationPhase,
     };
   }
 }
@@ -925,18 +1304,22 @@ function generateDynamicPriceFocusedOffer(
   round: number,
   concessionRate: number,
   priceEmphasis: number,
-  previousPrice: number | null | undefined
+  previousPrice: number | null | undefined,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
   // Base aggressiveness adjusted by vendor preference
-  const baseAggressiveness = priority === 'HIGH' ? 0.20 : priority === 'LOW' ? 0.40 : 0.30;
+  const baseAggressiveness =
+    priority === "HIGH" ? 0.2 : priority === "LOW" ? 0.4 : 0.3;
   const emphasisAdjustment = (priceEmphasis - 0.5) * 0.1;
 
   // Round-based concession: move toward vendor each round
   const roundConcession = round * concessionRate;
 
-  let basePrice = targetPrice + priceRange * (baseAggressiveness + emphasisAdjustment + roundConcession);
+  let basePrice =
+    targetPrice +
+    priceRange * (baseAggressiveness + emphasisAdjustment + roundConcession);
 
   // Ensure different from previous round (at least $50 or 0.5% different)
   if (previousPrice != null) {
@@ -952,10 +1335,15 @@ function generateDynamicPriceFocusedOffer(
   }
   basePrice = Math.min(basePrice, maxAcceptablePrice);
 
+  // Convergence floor (Apr 2026): never regress below our last counter.
+  basePrice = applyConvergenceFloor(basePrice, config, lastAccordoCounterPrice);
+
   // BEST price: 2.5% discount from base
   let bestPrice = basePrice * 0.975;
+  // Floor at convergence too (so the 2.5% discount doesn't drop us below it)
+  bestPrice = applyConvergenceFloor(bestPrice, config, lastAccordoCounterPrice);
   bestPrice = Math.max(config.targetPrice, bestPrice);
-  bestPrice = Math.round(bestPrice * 100) / 100;
+  bestPrice = humanRoundPrice(Math.round(bestPrice * 100) / 100);
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -987,18 +1375,22 @@ function generateDynamicTermsFocusedOffer(
   round: number,
   concessionRate: number,
   termsEmphasis: number,
-  previousPrice: number | null | undefined
+  previousPrice: number | null | undefined,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
   // Base aggressiveness for medium price
-  const baseAggressiveness = priority === 'HIGH' ? 0.30 : priority === 'LOW' ? 0.50 : 0.40;
+  const baseAggressiveness =
+    priority === "HIGH" ? 0.3 : priority === "LOW" ? 0.5 : 0.4;
   const emphasisAdjustment = (termsEmphasis - 0.5) * 0.1;
 
   // Round-based concession
   const roundConcession = round * concessionRate;
 
-  let mediumPrice = targetPrice + priceRange * (baseAggressiveness + emphasisAdjustment + roundConcession);
+  let mediumPrice =
+    targetPrice +
+    priceRange * (baseAggressiveness + emphasisAdjustment + roundConcession);
 
   // Ensure different from previous round
   if (previousPrice != null) {
@@ -1012,7 +1404,12 @@ function generateDynamicTermsFocusedOffer(
     mediumPrice = Math.min(mediumPrice, vendorOffer.total_price);
   }
   mediumPrice = Math.min(mediumPrice, maxAcceptablePrice);
-  mediumPrice = Math.round(mediumPrice * 100) / 100;
+  mediumPrice = applyConvergenceFloor(
+    mediumPrice,
+    config,
+    lastAccordoCounterPrice,
+  );
+  mediumPrice = humanRoundPrice(Math.round(mediumPrice * 100) / 100);
 
   // BEST payment terms (longest)
   const bestPaymentDays = config.paymentTermsMaxDays;
@@ -1043,17 +1440,20 @@ function generateDynamicBalancedOffer(
   vendorOffer: ExtendedOffer,
   round: number,
   concessionRate: number,
-  previousPrice: number | null | undefined
+  previousPrice: number | null | undefined,
+  lastAccordoCounterPrice?: number | null,
 ): ExtendedOffer {
   const { targetPrice, maxAcceptablePrice, priceRange, priority } = config;
 
   // Base aggressiveness for medium price
-  const baseAggressiveness = priority === 'HIGH' ? 0.30 : priority === 'LOW' ? 0.50 : 0.40;
+  const baseAggressiveness =
+    priority === "HIGH" ? 0.3 : priority === "LOW" ? 0.5 : 0.4;
 
   // Round-based concession
   const roundConcession = round * concessionRate;
 
-  let mediumPrice = targetPrice + priceRange * (baseAggressiveness + roundConcession);
+  let mediumPrice =
+    targetPrice + priceRange * (baseAggressiveness + roundConcession);
 
   // Ensure different from previous round
   if (previousPrice != null) {
@@ -1067,7 +1467,12 @@ function generateDynamicBalancedOffer(
     mediumPrice = Math.min(mediumPrice, vendorOffer.total_price);
   }
   mediumPrice = Math.min(mediumPrice, maxAcceptablePrice);
-  mediumPrice = Math.round(mediumPrice * 100) / 100;
+  mediumPrice = applyConvergenceFloor(
+    mediumPrice,
+    config,
+    lastAccordoCounterPrice,
+  );
+  mediumPrice = humanRoundPrice(Math.round(mediumPrice * 100) / 100);
 
   // MEDIUM payment terms
   const mediumPaymentDays = getMediumPaymentDays(config);
@@ -1088,7 +1493,6 @@ function generateDynamicBalancedOffer(
   };
 }
 
-
 // ============================================
 // FINAL MESO (75%+ Utility Trigger)
 // ============================================
@@ -1102,7 +1506,7 @@ function generateDynamicBalancedOffer(
 export function shouldTriggerFinalMeso(
   utilityScore: number,
   round: number,
-  threshold: number = 0.75
+  threshold: number = 0.75,
 ): boolean {
   // Only trigger after round 2 (give some negotiation time)
   if (round < 2) return false;
@@ -1120,7 +1524,9 @@ export function generateFinalMesoOptions(
   config: ResolvedNegotiationConfig,
   vendorOffer: ExtendedOffer,
   round: number,
-  currentUtility: number
+  currentUtility: number,
+  currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const options: MesoOption[] = [];
 
@@ -1131,36 +1537,47 @@ export function generateFinalMesoOptions(
     // Use small price variation (2-3%) for final closure
 
     // Base price for finals: closer to vendor's price
-    const vendorPrice = vendorOffer.total_price ?? (targetPrice + priceRange * 0.7);
+    const vendorPrice =
+      vendorOffer.total_price ?? targetPrice + priceRange * 0.7;
 
     // ============================================
     // Final Offer 1: Best Price + Best Delivery + Medium Terms + Min Warranty
     // Slight discount from vendor price, fastest delivery
     // ============================================
 
-    const finalPrice1 = Math.round((vendorPrice * 0.97) * 100) / 100; // 3% off vendor
+    const finalPrice1 = humanRoundPrice(Math.round(vendorPrice * 0.97 * 100) / 100); // 3% off vendor
     const mediumTerms = getMediumPaymentDays(config);
     const bestDelivery = getBestDeliveryDays(config, vendorOffer);
     const minWarranty = Math.max(0, config.warrantyPeriodMonths - 6);
 
     const finalOffer1: ExtendedOffer = {
-      total_price: Math.max(targetPrice, finalPrice1),
+      total_price: applyConvergenceFloor(
+        Math.max(targetPrice, finalPrice1),
+        config,
+        lastAccordoCounterPrice,
+      ),
       payment_terms: `Net ${mediumTerms}`,
       payment_terms_days: mediumTerms,
       delivery_days: bestDelivery,
       warranty_months: minWarranty,
       partial_delivery_allowed: config.partialDeliveryAllowed,
     };
-    const finalUtility1 = calculateWeightedUtilityFromResolved(finalOffer1, config);
+    const finalUtility1 = calculateWeightedUtilityFromResolved(
+      finalOffer1,
+      config,
+    );
 
     options.push({
       id: `meso_${round}_final1`,
       offer: finalOffer1,
       utility: finalUtility1.totalUtility,
-      label: 'Offer 1',
-      description: `Best price ($${finalOffer1.total_price?.toLocaleString()}) with ${bestDelivery}-day delivery`,
-      emphasis: ['price', 'delivery'],
-      tradeoffs: [`${minWarranty} months warranty`, `Net ${mediumTerms} payment`],
+      label: "Offer 1",
+      description: `${formatMesoPrice(finalOffer1.total_price, currency)}, ${fmtDays(bestDelivery)} delivery, Net ${mediumTerms}`,
+      emphasis: ["price", "delivery"],
+      tradeoffs: [
+        `${minWarranty} ${minWarranty === 1 ? "month" : "months"} warranty`,
+        `Net ${mediumTerms} payment`,
+      ],
     });
 
     // ============================================
@@ -1173,23 +1590,33 @@ export function generateFinalMesoOptions(
     const standardWarranty = config.warrantyPeriodMonths;
 
     const finalOffer2: ExtendedOffer = {
-      total_price: Math.round(vendorPrice * 100) / 100,
+      total_price: humanRoundPrice(applyConvergenceFloor(
+        Math.round(vendorPrice * 100) / 100,
+        config,
+        lastAccordoCounterPrice,
+      )),
       payment_terms: `Net ${bestTerms}`,
       payment_terms_days: bestTerms,
       delivery_days: mediumDelivery,
       warranty_months: standardWarranty,
       partial_delivery_allowed: config.partialDeliveryAllowed,
     };
-    const finalUtility2 = calculateWeightedUtilityFromResolved(finalOffer2, config);
+    const finalUtility2 = calculateWeightedUtilityFromResolved(
+      finalOffer2,
+      config,
+    );
 
     options.push({
       id: `meso_${round}_final2`,
       offer: finalOffer2,
       utility: finalUtility2.totalUtility,
-      label: 'Offer 2',
-      description: `Extended Net ${bestTerms} payment terms with ${standardWarranty} months warranty`,
-      emphasis: ['payment_terms'],
-      tradeoffs: [`$${finalOffer2.total_price?.toLocaleString()} price`, `${mediumDelivery}-day delivery`],
+      label: "Offer 2",
+      description: `${formatMesoPrice(finalOffer2.total_price, currency)}, Net ${bestTerms}, ${standardWarranty}-month warranty`,
+      emphasis: ["payment_terms"],
+      tradeoffs: [
+        `${formatMesoPrice(finalOffer2.total_price, currency)} price`,
+        `${fmtDays(mediumDelivery)} delivery`,
+      ],
     });
 
     // ============================================
@@ -1200,41 +1627,54 @@ export function generateFinalMesoOptions(
     const extendedWarranty = config.warrantyPeriodMonths + 6;
 
     const finalOffer3: ExtendedOffer = {
-      total_price: Math.round(vendorPrice * 100) / 100,
+      total_price: humanRoundPrice(applyConvergenceFloor(
+        Math.round(vendorPrice * 100) / 100,
+        config,
+        lastAccordoCounterPrice,
+      )),
       payment_terms: `Net ${mediumTerms}`,
       payment_terms_days: mediumTerms,
       delivery_days: bestDelivery,
       warranty_months: extendedWarranty,
       partial_delivery_allowed: true,
     };
-    const finalUtility3 = calculateWeightedUtilityFromResolved(finalOffer3, config);
+    const finalUtility3 = calculateWeightedUtilityFromResolved(
+      finalOffer3,
+      config,
+    );
 
     options.push({
       id: `meso_${round}_final3`,
       offer: finalOffer3,
       utility: finalUtility3.totalUtility,
-      label: 'Offer 3',
-      description: `Fast ${bestDelivery}-day delivery with extended ${extendedWarranty} months warranty`,
-      emphasis: ['delivery', 'warranty'],
-      tradeoffs: [`$${finalOffer3.total_price?.toLocaleString()} price`, `Net ${mediumTerms} payment`],
+      label: "Offer 3",
+      description: `${formatMesoPrice(finalOffer3.total_price, currency)}, ${fmtDays(bestDelivery)} delivery, ${fmtMonths(extendedWarranty)} warranty`,
+      emphasis: ["delivery", "warranty"],
+      tradeoffs: [
+        `${formatMesoPrice(finalOffer3.total_price, currency)} price`,
+        `Net ${mediumTerms} payment`,
+      ],
     });
 
     // Calculate final variance
     const utilities = options.map((o) => o.utility);
     const avgUtility = utilities.reduce((a, b) => a + b, 0) / utilities.length;
-    const finalVariance = Math.max(...utilities.map((u) => Math.abs(u - avgUtility)));
+    const finalVariance = Math.max(
+      ...utilities.map((u) => Math.abs(u - avgUtility)),
+    );
 
     return {
       options,
       targetUtility: avgUtility,
       variance: finalVariance,
       success: true,
+      currency,
       // Flow control flags for FINAL MESO (no Others option)
       showOthers: false,
       isFinal: true,
       inputDisabled: true,
-      disabledMessage: 'Select one of the final offers above to close the deal',
-      phase: 'FINAL_MESO' as NegotiationPhase,
+      disabledMessage: "Select one of the final offers above to close the deal",
+      phase: "FINAL_MESO" as NegotiationPhase,
     };
   } catch (error) {
     return {
@@ -1242,12 +1682,16 @@ export function generateFinalMesoOptions(
       targetUtility: currentUtility,
       variance: 0,
       success: false,
-      reason: error instanceof Error ? error.message : 'Unknown error generating final MESO options',
+      reason:
+        error instanceof Error
+          ? error.message
+          : "Unknown error generating final MESO options",
+      currency,
       // Default flow control flags for failed generation
       showOthers: false,
       isFinal: false,
       inputDisabled: false,
-      phase: 'NORMAL_NEGOTIATION' as NegotiationPhase,
+      phase: "NORMAL_NEGOTIATION" as NegotiationPhase,
     };
   }
 }
@@ -1261,7 +1705,7 @@ export function generateFinalMesoOptions(
  */
 export function updateMesoCycleStateOnShow(
   state: MesoCycleState | undefined,
-  round: number
+  round: number,
 ): MesoCycleState {
   const currentState = state || {
     mesoCycleNumber: 0,
@@ -1285,7 +1729,7 @@ export function updateMesoCycleStateOnShow(
  */
 export function updateMesoCycleStateOnOthersSelection(
   state: MesoCycleState | undefined,
-  round: number
+  round: number,
 ): MesoCycleState {
   const currentState = state || {
     mesoCycleNumber: 1,
@@ -1307,16 +1751,18 @@ export function updateMesoCycleStateOnOthersSelection(
  * Increment round counter in current post-Others cycle
  */
 export function incrementPostOthersRound(
-  state: MesoCycleState | undefined
+  state: MesoCycleState | undefined,
 ): MesoCycleState {
   if (!state || !state.inPostOthersPhase) {
-    return state || {
-      mesoCycleNumber: 0,
-      lastMesoShownAtRound: 0,
-      roundsInCurrentCycle: 0,
-      othersSelectedCount: 0,
-      inPostOthersPhase: false,
-    };
+    return (
+      state || {
+        mesoCycleNumber: 0,
+        lastMesoShownAtRound: 0,
+        roundsInCurrentCycle: 0,
+        othersSelectedCount: 0,
+        inPostOthersPhase: false,
+      }
+    );
   }
 
   return {
@@ -1330,7 +1776,7 @@ export function incrementPostOthersRound(
  */
 export function updateFinalOfferStateOnConfirm(
   state: FinalOfferState | undefined,
-  stalledPrice: number
+  stalledPrice: number,
 ): FinalOfferState {
   return {
     vendorConfirmedFinal: true,
@@ -1343,7 +1789,7 @@ export function updateFinalOfferStateOnConfirm(
  * Update final offer state when final MESO is shown
  */
 export function updateFinalOfferStateOnMesoShown(
-  state: FinalOfferState | undefined
+  state: FinalOfferState | undefined,
 ): FinalOfferState {
   const currentState = state || {
     vendorConfirmedFinal: false,
@@ -1363,21 +1809,30 @@ export function updateFinalOfferStateOnMesoShown(
 export function checkEscalationTriggers(
   mesoCycleState: MesoCycleState | undefined,
   finalOfferState: FinalOfferState | undefined,
-  lastOthersPrice?: number
+  lastOthersPrice?: number,
 ): { shouldEscalate: boolean; reason: string } {
   // Trigger 1: 5 MESO cycles exhausted
-  if (mesoCycleState && mesoCycleState.mesoCycleNumber > MESO_PHASE_CONFIG.MAX_MESO_CYCLES) {
-    return { shouldEscalate: true, reason: 'Max MESO cycles reached' };
+  if (
+    mesoCycleState &&
+    mesoCycleState.mesoCycleNumber > MESO_PHASE_CONFIG.MAX_MESO_CYCLES
+  ) {
+    return { shouldEscalate: true, reason: "Max MESO cycles reached" };
   }
 
   // Trigger 2: Final MESO shown but vendor still selecting Others at same price
   if (finalOfferState?.finalMesoShown && lastOthersPrice !== undefined) {
-    if (finalOfferState.stalledPrice !== undefined && lastOthersPrice === finalOfferState.stalledPrice) {
-      return { shouldEscalate: true, reason: 'Vendor persists at stalled price after final MESO' };
+    if (
+      finalOfferState.stalledPrice !== undefined &&
+      lastOthersPrice === finalOfferState.stalledPrice
+    ) {
+      return {
+        shouldEscalate: true,
+        reason: "Vendor persists at stalled price after final MESO",
+      };
     }
   }
 
-  return { shouldEscalate: false, reason: '' };
+  return { shouldEscalate: false, reason: "" };
 }
 
 /**
@@ -1387,7 +1842,9 @@ export function checkEscalationTriggers(
 export function generateMesoFromVendorPrice(
   config: ResolvedNegotiationConfig,
   vendorPrice: number,
-  round: number
+  round: number,
+  currency: SupportedCurrency = DEFAULT_CURRENCY,
+  lastAccordoCounterPrice?: number | null,
 ): MesoResult {
   const { maxAcceptablePrice, targetPrice } = config;
 
@@ -1401,12 +1858,17 @@ export function generateMesoFromVendorPrice(
     priceAdjusted = true;
   }
 
-  // Generate 3 offers based on the base price
-  const offer1Price = Math.round(basePrice * 0.97 * 100) / 100; // 3% below
-  const offer2Price = Math.round(basePrice * 100) / 100;
-  const offer3Price = Math.round(basePrice * 1.02 * 100) / 100; // 2% above (up to max)
+  // Convergence floor (Apr 2026): never regress below our last counter.
+  basePrice = applyConvergenceFloor(basePrice, config, lastAccordoCounterPrice);
 
-  const mediumTerms = Math.round((config.paymentTermsMinDays + config.paymentTermsMaxDays) / 2);
+  // Generate 3 offers based on the base price
+  const offer1Price = humanRoundPrice(Math.round(basePrice * 0.97 * 100) / 100); // 3% below
+  const offer2Price = humanRoundPrice(Math.round(basePrice * 100) / 100);
+  const offer3Price = humanRoundPrice(Math.round(basePrice * 1.02 * 100) / 100); // 2% above (up to max)
+
+  const mediumTerms = Math.round(
+    (config.paymentTermsMinDays + config.paymentTermsMaxDays) / 2,
+  );
   const bestTerms = config.paymentTermsMaxDays;
   const bestDelivery = 14; // Fast delivery
   const mediumDelivery = 21;
@@ -1425,10 +1887,13 @@ export function generateMesoFromVendorPrice(
         warranty_months: minWarranty,
       },
       utility: 0.8,
-      label: 'Offer 1',
-      description: `Best price ($${Math.max(targetPrice, offer1Price).toLocaleString()}) with ${bestDelivery}-day delivery`,
-      emphasis: ['price', 'delivery'],
-      tradeoffs: [`${minWarranty} months warranty`, `Net ${mediumTerms} payment`],
+      label: "Offer 1",
+      description: `${formatMesoPrice(Math.max(targetPrice, offer1Price), currency)}, ${fmtDays(bestDelivery)} delivery, Net ${mediumTerms}`,
+      emphasis: ["price", "delivery"],
+      tradeoffs: [
+        `${minWarranty} ${minWarranty === 1 ? "month" : "months"} warranty`,
+        `Net ${mediumTerms} payment`,
+      ],
     },
     {
       id: `meso_${round}_vendorprice2`,
@@ -1440,10 +1905,13 @@ export function generateMesoFromVendorPrice(
         warranty_months: standardWarranty,
       },
       utility: 0.8,
-      label: 'Offer 2',
-      description: `Extended Net ${bestTerms} payment terms with ${standardWarranty} months warranty`,
-      emphasis: ['payment_terms'],
-      tradeoffs: [`$${offer2Price.toLocaleString()} price`, `${mediumDelivery}-day delivery`],
+      label: "Offer 2",
+      description: `${formatMesoPrice(offer2Price, currency)}, Net ${bestTerms}, ${standardWarranty}-month warranty`,
+      emphasis: ["payment_terms"],
+      tradeoffs: [
+        `${formatMesoPrice(offer2Price, currency)} price`,
+        `${fmtDays(mediumDelivery)} delivery`,
+      ],
     },
     {
       id: `meso_${round}_vendorprice3`,
@@ -1455,10 +1923,13 @@ export function generateMesoFromVendorPrice(
         warranty_months: extendedWarranty,
       },
       utility: 0.8,
-      label: 'Offer 3',
-      description: `Fast ${bestDelivery}-day delivery with extended ${extendedWarranty} months warranty`,
-      emphasis: ['delivery', 'warranty'],
-      tradeoffs: [`$${Math.min(offer3Price, maxAcceptablePrice).toLocaleString()} price`, `Net ${mediumTerms} payment`],
+      label: "Offer 3",
+      description: `${formatMesoPrice(Math.min(offer3Price, maxAcceptablePrice), currency)}, ${fmtDays(bestDelivery)} delivery, ${fmtMonths(extendedWarranty)} warranty`,
+      emphasis: ["delivery", "warranty"],
+      tradeoffs: [
+        `${formatMesoPrice(Math.min(offer3Price, maxAcceptablePrice), currency)} price`,
+        `Net ${mediumTerms} payment`,
+      ],
     },
   ];
 
@@ -1467,12 +1938,13 @@ export function generateMesoFromVendorPrice(
     targetUtility: 0.8,
     variance: 0.02,
     success: true,
+    currency,
     showOthers: false, // Final MESO - no Others option
     isFinal: true,
     inputDisabled: true,
     disabledMessage: priceAdjusted
-      ? 'Your price was above our maximum. Please select from the adjusted offers below.'
-      : 'Select one of the final offers above to close the deal',
-    phase: 'FINAL_MESO' as NegotiationPhase,
+      ? "Your price was above our maximum. Please select from the adjusted offers below."
+      : "Select one of the final offers above to close the deal",
+    phase: "FINAL_MESO" as NegotiationPhase,
   };
 }

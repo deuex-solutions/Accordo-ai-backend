@@ -1,8 +1,18 @@
 'use strict';
+
+async function safeCreateTable(queryInterface, tableName, attributes, options) {
+  try {
+    await queryInterface.createTable(tableName, attributes, options);
+  } catch (e) {
+    if (e.message && e.message.includes('already exists')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── Products ──
-    await queryInterface.createTable('Products', {
+    await safeCreateTable(queryInterface,'Products', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -61,7 +71,7 @@ module.exports = {
     });
 
     // ── Projects ──
-    await queryInterface.createTable('Projects', {
+    await safeCreateTable(queryInterface,'Projects', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,
@@ -109,7 +119,7 @@ module.exports = {
     });
 
     // ── ProjectPocs ──
-    await queryInterface.createTable('ProjectPocs', {
+    await safeCreateTable(queryInterface,'ProjectPocs', {
       id: {
         type: Sequelize.INTEGER,
         autoIncrement: true,

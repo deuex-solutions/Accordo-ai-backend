@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router } from 'express';
 import {
   createVendor,
   createVendorWithCompany,
@@ -9,11 +9,11 @@ import {
   getVendor,
   updateVendor,
   deleteVendor,
-} from "./vendor.controller.js";
+} from './vendor.controller.js';
 import {
   authMiddleware,
   checkPermission,
-} from "../../middlewares/auth.middleware.js";
+} from '../../middlewares/auth.middleware.js';
 
 const vendorRouter = Router();
 const moduleId = 5;
@@ -27,100 +27,68 @@ const moduleId = 5;
  * GET /create-vendor/:companyId?step=5 - Review (read-only)
  */
 vendorRouter.post(
-  "/create-vendor",
+  '/create-vendor',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  createVendorStep,
+  createVendorStep
 );
 
 vendorRouter.put(
-  "/create-vendor/:companyId",
+  '/create-vendor/:companyId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  updateVendorStep,
+  updateVendorStep
 );
 
 vendorRouter.get(
-  "/create-vendor/:companyId",
+  '/create-vendor/:companyId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getVendorForReview,
+  getVendorForReview
 );
 
 // Legacy unified endpoint (kept for backward compatibility)
 vendorRouter.post(
-  "/company/create",
+  '/company/create',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  createVendorWithCompany,
+  createVendorWithCompany
 );
 
 // Legacy endpoint: Create vendor only (kept for backward compatibility)
 vendorRouter.post(
-  "/create",
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  createVendor,
+  createVendor
 );
 
 vendorRouter.get(
-  "/get-all",
+  '/',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getAllVendors,
+  getAllVendors
 );
 
 vendorRouter.get(
-  "/get/:vendorid",
+  '/:vendorId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getVendor,
+  getVendor
 );
 
 vendorRouter.put(
-  "/update/:vendorid",
+  '/:vendorId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 2),
-  updateVendor,
+  updateVendor
 );
 
 vendorRouter.delete(
-  "/delete/:vendorid",
+  '/:vendorId',
   authMiddleware,
   (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  deleteVendor,
-);
-
-// RESTful aliases (frontend uses these; verbose paths above kept for back-compat)
-vendorRouter.post(
-  "/",
-  authMiddleware,
-  (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  createVendor,
-);
-vendorRouter.get(
-  "/",
-  authMiddleware,
-  (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getAllVendors,
-);
-vendorRouter.get(
-  "/:vendorid",
-  authMiddleware,
-  (req, res, next) => checkPermission(req, res, next, moduleId, 1),
-  getVendor,
-);
-vendorRouter.put(
-  "/:vendorid",
-  authMiddleware,
-  (req, res, next) => checkPermission(req, res, next, moduleId, 2),
-  updateVendor,
-);
-vendorRouter.delete(
-  "/:vendorid",
-  authMiddleware,
-  (req, res, next) => checkPermission(req, res, next, moduleId, 3),
-  deleteVendor,
+  deleteVendor
 );
 
 export default vendorRouter;

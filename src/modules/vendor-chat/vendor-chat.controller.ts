@@ -10,6 +10,8 @@ import {
   selectMesoOptionService,
   submitOthersService,
   confirmFinalOfferService,
+  submitInitialDiscountService,
+  submitPaymentTermsService,
 } from './vendor-chat.service.js';
 import {
   submitQuoteSchema,
@@ -21,6 +23,8 @@ import {
   mesoSelectSchema,
   mesoOthersSchema,
   finalOfferConfirmSchema,
+  submitDiscountSchema,
+  submitPaymentTermsSchema,
 } from './vendor-chat.validator.js';
 import { CustomError } from '../../utils/custom-error.js';
 
@@ -351,6 +355,74 @@ export const confirmFinalOffer = async (
   }
 };
 
+/**
+ * Submit initial discount (Feature 1)
+ * POST /api/vendor-chat/discount
+ */
+export const submitDiscount = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { error, value } = submitDiscountSchema.validate(req.body);
+    if (error) {
+      res.status(400).json({ message: error.details[0].message });
+      return;
+    }
+
+    const { uniqueToken, percent } = value;
+    const result = await submitInitialDiscountService(uniqueToken, percent);
+
+    res.status(200).json({
+      message: 'Discount submitted successfully',
+      data: {
+        vendorMessage: result.vendorMessage,
+        pmMessage: result.pmMessage,
+        decision: result.decision,
+        deal: result.deal,
+        meso: result.meso,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Submit payment terms (Feature 2)
+ * POST /api/vendor-chat/payment-terms
+ */
+export const submitPaymentTerms = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { error, value } = submitPaymentTermsSchema.validate(req.body);
+    if (error) {
+      res.status(400).json({ message: error.details[0].message });
+      return;
+    }
+
+    const { uniqueToken, days } = value;
+    const result = await submitPaymentTermsService(uniqueToken, days);
+
+    res.status(200).json({
+      message: 'Payment terms submitted successfully',
+      data: {
+        vendorMessage: result.vendorMessage,
+        pmMessage: result.pmMessage,
+        decision: result.decision,
+        deal: result.deal,
+        meso: result.meso,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   submitQuote,
   checkCanEditQuote,
@@ -362,4 +434,6 @@ export default {
   selectMesoOption,
   submitOthers,
   confirmFinalOffer,
+  submitDiscount,
+  submitPaymentTerms,
 };

@@ -20,19 +20,9 @@
     "noImplicitReturns": false,
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": false,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@config/*": ["src/config/*"],
-      "@models/*": ["src/models/*"],
-      "@modules/*": ["src/modules/*"],
-      "@middlewares/*": ["src/middlewares/*"],
-      "@services/*": ["src/services/*"],
-      "@utils/*": ["src/utils/*"],
-      "@types/*": ["src/types/*"]
+      "*": ["./src/*"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "migrations", "**/*.test.ts", "**/*.spec.ts", "scripts/**/*", "tests/**/*"]
+  "include": ["./src/**/*.ts", "./src/models/**/*.ts"]
 }

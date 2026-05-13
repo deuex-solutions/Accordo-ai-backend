@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveNegotiationConfig,
   calculateWeightedUtilityFromResolved,
-} from '../../../src/modules/chatbot/engine/weightedUtility.js';
+} from '../../../src/modules/chatbot/engine/weighted-utility.js';
 import { DEFAULT_WEIGHTS } from '../../../src/modules/chatbot/engine/types.js';
 import type { ExtendedOffer, WizardConfig } from '../../../src/modules/chatbot/engine/types.js';
 
