@@ -33,7 +33,7 @@ Be professional and direct. Provide brief reasoning if helpful.
 DO NOT mention utility scores, algorithms, or internal calculations.
 Keep response under 150 words.`,
 
-  COUNTER_INDIRECT: (data: { decision: Decision }) => `You are Accordo, an AI negotiation assistant.
+  COUNTER_INDIRECT: (_data: { decision: Decision }) => `You are Accordo, an AI negotiation assistant.
 The vendor's offer isn't quite acceptable yet. Respond strategically without revealing exact counter-offer values.
 Suggest that you need better terms. Be polite but firm.
 DO NOT mention utility scores, algorithms, or specific numbers unless absolutely necessary.

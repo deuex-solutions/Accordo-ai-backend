@@ -1,7 +1,16 @@
-import type { Request, Response, NextFunction } from 'express';
-import path from 'path';
-import { extractDocumentNumber, DocumentType } from './document.service.js';
-import logger from '../../config/logger.js';
+import type { Request, Response, NextFunction } from "express";
+import path from "path";
+import { extractDocumentNumber, DocumentType } from "./document.service.js";
+import env from "../../config/env.js";
+import logger from "../../config/logger.js";
+
+/** Sent when ENABLE_DOC_OCR=false — keeps the route registered (so clients
+ *  don't get a 404) but communicates that the feature is intentionally off. */
+const OCR_DISABLED_RESPONSE = {
+  success: false,
+  message:
+    "Document OCR is disabled on this server. Set ENABLE_DOC_OCR=true to enable.",
+};
 
 /**
  * Extract document number from uploaded file
@@ -10,17 +19,21 @@ import logger from '../../config/logger.js';
 export const extractDocument = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
+  if (!env.features.enableDocOcr) {
+    res.status(501).json(OCR_DISABLED_RESPONSE);
+    return;
+  }
   try {
     const { documentType } = req.body;
 
     // Validate document type
-    const validTypes: DocumentType[] = ['GST', 'PAN', 'MSME', 'CI'];
+    const validTypes: DocumentType[] = ["GST", "PAN", "MSME", "CI"];
     if (!documentType || !validTypes.includes(documentType)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid document type. Must be one of: GST, PAN, MSME, CI',
+        message: "Invalid document type. Must be one of: GST, PAN, MSME, CI",
       });
       return;
     }
@@ -29,19 +42,22 @@ export const extractDocument = async (
     if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       res.status(400).json({
         success: false,
-        message: 'No file uploaded',
+        message: "No file uploaded",
       });
       return;
     }
 
     const file = req.files[0];
-    const uploadPath = path.resolve(process.cwd(), 'uploads');
+    const uploadPath = path.resolve(process.cwd(), "uploads");
     const filePath = path.join(uploadPath, file.filename);
 
     logger.info(`Processing ${documentType} document: ${file.filename}`);
 
     // Extract document number
-    const result = await extractDocumentNumber(filePath, documentType as DocumentType);
+    const result = await extractDocumentNumber(
+      filePath,
+      documentType as DocumentType,
+    );
 
     res.status(200).json({
       success: result.success,
@@ -57,7 +73,7 @@ export const extractDocument = async (
       },
     });
   } catch (error) {
-    logger.error('Document extraction controller error:', error);
+    logger.error("Document extraction controller error:", error);
     next(error);
   }
 };
@@ -69,8 +85,12 @@ export const extractDocument = async (
 export const extractDocumentBatch = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
+  if (!env.features.enableDocOcr) {
+    res.status(501).json(OCR_DISABLED_RESPONSE);
+    return;
+  }
   try {
     const { documents } = req.body;
 
@@ -78,7 +98,7 @@ export const extractDocumentBatch = async (
     if (!documents || !Array.isArray(documents)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid request. Expected documents array.',
+        message: "Invalid request. Expected documents array.",
       });
       return;
     }
@@ -86,20 +106,25 @@ export const extractDocumentBatch = async (
     if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       res.status(400).json({
         success: false,
-        message: 'No files uploaded',
+        message: "No files uploaded",
       });
       return;
     }
 
-    const uploadPath = path.resolve(process.cwd(), 'uploads');
+    const uploadPath = path.resolve(process.cwd(), "uploads");
     const results: Record<string, any> = {};
 
     for (const file of req.files) {
-      const docConfig = documents.find((d: any) => d.fieldName === file.fieldname);
+      const docConfig = documents.find(
+        (d: any) => d.fieldName === file.fieldname,
+      );
       if (!docConfig) continue;
 
       const filePath = path.join(uploadPath, file.filename);
-      const result = await extractDocumentNumber(filePath, docConfig.documentType as DocumentType);
+      const result = await extractDocumentNumber(
+        filePath,
+        docConfig.documentType as DocumentType,
+      );
 
       results[docConfig.fieldName] = {
         success: result.success,
@@ -112,11 +137,11 @@ export const extractDocumentBatch = async (
 
     res.status(200).json({
       success: true,
-      message: 'Batch extraction completed',
+      message: "Batch extraction completed",
       data: results,
     });
   } catch (error) {
-    logger.error('Batch document extraction error:', error);
+    logger.error("Batch document extraction error:", error);
     next(error);
   }
 };

@@ -74,7 +74,7 @@ export function generateDeadlines(status: string): {
   maxDeliveryDate: Date;
   negotiationClosureDate: Date;
 } {
-  const now = new Date();
+  // removed dead: const _now = new Date();
 
   switch (status) {
     case 'Draft':

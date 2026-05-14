@@ -14,7 +14,6 @@ import {
   type SignUpData,
   type ForgotPasswordData,
   type OtpData,
-  type RefreshTokenData,
 } from "./auth.validator.js";
 import repo from "./auth.repo.js";
 import companyRepo from "../company/company.repo.js";
@@ -95,7 +94,10 @@ const buildTransporter = (): Transporter => {
  * @returns Update result
  * @throws CustomError if validation fails
  */
-export const resetPasswordService = async (userId: string, password: string): Promise<[affectedCount: number]> => {
+export const resetPasswordService = async (
+  userId: string,
+  password: string,
+): Promise<[affectedCount: number]> => {
   const { error } = validateUserId({ user_id: Number(userId), password });
   if (error) {
     throw new CustomError(error.details[0].message, 400);
@@ -127,12 +129,14 @@ const generateStrongPassword = (): string => {
  * @returns Email send result
  * @throws CustomError if user not found
  */
-export const resetPasswordAutoService = async (userId: string): Promise<unknown> => {
+export const resetPasswordAutoService = async (
+  userId: string,
+): Promise<unknown> => {
   const password = generateStrongPassword();
   const hashedPassword = await hash(password, 10);
 
   await repo.updatePassword(Number(userId), hashedPassword);
-  const user = await repo.findUser(Number(userId)) as User | null;
+  const user = (await repo.findUser(Number(userId))) as User | null;
   if (!user) {
     throw new CustomError("User not found", 404);
   }
@@ -154,7 +158,9 @@ export const resetPasswordAutoService = async (userId: string): Promise<unknown>
  * @returns User data
  * @throws CustomError if validation fails or OTP invalid
  */
-export const verifyOtpService = async (resetPasswordData: OtpData): Promise<unknown> => {
+export const verifyOtpService = async (
+  resetPasswordData: OtpData,
+): Promise<unknown> => {
   const { error } = validateOtpData(resetPasswordData);
   if (error) {
     throw new CustomError(error.details[0].message, 400);
@@ -174,13 +180,15 @@ export const verifyOtpService = async (resetPasswordData: OtpData): Promise<unkn
  * @returns Email send result
  * @throws CustomError if validation fails or user not found
  */
-export const forgotPasswordService = async (userData: ForgotPasswordData): Promise<unknown> => {
+export const forgotPasswordService = async (
+  userData: ForgotPasswordData,
+): Promise<unknown> => {
   const { error } = validateForgotPassword(userData);
   if (error) {
     throw new CustomError(error.details[0].message, 400);
   }
 
-  const user = await repo.findUserByEmail(userData.email) as User | null;
+  const user = (await repo.findUserByEmail(userData.email)) as User | null;
   if (!user) {
     throw new CustomError("User not found", 409);
   }
@@ -210,7 +218,9 @@ export const forgotPasswordService = async (userData: ForgotPasswordData): Promi
  * @returns Created user data
  * @throws CustomError if validation fails or email exists
  */
-export const signUpService = async (userData: SignUpData): Promise<AuthResponse> => {
+export const signUpService = async (
+  userData: SignUpData,
+): Promise<AuthResponse> => {
   const { error } = validateSignUp(userData);
   if (error) {
     throw new CustomError(error.details[0].message, 400);
@@ -226,16 +236,27 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
   try {
     const username = `${userData.email}`;
     const hashedPassword = await hash(userData.password, 10);
-    const company = await companyRepo.createCompany({}, transaction) as { id: number };
+    const company = (await companyRepo.createCompany({}, transaction)) as {
+      id: number;
+    };
 
     // Seed default roles for the new company
     const defaultRoleNames = [
-      'Super Admin', 'Admin', 'CEO', 'CFO', 'HOD',
-      'Procurement Manager', 'Procurement Manager Approver',
+      "Super Admin",
+      "Admin",
+      "CEO",
+      "CFO",
+      "HOD",
+      "Procurement Manager",
+      "Procurement Manager Approver",
     ];
     const createdRoles = await Role.bulkCreate(
-      defaultRoleNames.map((name) => ({ name, companyId: company.id, isArchived: false })),
-      { transaction, returning: true }
+      defaultRoleNames.map((name) => ({
+        name,
+        companyId: company.id,
+        isArchived: false,
+      })),
+      { transaction, returning: true },
     );
 
     // Build a name->id map for the new roles
@@ -245,60 +266,91 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
     }
 
     // Seed role permissions for each role (permission levels: 1=Read, 3=R/W, 7=R/W/U, 15=Full)
-    const permissionTemplates: Record<string, { moduleId: number; permission: number }[]> = {
-      'Super Admin': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
-      'Admin': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
-      'CEO': [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
-      'CFO': [
-        { moduleId: 1, permission: 15 }, { moduleId: 2, permission: 7 },
-        { moduleId: 3, permission: 15 }, { moduleId: 4, permission: 15 },
-        { moduleId: 5, permission: 15 }, { moduleId: 6, permission: 15 },
+    const permissionTemplates: Record<
+      string,
+      { moduleId: number; permission: number }[]
+    > = {
+      "Super Admin": [1, 2, 3, 4, 5, 6].map((m) => ({
+        moduleId: m,
+        permission: 15,
+      })),
+      Admin: [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      CEO: [1, 2, 3, 4, 5, 6].map((m) => ({ moduleId: m, permission: 15 })),
+      CFO: [
+        { moduleId: 1, permission: 15 },
+        { moduleId: 2, permission: 7 },
+        { moduleId: 3, permission: 15 },
+        { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 15 },
+        { moduleId: 6, permission: 15 },
       ],
-      'HOD': [
-        { moduleId: 1, permission: 7 }, { moduleId: 2, permission: 3 },
-        { moduleId: 3, permission: 15 }, { moduleId: 4, permission: 15 },
-        { moduleId: 5, permission: 7 }, { moduleId: 6, permission: 7 },
+      HOD: [
+        { moduleId: 1, permission: 7 },
+        { moduleId: 2, permission: 3 },
+        { moduleId: 3, permission: 15 },
+        { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 7 },
+        { moduleId: 6, permission: 7 },
       ],
-      'Procurement Manager': [
-        { moduleId: 1, permission: 1 }, { moduleId: 3, permission: 15 },
-        { moduleId: 4, permission: 15 }, { moduleId: 5, permission: 7 },
+      "Procurement Manager": [
+        { moduleId: 1, permission: 1 },
+        { moduleId: 3, permission: 15 },
+        { moduleId: 4, permission: 15 },
+        { moduleId: 5, permission: 7 },
       ],
-      'Procurement Manager Approver': [
-        { moduleId: 1, permission: 1 }, { moduleId: 4, permission: 3 },
+      "Procurement Manager Approver": [
+        { moduleId: 1, permission: 1 },
+        { moduleId: 4, permission: 3 },
         { moduleId: 6, permission: 7 },
       ],
     };
 
-    const allPermissions: { roleId: number; moduleId: number; permission: number }[] = [];
+    const allPermissions: {
+      roleId: number;
+      moduleId: number;
+      permission: number;
+    }[] = [];
     for (const [roleName, perms] of Object.entries(permissionTemplates)) {
       const roleId = roleMap[roleName];
       if (roleId) {
         for (const p of perms) {
-          allPermissions.push({ roleId, moduleId: p.moduleId, permission: p.permission });
+          allPermissions.push({
+            roleId,
+            moduleId: p.moduleId,
+            permission: p.permission,
+          });
         }
       }
     }
     await RolePermission.bulkCreate(allPermissions, { transaction });
 
     // Assign the Admin role to the registering user
-    const adminRoleId = roleMap['Admin'];
-    const userDataWithCompany = { ...userData, companyId: company.id, roleId: adminRoleId };
+    const adminRoleId = roleMap["Admin"];
+    const userDataWithCompany = {
+      ...userData,
+      companyId: company.id,
+      roleId: adminRoleId,
+    };
 
-    const newUser = await repo.createUser(
+    const newUser = (await repo.createUser(
       {
         ...userDataWithCompany,
         username,
         password: hashedPassword,
-        userType: (userData.userType || 'admin') as 'super_admin' | 'admin' | 'procurement' | 'vendor',
-        status: 'active',
+        userType: (userData.userType || "admin") as
+          | "super_admin"
+          | "admin"
+          | "procurement"
+          | "vendor",
+        status: "active",
       },
-      transaction
-    ) as User;
+      transaction,
+    )) as User;
 
     const apiSecret = crypto.randomBytes(32).toString("hex");
     const payload: JWTPayload = {
       userId: newUser.id,
-      userType: (userData.userType || 'admin') as string,
+      userType: (userData.userType || "admin") as string,
       companyId: userDataWithCompany.companyId,
     };
     const apiKey = await generateJWT(payload, apiSecret);
@@ -308,7 +360,7 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
         apiKey: apiKey.replace("Bearer ", ""),
         apiSecret,
       },
-      transaction
+      transaction,
     );
 
     await transaction.commit();
@@ -325,7 +377,9 @@ export const signUpService = async (userData: SignUpData): Promise<AuthResponse>
  * @returns New access token
  * @throws CustomError if token invalid or expired
  */
-export const refreshTokenService = async (refreshTokenData: string): Promise<{ accessToken: string }> => {
+export const refreshTokenService = async (
+  refreshTokenData: string,
+): Promise<{ accessToken: string }> => {
   const { error } = validateRefreshToken({ refreshToken: refreshTokenData });
   if (error) {
     throw new CustomError(error.details[0].message, 400);
@@ -339,7 +393,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
   // Verify refresh token
   let decoded: JWTPayload;
   try {
-    decoded = await verifyJWT(token, jwt.refreshSecret) as JWTPayload;
+    decoded = (await verifyJWT(token, jwt.refreshSecret)) as JWTPayload;
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "jwt expired") {
       // Delete expired refresh token from database
@@ -356,7 +410,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
   }
 
   // Get user to check if still exists and get role
-  const user = await repo.findUser(decoded.userId) as User | null;
+  const user = (await repo.findUser(decoded.userId)) as User | null;
   if (!user) {
     await repo.deleteRefreshToken(token);
     throw new CustomError("User not found", 404);
@@ -365,7 +419,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
   // Generate new access token
   let payload: JWTPayload = {
     userId: user.id,
-    userType: user.userType ?? 'procurement',
+    userType: user.userType ?? "procurement",
     companyId: user.companyId,
   };
 
@@ -373,7 +427,7 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
     const role = await getRoleService(user.roleId);
     payload = {
       userId: user.id,
-      userType: user.userType ?? 'procurement',
+      userType: user.userType ?? "procurement",
       companyId: user.companyId,
       roleData: role,
     };
@@ -392,7 +446,9 @@ export const refreshTokenService = async (refreshTokenData: string): Promise<{ a
  * @returns Success message
  * @throws CustomError if user ID missing
  */
-export const logoutService = async (userId: number | undefined): Promise<{ message: string }> => {
+export const logoutService = async (
+  userId: number | undefined,
+): Promise<{ message: string }> => {
   if (!userId) {
     throw new CustomError("User ID is required", 400);
   }
@@ -408,40 +464,45 @@ export const logoutService = async (userId: number | undefined): Promise<{ messa
  * @returns Decoded context with userId, userType, companyId, email
  * @throws CustomError if token invalid or expired
  */
-export const validateTokenService = async (token: string): Promise<{
+export const validateTokenService = async (
+  token: string,
+): Promise<{
   userId: number;
   userType: string;
   companyId?: number;
   email?: string;
 }> => {
-  if (!token || typeof token !== 'string') {
-    throw new CustomError('Token is required', 400);
+  if (!token || typeof token !== "string") {
+    throw new CustomError("Token is required", 400);
   }
   try {
     const decoded = await verifyJWT(token, jwt.accessSecret);
     // console.log(decoded);
     if (decoded.userId) {
-      const user = await repo.findUser(decoded.userId) as User | null;
+      const user = (await repo.findUser(decoded.userId)) as User | null;
       if (!user) {
-        throw new CustomError('User not found', 404);
+        throw new CustomError("User not found", 404);
       }
       return {
         userId: user.id,
-        userType: user.userType ?? 'customer',
+        userType: user.userType ?? "customer",
         companyId: user.companyId,
         email: user.email,
       };
     }
-    throw new CustomError('Invalid token', 401);
+    throw new CustomError("Invalid token", 401);
   } catch (error: unknown) {
     const err = error as Error;
-    if (err.message === 'jwt expired') {
-      throw new CustomError('Token expired. Please refresh your token', 401);
+    if (err.message === "jwt expired") {
+      throw new CustomError("Token expired. Please refresh your token", 401);
     }
-    if (err.message === 'invalid signature' || err.message === 'jwt malformed') {
-      throw new CustomError('Invalid token', 401);
+    if (
+      err.message === "invalid signature" ||
+      err.message === "jwt malformed"
+    ) {
+      throw new CustomError("Invalid token", 401);
     }
-    throw new CustomError(err.message || 'Authentication failed', 401);
+    throw new CustomError(err.message || "Authentication failed", 401);
   }
 };
 
@@ -451,9 +512,11 @@ export const validateTokenService = async (token: string): Promise<{
  * @returns Update result
  * @throws CustomError if validation fails
  */
-export const changePasswordService = async (userData: ChangePasswordData): Promise<[affectedCount: number]> => {
+export const changePasswordService = async (
+  userData: ChangePasswordData,
+): Promise<[affectedCount: number]> => {
   const hashedPassword = await hash(userData.newPassword, 10);
-  const user = await repo.findUser(userData.userId, true) as User | null;
+  const user = (await repo.findUser(userData.userId, true)) as User | null;
   if (!user) {
     throw new CustomError("Email entered is invalid", 401);
   }
@@ -462,7 +525,7 @@ export const changePasswordService = async (userData: ChangePasswordData): Promi
   }
   const validateCurrentPassword = compareSync(
     userData.currentPassword,
-    user.password
+    user.password,
   );
   if (!validateCurrentPassword) {
     throw new CustomError("Current password entered is invalid", 401);
@@ -476,13 +539,15 @@ export const changePasswordService = async (userData: ChangePasswordData): Promi
  * @returns User data with access and refresh tokens
  * @throws CustomError if validation fails or credentials invalid
  */
-export const signInService = async (userData: SignInData): Promise<AuthResponse> => {
+export const signInService = async (
+  userData: SignInData,
+): Promise<AuthResponse> => {
   const { error } = validateSignIn(userData);
   if (error) {
     throw new CustomError(error.details[0].message, 400);
   }
 
-  const user = await repo.findUserByEmail(userData.email) as User | null;
+  const user = (await repo.findUserByEmail(userData.email)) as User | null;
   if (!user) {
     throw new CustomError("Email or password is invalid", 400);
   }
@@ -498,7 +563,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
 
   let payload: JWTPayload = {
     userId: user.id,
-    userType: user.userType ?? 'procurement',
+    userType: user.userType ?? "procurement",
     companyId: user.companyId,
   };
 
@@ -506,7 +571,7 @@ export const signInService = async (userData: SignInData): Promise<AuthResponse>
     const role = await getRoleService(user.roleId);
     payload = {
       userId: user.id,
-      userType: user.userType ?? 'procurement',
+      userType: user.userType ?? "procurement",
       companyId: user.companyId,
       roleData: role,
     };

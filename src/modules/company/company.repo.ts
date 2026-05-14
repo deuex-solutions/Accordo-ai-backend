@@ -1,7 +1,7 @@
 import { QueryTypes } from 'sequelize';
 import models, { sequelize } from '../../models/index.js';
 import type { Company } from '../../models/company.js';
-import type { User } from '../../models/user.js';
+
 import type { Transaction, FindOptions } from 'sequelize';
 
 /**

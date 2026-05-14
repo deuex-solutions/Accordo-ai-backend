@@ -7,8 +7,8 @@
  * @module preferenceTracker
  */
 
-import type { MesoOption, MesoSelection, MesoRoundRecord } from './meso.js';
-import type { NegotiationState, VendorEmphasis } from './types.js';
+import type { MesoOption, MesoSelection } from './meso.js';
+import type { VendorEmphasis } from './types.js';
 
 // ============================================
 // Types

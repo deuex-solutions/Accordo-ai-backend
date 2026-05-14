@@ -4,7 +4,6 @@ import {
   extractPaymentDays,
   formatPaymentTerms,
   NegotiationState,
-  AccumulatedOffer,
   PmCounterRecord,
   BehavioralSignals,
   AdaptiveStrategyResult,
@@ -12,25 +11,18 @@ import {
   ExtendedOffer,
   WizardConfig,
   ResolvedNegotiationConfig,
-  ACCORDO_DEFAULTS,
-  DEFAULT_WEIGHTS,
 } from "./types.js";
 import {
   totalUtility,
-  priceUtility,
-  termsUtility,
   NegotiationConfig,
 } from "./utility.js";
 import { getCurrencySymbol } from "../../../negotiation/intent/build-negotiation-intent.js";
 import {
-  calculateWeightedUtility,
   resolveNegotiationConfig,
   calculateWeightedUtilityFromResolved,
 } from "./weighted-utility.js";
 import {
-  detectVendorEmphasis,
   getTotalPriceConcession,
-  getLastPmCounter,
   isInPreferenceExploration,
   getPreferenceExplorationRoundsRemaining,
   isNegotiationStalled,
@@ -241,7 +233,7 @@ function bestTerms(config: NegotiationConfig): string {
  * Formula: Counter = PM's Target + (Aggressiveness × Range)
  * Where Range = Vendor's Offer - PM's Target
  */
-function calculateCounterPrice(
+function _calculateCounterPrice(
   config: NegotiationConfig,
   vendorOffer: Offer,
   round: number,
@@ -255,7 +247,7 @@ function calculateCounterPrice(
       anchor: 1000,
       concession_step: 50,
     };
-  const { target, max_acceptable, anchor, concession_step } = priceParams;
+  const { target, max_acceptable } = priceParams;
   const priceRange = max_acceptable - target;
   const priority = config.priority || "MEDIUM";
 
@@ -642,7 +634,7 @@ export function decideNextMove(
   adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): Decision {
   const reasons: string[] = [];
-  const priority = config.priority || "MEDIUM";
+  // removed dead: const _priority = config.priority || "MEDIUM";
   const cs = getCurrencySymbol(config.currency);
 
   // Get thresholds with defaults (70%, 50%, 30%)

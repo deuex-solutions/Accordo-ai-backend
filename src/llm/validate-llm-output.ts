@@ -227,7 +227,7 @@ function isPriceMatch(detected: number, reference: number): boolean {
 /**
  * Check if a price is within [min, max] range (inclusive, with 0.5% tolerance on bounds).
  */
-function isPriceInRange(price: number, min: number, max: number): boolean {
+function _isPriceInRange(price: number, min: number, max: number): boolean {
   const lowerBound = Math.min(min, max) * 0.995;
   const upperBound = Math.max(min, max) * 1.005;
   return price >= lowerBound && price <= upperBound;
@@ -541,7 +541,7 @@ export function validateLlmOutput(
     // decimal, with K/L/Cr suffix, or plain digits).
     // We match: ₹349000, ₹3,49,000, ₹349,000, ₹349K, ₹3.49L, etc.
     const escapedSymbol = intent.currencySymbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const priceDigits = String(Math.round(intent.allowedPrice));
+    // removed dead: const _priceDigits = String(Math.round(intent.allowedPrice));
 
     // Match currency symbol + any comma-grouped or plain number that rounds
     // to the same integer value as allowedPrice

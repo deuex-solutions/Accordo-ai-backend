@@ -1,8 +1,11 @@
-import cron from 'node-cron';
-import { Op } from 'sequelize';
-import models from '../../../models/index.js';
-import logger from '../../../config/logger.js';
-import { generateAndSendComparison, checkCompletionStatus } from '../bid-comparison.service.js';
+import cron from "node-cron";
+import { Op } from "sequelize";
+import models from "../../../models/index.js";
+import logger from "../../../config/logger.js";
+import {
+  generateAndSendComparison,
+  checkCompletionStatus,
+} from "../bid-comparison.service.js";
 
 const { Requisition, BidComparison } = models;
 
@@ -13,7 +16,7 @@ let schedulerTask: cron.ScheduledTask | null = null;
  * and trigger comparison generation if not already done
  */
 async function checkDeadlines(): Promise<void> {
-  logger.info('Running deadline checker...');
+  logger.info("Running deadline checker...");
 
   try {
     // Find requisitions where:
@@ -23,9 +26,9 @@ async function checkDeadlines(): Promise<void> {
     const expiredRequisitions = await Requisition.findAll({
       where: {
         negotiationClosureDate: { [Op.lt]: new Date() },
-        status: 'NegotiationStarted',
+        status: "NegotiationStarted",
       },
-      attributes: ['id', 'rfqId', 'subject', 'negotiationClosureDate'],
+      attributes: ["id", "rfqId", "subject", "negotiationClosureDate"],
     });
 
     for (const requisition of expiredRequisitions) {
@@ -35,7 +38,9 @@ async function checkDeadlines(): Promise<void> {
       });
 
       if (existingComparison) {
-        logger.debug(`Comparison already exists for requisition ${requisition.id}`);
+        logger.debug(
+          `Comparison already exists for requisition ${requisition.id}`,
+        );
         continue;
       }
 
@@ -43,23 +48,34 @@ async function checkDeadlines(): Promise<void> {
       const status = await checkCompletionStatus(requisition.id);
 
       if (status.completedVendors === 0) {
-        logger.info(`No completed vendors for requisition ${requisition.id}, skipping`);
+        logger.info(
+          `No completed vendors for requisition ${requisition.id}, skipping`,
+        );
         continue;
       }
 
       logger.info(
-        `Deadline reached for requisition ${requisition.rfqId} (${status.completedVendors}/${status.totalVendors} completed)`
+        `Deadline reached for requisition ${requisition.rfqId} (${status.completedVendors}/${status.totalVendors} completed)`,
       );
 
       try {
-        const result = await generateAndSendComparison(requisition.id, 'DEADLINE_REACHED');
-        logger.info(`Generated comparison ${result.comparisonId} for requisition ${requisition.id}`);
+        const result = await generateAndSendComparison(
+          requisition.id,
+          "DEADLINE_REACHED",
+        );
+        logger.info(
+          `Generated comparison ${result.comparisonId} for requisition ${requisition.id}`,
+        );
       } catch (error) {
-        logger.error(`Failed to generate comparison for requisition ${requisition.id}: ${(error as Error).message}`);
+        logger.error(
+          `Failed to generate comparison for requisition ${requisition.id}: ${(error as Error).message}`,
+        );
       }
     }
 
-    logger.info(`Deadline checker completed. Checked ${expiredRequisitions.length} requisitions.`);
+    logger.info(
+      `Deadline checker completed. Checked ${expiredRequisitions.length} requisitions.`,
+    );
   } catch (error) {
     logger.error(`Deadline checker error: ${(error as Error).message}`);
   }
@@ -69,9 +85,11 @@ async function checkDeadlines(): Promise<void> {
  * Start the deadline checker scheduler
  * Runs every hour by default
  */
-export function startDeadlineScheduler(cronExpression: string = '0 * * * *'): void {
+export function startDeadlineScheduler(
+  cronExpression: string = "0 * * * *",
+): void {
   if (schedulerTask) {
-    logger.warn('Deadline scheduler already running');
+    logger.warn("Deadline scheduler already running");
     return;
   }
 
@@ -79,7 +97,9 @@ export function startDeadlineScheduler(cronExpression: string = '0 * * * *'): vo
     await checkDeadlines();
   });
 
-  logger.info(`Deadline scheduler started with cron expression: ${cronExpression}`);
+  logger.info(
+    `Deadline scheduler started with cron expression: ${cronExpression}`,
+  );
 }
 
 /**
@@ -87,9 +107,9 @@ export function startDeadlineScheduler(cronExpression: string = '0 * * * *'): vo
  */
 export function stopDeadlineScheduler(): void {
   if (schedulerTask) {
-    schedulerTask.stop();
+    void schedulerTask.stop();
     schedulerTask = null;
-    logger.info('Deadline scheduler stopped');
+    logger.info("Deadline scheduler stopped");
   }
 }
 

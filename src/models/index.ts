@@ -1,4 +1,4 @@
-import { Sequelize, Model } from 'sequelize';
+import { Model } from 'sequelize';
 import sequelize from '../config/database.js';
 
 import authTokenModel, { AuthToken } from './auth-token.js';

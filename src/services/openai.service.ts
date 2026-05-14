@@ -9,12 +9,33 @@
  * - Automatic fallback to Qwen3 (Ollama) on failure
  */
 
-import OpenAI from 'openai';
-import { encoding_for_model, type TiktokenModel } from 'tiktoken';
-import env from '../config/env.js';
-import logger from '../config/logger.js';
-import models from '../models/index.js';
-import { chatCompletion as ollamaChatCompletion } from './llm.service.js';
+import OpenAI from "openai";
+// tiktoken is dynamically imported on first use to keep cold-start light.
+// Type imported for compile-time only — emits nothing at runtime.
+import type {
+  encoding_for_model as EncodingForModel,
+  TiktokenModel,
+} from "tiktoken";
+type EncodingForModelFn = typeof EncodingForModel;
+
+let cachedEncodingForModel: EncodingForModelFn | null = null;
+async function getEncodingForModel(): Promise<EncodingForModelFn | null> {
+  if (cachedEncodingForModel) return cachedEncodingForModel;
+  try {
+    const mod = await import("tiktoken");
+    cachedEncodingForModel = mod.encoding_for_model;
+    return cachedEncodingForModel;
+  } catch (error) {
+    logger.warn("[OpenAI] tiktoken not available, will use char estimate", {
+      error,
+    });
+    return null;
+  }
+}
+import env from "../config/env.js";
+import logger from "../config/logger.js";
+import models from "../models/index.js";
+import { chatCompletion as ollamaChatCompletion } from "./llm.service.js";
 
 // OpenAI client instance
 let openaiClient: OpenAI | null = null;
@@ -29,7 +50,7 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -58,7 +79,7 @@ export interface OpenAIResponse {
  */
 function getOpenAIClient(): OpenAI | null {
   if (!env.openai.apiKey) {
-    logger.warn('[OpenAI] No API key configured, will use fallback');
+    logger.warn("[OpenAI] No API key configured, will use fallback");
     return null;
   }
 
@@ -66,18 +87,35 @@ function getOpenAIClient(): OpenAI | null {
     openaiClient = new OpenAI({
       apiKey: env.openai.apiKey,
     });
-    logger.info('[OpenAI] Client initialized', { model: env.openai.model });
+    logger.info("[OpenAI] Client initialized", { model: env.openai.model });
   }
 
   return openaiClient;
 }
 
 /**
- * Count tokens in a message array using tiktoken
+ * Estimate tokens from character count. Used as fallback when tiktoken isn't
+ * loaded yet or fails. ~4 chars per token is the standard heuristic.
  */
-export function countTokens(messages: ChatMessage[], model: string = 'gpt-3.5-turbo'): number {
+function estimateTokens(messages: ChatMessage[]): number {
+  return Math.ceil(messages.reduce((acc, m) => acc + m.content.length, 0) / 4);
+}
+
+/**
+ * Count tokens in a message array using tiktoken (when loaded). Falls back to
+ * the char-estimate heuristic synchronously if tiktoken hasn't been loaded yet —
+ * callers can pre-warm by awaiting `warmTokenCounter()` at startup if needed.
+ */
+export function countTokens(
+  messages: ChatMessage[],
+  model: string = "gpt-3.5-turbo",
+): number {
+  if (!cachedEncodingForModel) {
+    void getEncodingForModel();
+    return estimateTokens(messages);
+  }
   try {
-    const encoding = encoding_for_model(model as TiktokenModel);
+    const encoding = cachedEncodingForModel(model as TiktokenModel);
     let totalTokens = 0;
 
     for (const message of messages) {
@@ -91,10 +129,15 @@ export function countTokens(messages: ChatMessage[], model: string = 'gpt-3.5-tu
     encoding.free();
     return totalTokens;
   } catch (error) {
-    // Fallback: estimate ~4 chars per token
-    logger.warn('[OpenAI] Token counting failed, using estimate', { error });
-    return Math.ceil(messages.reduce((acc, m) => acc + m.content.length, 0) / 4);
+    logger.warn("[OpenAI] Token counting failed, using estimate", { error });
+    return estimateTokens(messages);
   }
+}
+
+/** Force-load tiktoken. Call once at startup if you want accurate counts on
+ *  the first request instead of an estimate. */
+export async function warmTokenCounter(): Promise<void> {
+  await getEncodingForModel();
 }
 
 /**
@@ -103,12 +146,12 @@ export function countTokens(messages: ChatMessage[], model: string = 'gpt-3.5-tu
  */
 export function truncateMessages(
   messages: ChatMessage[],
-  maxTokens: number = MAX_INPUT_TOKENS
+  maxTokens: number = MAX_INPUT_TOKENS,
 ): ChatMessage[] {
   if (messages.length === 0) return messages;
 
-  const systemMessage = messages.find(m => m.role === 'system');
-  const otherMessages = messages.filter(m => m.role !== 'system');
+  const systemMessage = messages.find((m) => m.role === "system");
+  const otherMessages = messages.filter((m) => m.role !== "system");
 
   // Start with system message
   const result: ChatMessage[] = systemMessage ? [systemMessage] : [];
@@ -124,7 +167,7 @@ export function truncateMessages(
       messagesToAdd.unshift(message);
       currentTokens += messageTokens;
     } else {
-      logger.info('[OpenAI] Truncating conversation', {
+      logger.info("[OpenAI] Truncating conversation", {
         originalCount: messages.length,
         truncatedCount: result.length + messagesToAdd.length,
         tokensUsed: currentTokens,
@@ -140,7 +183,8 @@ export function truncateMessages(
 /**
  * Sleep for retry delay with exponential backoff
  */
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Log API usage to database for cost tracking
@@ -150,11 +194,11 @@ async function logUsage(
   model: string,
   dealId?: string,
   userId?: number,
-  fallbackUsed: boolean = false
+  fallbackUsed: boolean = false,
 ): Promise<void> {
   try {
     await models.ApiUsageLog.create({
-      provider: fallbackUsed ? 'ollama' : 'openai',
+      provider: fallbackUsed ? "ollama" : "openai",
       model,
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
@@ -165,7 +209,7 @@ async function logUsage(
     });
   } catch (error) {
     // Don't fail the request if logging fails
-    logger.error('[OpenAI] Failed to log usage', { error });
+    logger.error("[OpenAI] Failed to log usage", { error });
   }
 }
 
@@ -175,7 +219,7 @@ async function logUsage(
  */
 export async function generateCompletion(
   messages: ChatMessage[],
-  options: OpenAICompletionOptions = {}
+  options: OpenAICompletionOptions = {},
 ): Promise<OpenAIResponse> {
   const {
     temperature = env.openai.temperature,
@@ -195,7 +239,7 @@ export async function generateCompletion(
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        logger.info('[OpenAI] Sending request', {
+        logger.info("[OpenAI] Sending request", {
           model: env.openai.model,
           messageCount: truncatedMessages.length,
           temperature,
@@ -210,7 +254,7 @@ export async function generateCompletion(
           max_tokens: maxTokens,
         });
 
-        const content = response.choices[0]?.message?.content || '';
+        const content = response.choices[0]?.message?.content || "";
         const usage: TokenUsage = {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
@@ -220,7 +264,7 @@ export async function generateCompletion(
         // Log usage for cost tracking
         await logUsage(usage, env.openai.model, dealId, userId, false);
 
-        logger.info('[OpenAI] Request successful', {
+        logger.info("[OpenAI] Request successful", {
           model: response.model,
           usage,
           contentLength: content.length,
@@ -236,7 +280,7 @@ export async function generateCompletion(
         lastError = error instanceof Error ? error : new Error(String(error));
         const openaiError = error as { status?: number; code?: string };
 
-        logger.warn('[OpenAI] Request failed', {
+        logger.warn("[OpenAI] Request failed", {
           attempt: attempt + 1,
           maxRetries: MAX_RETRIES,
           status: openaiError.status,
@@ -245,7 +289,12 @@ export async function generateCompletion(
         });
 
         // Don't retry on client errors (4xx) except rate limits (429)
-        if (openaiError.status && openaiError.status >= 400 && openaiError.status < 500 && openaiError.status !== 429) {
+        if (
+          openaiError.status &&
+          openaiError.status >= 400 &&
+          openaiError.status < 500 &&
+          openaiError.status !== 429
+        ) {
           break;
         }
 
@@ -257,7 +306,7 @@ export async function generateCompletion(
       }
     }
 
-    logger.error('[OpenAI] All retries failed, falling back to Qwen3', {
+    logger.error("[OpenAI] All retries failed, falling back to Qwen3", {
       error: lastError?.message,
     });
   }
@@ -271,11 +320,11 @@ export async function generateCompletion(
  */
 async function fallbackToQwen3(
   messages: ChatMessage[],
-  options: OpenAICompletionOptions
+  options: OpenAICompletionOptions,
 ): Promise<OpenAIResponse> {
   const { dealId, userId, temperature = 0.7, maxTokens = 1000 } = options;
 
-  logger.info('[OpenAI] Using Qwen3 fallback', {
+  logger.info("[OpenAI] Using Qwen3 fallback", {
     messageCount: messages.length,
   });
 
@@ -304,8 +353,8 @@ async function fallbackToQwen3(
       fallbackUsed: true,
     };
   } catch (error) {
-    logger.error('[OpenAI] Qwen3 fallback also failed', { error });
-    throw new Error('Both OpenAI and Qwen3 fallback failed');
+    logger.error("[OpenAI] Qwen3 fallback also failed", { error });
+    throw new Error("Both OpenAI and Qwen3 fallback failed");
   }
 }
 
@@ -323,7 +372,7 @@ export async function checkHealth(): Promise<{
     return {
       available: false,
       model: env.openai.model,
-      error: 'No API key configured',
+      error: "No API key configured",
     };
   }
 
@@ -331,7 +380,7 @@ export async function checkHealth(): Promise<{
     // Make a minimal request to check connectivity
     const response = await client.chat.completions.create({
       model: env.openai.model,
-      messages: [{ role: 'user', content: 'Hi' }],
+      messages: [{ role: "user", content: "Hi" }],
       max_tokens: 5,
     });
 

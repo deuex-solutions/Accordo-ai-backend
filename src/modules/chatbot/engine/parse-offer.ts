@@ -42,7 +42,7 @@ function parseDeliveryFromText(text: string): {
     | undefined;
   raw_delivery_text: string | undefined;
 } {
-  const t = text.toLowerCase();
+  // removed dead: const t = text.toLowerCase();
 
   // Pattern 0: ASAP/Immediately - treat as 1-3 days
   const asapPatterns = [

@@ -1,13 +1,15 @@
-import Tesseract from 'tesseract.js';
-import path from 'path';
-import fs from 'fs';
-import { fromPath } from 'pdf2pic';
-import logger from '../../config/logger.js';
+// tesseract.js is dynamically imported when ENABLE_DOC_OCR=true; otherwise it
+// is never loaded so its ~43 MB native binaries don't ship with the deploy.
+import path from "path";
+import fs from "fs";
+import { promises as fsp } from "fs";
+import { fromPath } from "pdf2pic";
+import logger from "../../config/logger.js";
 
 /**
  * Document types for extraction
  */
-export type DocumentType = 'GST' | 'PAN' | 'MSME' | 'CI';
+export type DocumentType = "GST" | "PAN" | "MSME" | "CI";
 
 /**
  * Extraction result interface
@@ -60,29 +62,29 @@ const EXTRACTION_PATTERNS: Record<DocumentType, RegExp[]> = {
  */
 async function convertPdfToImage(pdfPath: string): Promise<string> {
   const outputDir = path.dirname(pdfPath);
-  const baseName = path.basename(pdfPath, '.pdf');
-  const outputPath = path.join(outputDir, `${baseName}-page-1.png`);
+  const baseName = path.basename(pdfPath, ".pdf");
+  // removed dead: const _outputPath = path.join(outputDir, `${baseName}-page-1.png`);
 
   try {
     const options = {
       density: 300,
       saveFilename: `${baseName}-page`,
       savePath: outputDir,
-      format: 'png',
+      format: "png",
       width: 2000,
       height: 2800,
     };
 
     const convert = fromPath(pdfPath, options);
-    const result = await convert(1, { responseType: 'image' });
+    const result = await convert(1, { responseType: "image" });
 
     if (result && result.path) {
       return result.path;
     }
 
-    throw new Error('PDF conversion failed - no output path');
+    throw new Error("PDF conversion failed - no output path");
   } catch (error) {
-    logger.error('PDF to image conversion failed:', error);
+    logger.error("PDF to image conversion failed:", error);
     throw error;
   }
 }
@@ -92,9 +94,10 @@ async function convertPdfToImage(pdfPath: string): Promise<string> {
  */
 async function performOCR(imagePath: string): Promise<string> {
   try {
-    const result = await Tesseract.recognize(imagePath, 'eng', {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
+    const { default: Tesseract } = await import("tesseract.js");
+    const result = await Tesseract.recognize(imagePath, "eng", {
+      logger: (m: { status: string; progress: number }) => {
+        if (m.status === "recognizing text") {
           logger.debug(`OCR Progress: ${Math.round(m.progress * 100)}%`);
         }
       },
@@ -102,7 +105,7 @@ async function performOCR(imagePath: string): Promise<string> {
 
     return result.data.text;
   } catch (error) {
-    logger.error('OCR failed:', error);
+    logger.error("OCR failed:", error);
     throw error;
   }
 }
@@ -110,24 +113,27 @@ async function performOCR(imagePath: string): Promise<string> {
 /**
  * Extract document number from text based on document type
  */
-function extractNumberFromText(text: string, documentType: DocumentType): { number: string | null; confidence: number } {
+function extractNumberFromText(
+  text: string,
+  documentType: DocumentType,
+): { number: string | null; confidence: number } {
   const patterns = EXTRACTION_PATTERNS[documentType];
-  const normalizedText = text.toUpperCase().replace(/\s+/g, ' ');
+  const normalizedText = text.toUpperCase().replace(/\s+/g, " ");
 
   for (const pattern of patterns) {
     const matches = normalizedText.match(pattern);
     if (matches && matches.length > 0) {
       // Clean up the extracted number
       let extractedNumber = matches[0]
-        .replace(/GST\s*(?:No|Number|#)?[\s:.-]*/gi, '')
-        .replace(/GSTIN[\s:.-]*/gi, '')
-        .replace(/PAN\s*(?:No|Number|#)?[\s:.-]*/gi, '')
-        .replace(/Permanent\s*Account\s*Number[\s:.-]*/gi, '')
-        .replace(/MSME\s*(?:No|Number|#)?[\s:.-]*/gi, '')
-        .replace(/Udyam\s*(?:Registration)?[\s:.-]*/gi, '')
-        .replace(/CIN[\s:.-]*/gi, '')
-        .replace(/Corporate\s*Identity\s*Number[\s:.-]*/gi, '')
-        .replace(/[\s:-]/g, '')
+        .replace(/GST\s*(?:No|Number|#)?[\s:.-]*/gi, "")
+        .replace(/GSTIN[\s:.-]*/gi, "")
+        .replace(/PAN\s*(?:No|Number|#)?[\s:.-]*/gi, "")
+        .replace(/Permanent\s*Account\s*Number[\s:.-]*/gi, "")
+        .replace(/MSME\s*(?:No|Number|#)?[\s:.-]*/gi, "")
+        .replace(/Udyam\s*(?:Registration)?[\s:.-]*/gi, "")
+        .replace(/CIN[\s:.-]*/gi, "")
+        .replace(/Corporate\s*Identity\s*Number[\s:.-]*/gi, "")
+        .replace(/[\s:-]/g, "")
         .trim();
 
       // Validate the extracted number format
@@ -143,22 +149,31 @@ function extractNumberFromText(text: string, documentType: DocumentType): { numb
 /**
  * Validate extracted number against expected format
  */
-function validateExtractedNumber(number: string, documentType: DocumentType): boolean {
+function validateExtractedNumber(
+  number: string,
+  documentType: DocumentType,
+): boolean {
   switch (documentType) {
-    case 'GST':
+    case "GST":
       // GSTIN: 15 characters
-      return /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/.test(number);
-    case 'PAN':
+      return /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/.test(
+        number,
+      );
+    case "PAN":
       // PAN: 10 characters
       return /^[A-Z]{5}\d{4}[A-Z]{1}$/.test(number);
-    case 'MSME':
+    case "MSME":
       // UDYAM format or older formats
-      return /^UDYAM[A-Z]{2}\d{2}\d{7}$/.test(number.replace(/-/g, '')) ||
-             /^[A-Z]{2}\d{2}[A-Z]{1}\d{7}$/.test(number);
-    case 'CI':
+      return (
+        /^UDYAM[A-Z]{2}\d{2}\d{7}$/.test(number.replace(/-/g, "")) ||
+        /^[A-Z]{2}\d{2}[A-Z]{1}\d{7}$/.test(number)
+      );
+    case "CI":
       // CIN: 21 characters
-      return /^[LU]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}$/.test(number) ||
-             /^[A-Z]{3}\d{4}$/.test(number); // LLPIN
+      return (
+        /^[LU]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}$/.test(number) ||
+        /^[A-Z]{3}\d{4}$/.test(number)
+      ); // LLPIN
     default:
       return false;
   }
@@ -169,19 +184,21 @@ function validateExtractedNumber(number: string, documentType: DocumentType): bo
  */
 export async function extractDocumentNumber(
   filePath: string,
-  documentType: DocumentType
+  documentType: DocumentType,
 ): Promise<ExtractionResult> {
   const absolutePath = path.resolve(filePath);
 
   // Verify file exists
-  if (!fs.existsSync(absolutePath)) {
+  try {
+    await fsp.access(absolutePath);
+  } catch {
     return {
       success: false,
       documentType,
       extractedNumber: null,
       confidence: 0,
       filePath: absolutePath,
-      error: 'File not found',
+      error: "File not found",
     };
   }
 
@@ -190,28 +207,37 @@ export async function extractDocumentNumber(
     const ext = path.extname(absolutePath).toLowerCase();
 
     // Convert PDF to image if needed
-    if (ext === '.pdf') {
+    if (ext === ".pdf") {
       try {
         imagePath = await convertPdfToImage(absolutePath);
       } catch (pdfError) {
-        logger.warn('PDF conversion failed, attempting direct OCR:', pdfError);
+        logger.warn("PDF conversion failed, attempting direct OCR:", pdfError);
         // Some Tesseract builds can handle PDFs directly
       }
     }
 
     // Perform OCR
     const extractedText = await performOCR(imagePath);
-    logger.debug(`Extracted text from ${documentType} document:`, extractedText.substring(0, 500));
+    logger.debug(
+      `Extracted text from ${documentType} document:`,
+      extractedText.substring(0, 500),
+    );
 
     // Extract number from text
-    const { number, confidence } = extractNumberFromText(extractedText, documentType);
+    const { number, confidence } = extractNumberFromText(
+      extractedText,
+      documentType,
+    );
 
     // Clean up temporary image if PDF was converted
-    if (ext === '.pdf' && imagePath !== absolutePath && fs.existsSync(imagePath)) {
+    if (ext === ".pdf" && imagePath !== absolutePath) {
       try {
-        fs.unlinkSync(imagePath);
+        await fsp.unlink(imagePath);
       } catch (cleanupError) {
-        logger.warn('Failed to clean up temporary image:', cleanupError);
+        const err = cleanupError as NodeJS.ErrnoException;
+        if (err?.code !== "ENOENT") {
+          logger.warn("Failed to clean up temporary image:", cleanupError);
+        }
       }
     }
 
@@ -230,7 +256,7 @@ export async function extractDocumentNumber(
       extractedNumber: null,
       confidence: 0,
       filePath: absolutePath,
-      error: error instanceof Error ? error.message : 'Extraction failed',
+      error: error instanceof Error ? error.message : "Extraction failed",
     };
   }
 }

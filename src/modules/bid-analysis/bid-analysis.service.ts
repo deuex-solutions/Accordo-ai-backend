@@ -1,4 +1,4 @@
-import { Op, fn, col, literal } from 'sequelize';
+import { Op } from 'sequelize';
 import models from '../../models/index.js';
 import { CustomError } from '../../utils/custom-error.js';
 import logger from '../../config/logger.js';
@@ -14,7 +14,6 @@ import type {
   RejectBidResult,
   RestoreBidResult,
   SelectBidResult,
-  ACTION_LABELS,
   BidStatus,
   DealStatus,
   VendorNegotiationSummary,

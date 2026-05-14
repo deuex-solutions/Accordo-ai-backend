@@ -1,8 +1,8 @@
 import repo from "./dashboard.repo.js";
 import userRepo from "../user/user.repo.js";
 import { CustomError } from "../../utils/custom-error.js";
-import type { Requisition } from "../../models/requisition.js";
-import type { Contract } from "../../models/contract.js";
+
+
 
 // ============================================================================
 // Existing service (kept as-is)

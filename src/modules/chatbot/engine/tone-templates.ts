@@ -106,27 +106,27 @@ const COUNTER_TEMPLATES: Record<VendorTone, (ctx: TemplateContext) => string> = 
 // ────────────────────────────────────────────────────────────────
 
 const WALK_AWAY_TEMPLATES: Record<VendorTone, (ctx: TemplateContext) => string> = {
-  formal: (ctx) => pick([
+  formal: (_ctx) => pick([
     `We sincerely appreciate the time and effort invested in this negotiation. Regrettably, we are unable to proceed with the current terms. We hope to explore future opportunities together.`,
     `Thank you for your professionalism throughout these discussions. Unfortunately, we cannot reach an agreement at this time. We remain open to future collaboration.`,
   ]),
 
-  casual: (ctx) => pick([
+  casual: (_ctx) => pick([
     `Thanks for all the back and forth on this. Unfortunately, we can't make the current terms work. Hope we can connect again on something else down the road.`,
     `Appreciate the effort here. The numbers just don't work for us right now. Let's keep in touch for future opportunities though.`,
   ]),
 
-  firm: (ctx) => pick([
+  firm: (_ctx) => pick([
     `We've carefully considered your position. The current terms don't meet our requirements, so we'll need to step back from this negotiation. Thank you for your time.`,
     `After thorough review, we cannot proceed at these terms. We appreciate your directness throughout the process and wish you well.`,
   ]),
 
-  urgent: (ctx) => pick([
+  urgent: (_ctx) => pick([
     `Given our constraints, we're unable to move forward with the current offer. Thank you for the discussions, and we hope to reconnect soon.`,
     `Unfortunately we need to close this out — the terms don't align with what we need. Appreciate the quick engagement.`,
   ]),
 
-  friendly: (ctx) => pick([
+  friendly: (_ctx) => pick([
     `I want to thank you for your patience and willingness to work with us. Unfortunately, we can't quite make this work with the current terms. I really hope we can work together on something else in the future!`,
     `It's been great discussing this with you, and I appreciate the flexibility you've shown. Sadly, the numbers don't line up for us right now. Let's definitely keep in touch!`,
   ]),
@@ -137,27 +137,27 @@ const WALK_AWAY_TEMPLATES: Record<VendorTone, (ctx: TemplateContext) => string> 
 // ────────────────────────────────────────────────────────────────
 
 const ESCALATE_TEMPLATES: Record<VendorTone, (ctx: TemplateContext) => string> = {
-  formal: (ctx) => pick([
+  formal: (_ctx) => pick([
     `Your offer warrants further consideration by our senior team. A colleague will be in touch shortly to continue these discussions.`,
     `We'd like to bring in a senior colleague to give this the attention it deserves. You will hear from us in due course.`,
   ]),
 
-  casual: (ctx) => pick([
+  casual: (_ctx) => pick([
     `Let me bring in a teammate who can help move this forward. Someone will reach out soon!`,
     `I'd like to loop in someone from our team on this. You'll hear from them shortly.`,
   ]),
 
-  firm: (ctx) => pick([
+  firm: (_ctx) => pick([
     `This needs review from our leadership team. A senior colleague will follow up with you directly.`,
     `We're bringing in a decision-maker to review this. Someone will be in touch to continue.`,
   ]),
 
-  urgent: (ctx) => pick([
+  urgent: (_ctx) => pick([
     `I'm escalating this to our senior team right away. You'll hear back from them very soon.`,
     `Bringing in a colleague now to expedite this. They'll be in touch shortly.`,
   ]),
 
-  friendly: (ctx) => pick([
+  friendly: (_ctx) => pick([
     `I want to make sure this gets the attention it deserves! Let me bring in a colleague who can help. Someone will reach out to you soon.`,
     `Your offer is looking interesting! I'd like a teammate to review this with fresh eyes. They'll be in touch shortly.`,
   ]),

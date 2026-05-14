@@ -45,7 +45,7 @@ export interface ProcessVendorTurnResult {
 /**
  * Generate Accordo response message based on decision (template-based for INSIGHTS)
  */
-function generateAccordoResponse(decision: Decision, round: number): string {
+function generateAccordoResponse(decision: Decision, _round: number): string {
   const { action, counterOffer } = decision;
 
   switch (action) {
@@ -91,7 +91,7 @@ function generateAccordoResponse(decision: Decision, round: number): string {
 export async function processVendorTurn(
   input: ProcessVendorTurnInput,
 ): Promise<ProcessVendorTurnResult> {
-  const { dealId, vendorMessage, userId } = input;
+  const { dealId, vendorMessage } = input;
 
   // Start database transaction
   const transaction = await sequelize.transaction();

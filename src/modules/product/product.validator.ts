@@ -159,7 +159,7 @@ export const productIdSchema = Joi.object({
  * Middleware function to validate request body
  */
 export const validateBody = (schema: Joi.ObjectSchema) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const { error, value } = schema.validate(req.body, {
       abortEarly: false,
       stripUnknown: true,
@@ -167,11 +167,12 @@ export const validateBody = (schema: Joi.ObjectSchema) => {
 
     if (error) {
       const errors = error.details.map((detail) => detail.message);
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: "Validation error",
         errors,
       });
+      return;
     }
 
     req.body = value;
@@ -183,7 +184,7 @@ export const validateBody = (schema: Joi.ObjectSchema) => {
  * Middleware function to validate request params
  */
 export const validateParams = (schema: Joi.ObjectSchema) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const { error, value } = schema.validate(req.params, {
       abortEarly: false,
       stripUnknown: true,
@@ -191,11 +192,12 @@ export const validateParams = (schema: Joi.ObjectSchema) => {
 
     if (error) {
       const errors = error.details.map((detail) => detail.message);
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: "Validation error",
         errors,
       });
+      return;
     }
 
     req.params = value;

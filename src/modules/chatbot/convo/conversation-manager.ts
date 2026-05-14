@@ -7,7 +7,6 @@
 
 import type {
   ConversationState,
-  ConversationPhase,
   ConversationIntent,
   VendorPreference,
   RefusalType,

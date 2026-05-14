@@ -8,7 +8,7 @@
 
 import { generateChatbotLlamaCompletion } from '../llm/chatbot-llama-client.js';
 import logger from '../../../config/logger.js';
-import { CustomError } from '../../../utils/custom-error.js';
+
 import type { ConvoIntent } from './conversation-templates.js';
 
 /**

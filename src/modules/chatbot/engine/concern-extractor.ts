@@ -286,7 +286,7 @@ function extractConcernsFromMessage(content: string): VendorConcern[] {
     for (const regex of pattern.patterns) {
       const match = content.match(regex);
       if (match && !seen.has(pattern.type)) {
-        const contextText = extractContext(content, match, pattern.contextWindow);
+        // removed dead: const _contextText = extractContext(content, match, pattern.contextWindow);
 
         concerns.push({
           type: pattern.type,

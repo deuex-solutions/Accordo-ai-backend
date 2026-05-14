@@ -153,7 +153,7 @@ export async function findSimilarPatterns(
   try {
     // Import models dynamically to avoid circular dependency
     const { NegotiationPattern } = await import('../../../models/index.js');
-    const { Op } = await import('sequelize');
+    const {} = await import('sequelize');
 
     // Build pattern query based on deal state
     const whereClause: Record<string, unknown> = {

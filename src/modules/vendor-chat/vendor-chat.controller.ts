@@ -26,7 +26,7 @@ import {
   submitDiscountSchema,
   submitPaymentTermsSchema,
 } from './vendor-chat.validator.js';
-import { CustomError } from '../../utils/custom-error.js';
+
 
 /**
  * Vendor Chat Controller
