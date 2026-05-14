@@ -66,9 +66,11 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_SSL: "false"
       # JWT
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
-      JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET:-change-me-access-secret}
-      JWT_REFRESH_TOKEN_SECRET: ${JWT_REFRESH_TOKEN_SECRET:-change-me-refresh-secret}
+      # Leave unset → backend's env.ts generates an ephemeral random secret in dev,
+      # throws in production. Don't ship literal placeholder strings.
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET:-}
+      JWT_REFRESH_TOKEN_SECRET: ${JWT_REFRESH_TOKEN_SECRET:-}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-1h}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
       # URLs
@@ -134,7 +136,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-accordo}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-}                              # REQUIRED for prod
+      DB_PASSWORD: ${DB_PASSWORD:-} # REQUIRED for prod
       DB_SSL: ${DB_SSL:-false}
       # JWT (all REQUIRED for prod — app will fail on startup if missing)
       JWT_SECRET: ${JWT_SECRET:-}

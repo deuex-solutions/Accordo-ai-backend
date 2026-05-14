@@ -21,8 +21,8 @@ interface UserData {
   profilePic?: string;
   companyId?: number;
   roleId?: number;
-  userType?: 'super_admin' | 'admin' | 'procurement' | 'vendor';
-  approvalLevel?: 'NONE' | 'L1' | 'L2' | 'L3';
+  userType?: "super_admin" | "admin" | "procurement" | "vendor";
+  approvalLevel?: "NONE" | "L1" | "L2" | "L3";
   status?: string;
   [key: string]: unknown;
 }
@@ -35,8 +35,8 @@ interface UpdateUserData {
   email?: string;
   profilePic?: string;
   roleId?: number;
-  userType?: 'super_admin' | 'admin' | 'procurement' | 'vendor';
-  approvalLevel?: 'NONE' | 'L1' | 'L2' | 'L3';
+  userType?: "super_admin" | "admin" | "procurement" | "vendor";
+  approvalLevel?: "NONE" | "L1" | "L2" | "L3";
   [key: string]: unknown;
 }
 
@@ -85,7 +85,9 @@ interface PaginatedUsersResponse {
 /**
  * Get user profile from access token
  */
-export const getUserProfileService = async (accessToken: string): Promise<UserProfile> => {
+export const getUserProfileService = async (
+  accessToken: string,
+): Promise<UserProfile> => {
   try {
     if (!accessToken) {
       throw new CustomError("Access token is required", 400);
@@ -106,7 +108,7 @@ export const getUserProfileService = async (accessToken: string): Promise<UserPr
  */
 export const assignRoleService = async (
   userId: number,
-  roleId: number
+  roleId: number,
 ): Promise<[affectedCount: number]> => {
   try {
     return repo.assignRole(userId, roleId);
@@ -123,7 +125,7 @@ export const getAllUsersService = async (
   page: string | number = 1,
   limit: string | number = 10,
   userId?: number,
-  filters?: string
+  filters?: string,
 ): Promise<PaginatedUsersResponse> => {
   try {
     const parsedPage = Number.parseInt(String(page), 10) || 1;
@@ -153,12 +155,16 @@ export const getAllUsersService = async (
 
     if (filters) {
       try {
-        const filterData: FilterData[] = JSON.parse(decodeURIComponent(filters));
+        const filterData: FilterData[] = JSON.parse(
+          decodeURIComponent(filters),
+        );
         queryOptions.where = {
           ...util.filterUtil(filterData),
           ...queryOptions.where,
         };
-        const indexRole = filterData.findIndex((item) => item.filterBy === "role");
+        const indexRole = filterData.findIndex(
+          (item) => item.filterBy === "role",
+        );
         if (indexRole !== -1) {
           queryOptions.role = String(filterData[indexRole].value);
         }
@@ -184,7 +190,7 @@ export const getAllUsersService = async (
  */
 export const createUserService = async (
   userData: UserData,
-  userId?: number
+  userId?: number,
 ): Promise<unknown> => {
   try {
     const { error } = validateCreateUser(userData);
@@ -207,12 +213,16 @@ export const createUserService = async (
     // Ensure required fields for createUser
     const userCreateData = {
       ...userData,
-      name: userData.name || userData.email.split('@')[0],
-      userType: (userData.userType || 'procurement') as 'super_admin' | 'admin' | 'procurement' | 'vendor',
-      status: userData.status || 'active'
+      name: userData.name || userData.email.split("@")[0],
+      userType: (userData.userType || "procurement") as
+        | "super_admin"
+        | "admin"
+        | "procurement"
+        | "vendor",
+      status: userData.status || "active",
     };
 
-    const createdUser = await authRepo.createUser(userCreateData) as any;
+    const createdUser = (await authRepo.createUser(userCreateData)) as any;
 
     const apiSecret = crypto.randomBytes(32).toString("hex");
     const payload = {
@@ -227,7 +237,34 @@ export const createUserService = async (
 
     return createdUser;
   } catch (error) {
-    throw new CustomError(String(error), 400);
+    if (error instanceof CustomError) {
+      throw error;
+    }
+    const err = error as {
+      name?: string;
+      message?: string;
+      errors?: Array<{ path: string; message: string; value: unknown }>;
+      parent?: { detail?: string; message?: string };
+      original?: { detail?: string; message?: string };
+    };
+    let message = err.message || String(error);
+    if (
+      err.name === "SequelizeValidationError" ||
+      err.name === "SequelizeUniqueConstraintError"
+    ) {
+      if (err.errors && err.errors.length > 0) {
+        message = err.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
+      } else if (err.parent?.detail || err.original?.detail) {
+        message = err.parent?.detail || err.original?.detail || message;
+      }
+    } else if (err.name === "SequelizeDatabaseError") {
+      message =
+        err.parent?.detail ||
+        err.parent?.message ||
+        err.original?.message ||
+        message;
+    }
+    throw new CustomError(`Failed to create user: ${message}`, 400);
   }
 };
 
@@ -247,7 +284,7 @@ export const getUserService = async (userId: number | string): Promise<any> => {
  */
 export const updateUserService = async (
   userId: number | string,
-  userData: UpdateUserData
+  userData: UpdateUserData,
 ): Promise<[affectedCount: number]> => {
   try {
     // Check if user is protected and trying to change role
@@ -267,7 +304,9 @@ export const updateUserService = async (
 /**
  * Delete a user by ID
  */
-export const deleteUserService = async (userId: number | string): Promise<number> => {
+export const deleteUserService = async (
+  userId: number | string,
+): Promise<number> => {
   try {
     const user = await repo.getUser(userId);
     if (!user) {

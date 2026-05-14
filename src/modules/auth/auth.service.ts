@@ -25,6 +25,7 @@ import { Role, RolePermission } from "../../models/index.js";
 import CustomError from "../../utils/custom-error.js";
 import env from "../../config/env.js";
 import { sequelize } from "../../config/database.js";
+import logger from "../../config/logger.js";
 
 const { smtp, jwt } = env;
 
@@ -419,7 +420,7 @@ export const validateTokenService = async (token: string): Promise<{
   }
   try {
     const decoded = await verifyJWT(token, jwt.accessSecret);
-    // console.log(decoded);
+    // logger.debug(decoded);
     if (decoded.userId) {
       const user = await repo.findUser(decoded.userId) as User | null;
       if (!user) {

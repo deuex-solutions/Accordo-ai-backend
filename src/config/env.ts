@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
@@ -12,6 +13,28 @@ dotenv.config({ path: envPath });
 const dbUrlParsed = process.env.DATABASE_URL
   ? parseDatabaseUrl(process.env.DATABASE_URL)
   : null;
+
+function resolveJwtSecret(envVarName: string): string {
+  const fromEnv = process.env[envVarName] || process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length >= 32) return fromEnv;
+
+  const isProd = (process.env.NODE_ENV || "development") === "production";
+  if (isProd) {
+    throw new Error(
+      `${envVarName} is required in production (min 32 chars). ` +
+        `Generate with: openssl rand -hex 32`,
+    );
+  }
+  // Dev/test: generate an ephemeral random secret. Tokens won't survive a restart
+  // — intentional, so accidental dev fallbacks never reach prod.
+  const generated = crypto.randomBytes(32).toString("hex");
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[env] ${envVarName} not set; generated ephemeral secret for development. ` +
+      `Set ${envVarName} in .env for stable tokens across restarts.`,
+  );
+  return generated;
+}
 
 export interface DatabaseConfig {
   host: string;
@@ -119,14 +142,8 @@ export const env: EnvironmentConfig = {
     logging: process.env.DB_LOGGING === "true",
   },
   jwt: {
-    accessSecret:
-      process.env.JWT_ACCESS_TOKEN_SECRET ||
-      process.env.JWT_SECRET ||
-      "change-me",
-    refreshSecret:
-      process.env.JWT_REFRESH_TOKEN_SECRET ||
-      process.env.JWT_SECRET ||
-      "change-me",
+    accessSecret: resolveJwtSecret("JWT_ACCESS_TOKEN_SECRET"),
+    refreshSecret: resolveJwtSecret("JWT_REFRESH_TOKEN_SECRET"),
     accessExpiry: process.env.JWT_ACCESS_EXPIRY || "1h",
     refreshExpiry: process.env.JWT_REFRESH_EXPIRY || "7d",
   },
