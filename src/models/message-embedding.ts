@@ -7,10 +7,11 @@ import {
   CreationOptional,
   ForeignKey,
   NonAttribute,
-} from 'sequelize';
-import type { ChatbotMessage } from './chatbot-message.js';
-import type { ChatbotDeal } from './chatbot-deal.js';
-import type { User } from './user.js';
+} from "sequelize";
+import { VECTOR } from "../types/sequelize-vector.js";
+import type { ChatbotMessage } from "./chatbot-message.js";
+import type { ChatbotDeal } from "./chatbot-deal.js";
+import type { User } from "./user.js";
 
 export class MessageEmbedding extends Model<
   InferAttributes<MessageEmbedding>,
@@ -23,8 +24,8 @@ export class MessageEmbedding extends Model<
   declare vendorId: ForeignKey<number> | null;
   declare embedding: number[];
   declare contentText: string;
-  declare contentType: 'message' | 'offer_extract' | 'decision';
-  declare role: 'VENDOR' | 'ACCORDO' | 'SYSTEM';
+  declare contentType: "message" | "offer_extract" | "decision";
+  declare role: "VENDOR" | "ACCORDO" | "SYSTEM";
   declare round: number;
   declare outcome: string | null;
   declare utilityScore: number | null;
@@ -44,25 +45,27 @@ export class MessageEmbedding extends Model<
 
   static associate(models: Record<string, unknown>): void {
     this.belongsTo(models.ChatbotMessage as typeof ChatbotMessage, {
-      foreignKey: 'messageId',
-      as: 'Message',
+      foreignKey: "messageId",
+      as: "Message",
     });
     this.belongsTo(models.ChatbotDeal as typeof ChatbotDeal, {
-      foreignKey: 'dealId',
-      as: 'Deal',
+      foreignKey: "dealId",
+      as: "Deal",
     });
     this.belongsTo(models.User as typeof User, {
-      foreignKey: 'userId',
-      as: 'User',
+      foreignKey: "userId",
+      as: "User",
     });
     this.belongsTo(models.User as typeof User, {
-      foreignKey: 'vendorId',
-      as: 'Vendor',
+      foreignKey: "vendorId",
+      as: "Vendor",
     });
   }
 }
 
-export function initMessageEmbeddingModel(sequelize: Sequelize): typeof MessageEmbedding {
+export function initMessageEmbeddingModel(
+  sequelize: Sequelize,
+): typeof MessageEmbedding {
   MessageEmbedding.init(
     {
       id: {
@@ -74,50 +77,50 @@ export function initMessageEmbeddingModel(sequelize: Sequelize): typeof MessageE
       messageId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: 'message_id',
+        field: "message_id",
         references: {
-          model: 'chatbot_messages',
-          key: 'id',
+          model: "chatbot_messages",
+          key: "id",
         },
       },
       dealId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: 'deal_id',
+        field: "deal_id",
         references: {
-          model: 'chatbot_deals',
-          key: 'id',
+          model: "chatbot_deals",
+          key: "id",
         },
       },
       userId: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'user_id',
+        field: "user_id",
       },
       vendorId: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'vendor_id',
+        field: "vendor_id",
       },
       embedding: {
-        type: DataTypes.ARRAY(DataTypes.FLOAT),
+        type: VECTOR(1024),
         allowNull: false,
-        comment: 'Vector embedding (1024 dimensions for bge-large-en-v1.5)',
+        comment: "Vector embedding (pgvector vector(1024))",
       },
       contentText: {
         type: DataTypes.TEXT,
         allowNull: false,
-        field: 'content_text',
-        comment: 'Original text that was embedded',
+        field: "content_text",
+        comment: "Original text that was embedded",
       },
       contentType: {
-        type: DataTypes.ENUM('message', 'offer_extract', 'decision'),
+        type: DataTypes.ENUM("message", "offer_extract", "decision"),
         allowNull: false,
-        defaultValue: 'message',
-        field: 'content_type',
+        defaultValue: "message",
+        field: "content_type",
       },
       role: {
-        type: DataTypes.ENUM('VENDOR', 'ACCORDO', 'SYSTEM'),
+        type: DataTypes.ENUM("VENDOR", "ACCORDO", "SYSTEM"),
         allowNull: false,
       },
       round: {
@@ -128,86 +131,86 @@ export function initMessageEmbeddingModel(sequelize: Sequelize): typeof MessageE
       outcome: {
         type: DataTypes.STRING,
         allowNull: true,
-        comment: 'Deal outcome: ACCEPTED, WALKED_AWAY, ESCALATED, etc.',
+        comment: "Deal outcome: ACCEPTED, WALKED_AWAY, ESCALATED, etc.",
       },
       utilityScore: {
         type: DataTypes.DECIMAL(10, 4),
         allowNull: true,
-        field: 'utility_score',
+        field: "utility_score",
       },
       decisionAction: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'decision_action',
-        comment: 'ACCEPT, COUNTER, WALK_AWAY, ESCALATE, ASK_CLARIFY',
+        field: "decision_action",
+        comment: "ACCEPT, COUNTER, WALK_AWAY, ESCALATE, ASK_CLARIFY",
       },
       productCategory: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'product_category',
+        field: "product_category",
       },
       priceRange: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'price_range',
-        comment: 'Price range bucket for filtering: low, medium, high',
+        field: "price_range",
+        comment: "Price range bucket for filtering: low, medium, high",
       },
       paymentTerms: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'payment_terms',
-        comment: 'Payment terms: Net 30, Net 60, Net 90, etc.',
+        field: "payment_terms",
+        comment: "Payment terms: Net 30, Net 60, Net 90, etc.",
       },
       metadata: {
         type: DataTypes.JSONB,
         allowNull: true,
-        comment: 'Additional metadata for filtering and context',
+        comment: "Additional metadata for filtering and context",
       },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        field: 'created_at',
+        field: "created_at",
       },
       updatedAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        field: 'updated_at',
+        field: "updated_at",
       },
     },
     {
       sequelize,
-      tableName: 'message_embeddings',
+      tableName: "message_embeddings",
       timestamps: true,
       underscored: true,
       indexes: [
         {
-          name: 'idx_message_embeddings_deal_id',
-          fields: ['deal_id'],
+          name: "idx_message_embeddings_deal_id",
+          fields: ["deal_id"],
         },
         {
-          name: 'idx_message_embeddings_message_id',
-          fields: ['message_id'],
+          name: "idx_message_embeddings_message_id",
+          fields: ["message_id"],
         },
         {
-          name: 'idx_message_embeddings_role',
-          fields: ['role'],
+          name: "idx_message_embeddings_role",
+          fields: ["role"],
         },
         {
-          name: 'idx_message_embeddings_outcome',
-          fields: ['outcome'],
+          name: "idx_message_embeddings_outcome",
+          fields: ["outcome"],
         },
         {
-          name: 'idx_message_embeddings_content_type',
-          fields: ['content_type'],
+          name: "idx_message_embeddings_content_type",
+          fields: ["content_type"],
         },
         {
-          name: 'idx_message_embeddings_created_at',
-          fields: ['created_at'],
+          name: "idx_message_embeddings_created_at",
+          fields: ["created_at"],
         },
       ],
-    }
+    },
   );
   return MessageEmbedding;
 }

@@ -3,15 +3,19 @@
  * Creates and initializes the appropriate embedding provider based on configuration.
  */
 
-import env from '../../../config/env.js';
-import logger from '../../../config/logger.js';
-import type { EmbeddingProvider, EmbeddingProviderConfig } from './embedding-provider.interface.js';
+import env from "../../../config/env.js";
+import logger from "../../../config/logger.js";
+import type {
+  EmbeddingProvider,
+  EmbeddingProviderConfig,
+} from "./embedding-provider.interface.js";
 
 /** Default models per provider when EMBEDDING_MODEL is not set */
 const DEFAULT_MODELS: Record<string, string> = {
-  openai: 'text-embedding-3-small',
-  bedrock: 'amazon.titan-embed-text-v2:0',
-  local: 'Xenova/bge-large-en-v1.5',
+  openai: "text-embedding-3-small",
+  bedrock: "amazon.titan-embed-text-v2:0",
+  local: "Xenova/bge-large-en-v1.5",
+  ollama: "bge-m3",
 };
 
 /**
@@ -20,11 +24,16 @@ const DEFAULT_MODELS: Record<string, string> = {
  */
 export async function createEmbeddingProvider(): Promise<EmbeddingProvider> {
   const providerType = env.vector.embeddingProvider;
-  const model = env.vector.embeddingModel || DEFAULT_MODELS[providerType] || DEFAULT_MODELS.local;
+  const model =
+    env.vector.embeddingModel ||
+    DEFAULT_MODELS[providerType] ||
+    DEFAULT_MODELS.local;
   const dimension = env.vector.embeddingDimension;
   const timeout = env.vector.embeddingTimeout;
 
-  logger.info(`Creating embedding provider: ${providerType} (model: ${model}, dimension: ${dimension})`);
+  logger.info(
+    `Creating embedding provider: ${providerType} (model: ${model}, dimension: ${dimension})`,
+  );
 
   const baseConfig: EmbeddingProviderConfig = {
     model,
@@ -36,13 +45,17 @@ export async function createEmbeddingProvider(): Promise<EmbeddingProvider> {
   let provider: EmbeddingProvider;
 
   switch (providerType) {
-    case 'openai': {
-      const { OpenAIEmbeddingProvider } = await import('./openai.provider.js');
-      provider = new OpenAIEmbeddingProvider(baseConfig, env.openai.apiKey || '');
+    case "openai": {
+      const { OpenAIEmbeddingProvider } = await import("./openai.provider.js");
+      provider = new OpenAIEmbeddingProvider(
+        baseConfig,
+        env.openai.apiKey || "",
+      );
       break;
     }
-    case 'bedrock': {
-      const { BedrockEmbeddingProvider } = await import('./bedrock.provider.js');
+    case "bedrock": {
+      const { BedrockEmbeddingProvider } =
+        await import("./bedrock.provider.js");
       provider = new BedrockEmbeddingProvider(baseConfig, {
         region: env.vector.awsRegion,
         accessKeyId: env.vector.awsAccessKeyId,
@@ -50,13 +63,20 @@ export async function createEmbeddingProvider(): Promise<EmbeddingProvider> {
       });
       break;
     }
-    case 'local': {
-      const { LocalEmbeddingProvider } = await import('./local.provider.js');
+    case "local": {
+      const { LocalEmbeddingProvider } = await import("./local.provider.js");
       provider = new LocalEmbeddingProvider(baseConfig);
       break;
     }
+    case "ollama": {
+      const { OllamaEmbeddingProvider } = await import("./ollama.provider.js");
+      provider = new OllamaEmbeddingProvider(baseConfig);
+      break;
+    }
     default:
-      throw new Error(`Unknown embedding provider: ${providerType}. Use 'openai', 'bedrock', or 'local'.`);
+      throw new Error(
+        `Unknown embedding provider: ${providerType}. Use 'openai', 'bedrock', 'local', or 'ollama'.`,
+      );
   }
 
   await provider.initialize();

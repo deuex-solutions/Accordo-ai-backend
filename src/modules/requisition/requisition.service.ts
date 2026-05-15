@@ -67,19 +67,19 @@ export const createRequisionService = async (
   attachmentFiles: MulterFile[] = [],
 ): Promise<Requisition> => {
   try {
-    console.log("=== CREATE REQUISITION SERVICE ===");
-    console.log("Received requisitionData keys:", Object.keys(requisitionData));
-    console.log(
+    logger.debug("=== CREATE REQUISITION SERVICE ===");
+    logger.debug("Received requisitionData keys:", Object.keys(requisitionData));
+    logger.debug(
       "Received requisitionData:",
       JSON.stringify(requisitionData, null, 2),
     );
-    console.log("userId:", userId);
+    logger.debug("userId:", userId);
 
     const user = await userRepo.getUser(userId);
     if (!user?.companyId) {
       throw new CustomError("User company not found", 400);
     }
-    console.log("User found with companyId:", user.companyId);
+    logger.debug("User found with companyId:", user.companyId);
 
     // Parse productData from various formats (multipart form data can send it differently)
     let productData: ProductData[] = [];
@@ -90,7 +90,7 @@ export const createRequisionService = async (
         try {
           productData = JSON.parse(requisitionData.productData);
         } catch (parseError) {
-          console.error("Error parsing productData JSON:", parseError);
+          logger.error("Error parsing productData JSON:", parseError);
           productData = [];
         }
       } else if (typeof requisitionData.productData === "object") {
@@ -129,7 +129,7 @@ export const createRequisionService = async (
           // Parse string dates
           const parsedDate = new Date(cleanedData[field]);
           if (isNaN(parsedDate.getTime())) {
-            console.error(`Invalid date for ${field}:`, cleanedData[field]);
+            logger.error(`Invalid date for ${field}:`, cleanedData[field]);
             cleanedData[field] = null;
           } else {
             cleanedData[field] = parsedDate;
@@ -157,7 +157,7 @@ export const createRequisionService = async (
       cleanedData.typeOfCurrency &&
       !validCurrencies.includes(cleanedData.typeOfCurrency)
     ) {
-      console.error("Invalid currency:", cleanedData.typeOfCurrency);
+      logger.error("Invalid currency:", cleanedData.typeOfCurrency);
       throw new CustomError(
         `Invalid currency: ${cleanedData.typeOfCurrency}. Valid values: ${validCurrencies.join(", ")}`,
         400,
@@ -169,11 +169,11 @@ export const createRequisionService = async (
       companyId: user.companyId,
     };
 
-    console.log(
+    logger.debug(
       "Creating requisition with payload:",
       JSON.stringify(payload, null, 2),
     );
-    console.log(
+    logger.debug(
       "projectId value:",
       payload.projectId,
       "type:",
@@ -183,17 +183,17 @@ export const createRequisionService = async (
     let requisition;
     try {
       requisition = await repo.createRequisition(payload);
-      console.log("Requisition created successfully with id:", requisition.id);
+      logger.debug("Requisition created successfully with id:", requisition.id);
     } catch (createError: any) {
-      console.error("=== REQUISITION CREATION ERROR ===");
-      console.error("Error:", createError);
-      console.error("Error name:", createError.name);
-      console.error("Error message:", createError.message);
-      console.error("Error SQL:", createError.sql);
-      console.error("Error parent:", createError.parent?.message);
-      console.error("Error detail:", createError.parent?.detail);
+      logger.error("=== REQUISITION CREATION ERROR ===");
+      logger.error("Error:", createError);
+      logger.error("Error name:", createError.name);
+      logger.error("Error message:", createError.message);
+      logger.error("Error SQL:", createError.sql);
+      logger.error("Error parent:", createError.parent?.message);
+      logger.error("Error detail:", createError.parent?.detail);
       if (createError.errors) {
-        console.error(
+        logger.error(
           "Validation errors:",
           createError.errors.map((e: any) => ({
             field: e.path,
@@ -203,7 +203,7 @@ export const createRequisionService = async (
           })),
         );
       }
-      console.error("=== END REQUISITION CREATION ERROR ===");
+      logger.error("=== END REQUISITION CREATION ERROR ===");
       throw createError;
     }
 
@@ -255,24 +255,34 @@ export const createRequisionService = async (
 
     return requisition;
   } catch (error: any) {
-    console.error("Error in createRequisionService:", error);
+    logger.error("Error in createRequisionService:", error);
 
     // Extract detailed validation error info
     let message = error instanceof Error ? error.message : String(error);
 
     // Check for Sequelize validation errors and include field details
-    if (error.name === "SequelizeValidationError" && error.errors) {
-      const fieldErrors = error.errors
-        .map(
-          (e: any) =>
-            `${e.path}: ${e.message} (value: ${JSON.stringify(e.value)})`,
-        )
-        .join("; ");
-      message = `Validation error: ${fieldErrors}`;
+    if (error.name === "SequelizeValidationError") {
+      if (error.errors && error.errors.length > 0) {
+        const fieldErrors = error.errors
+          .map(
+            (e: any) =>
+              `${e.path}: ${e.message} (value: ${JSON.stringify(e.value)})`,
+          )
+          .join("; ");
+        message = `Validation error: ${fieldErrors}`;
+      } else {
+        // Empty errors array — surface parent/original detail (e.g. Postgres enum violation)
+        const detail =
+          error.parent?.detail ||
+          error.original?.detail ||
+          error.parent?.message ||
+          error.original?.message;
+        message = `Validation error${detail ? `: ${detail}` : ""}`;
+      }
     } else if (error.name === "SequelizeForeignKeyConstraintError") {
       message = `Foreign key error: ${error.table} - ${error.fields?.join(", ")} (${error.parent?.detail || error.message})`;
     } else if (error.name === "SequelizeDatabaseError") {
-      message = `Database error: ${error.parent?.message || error.message}`;
+      message = `Database error: ${error.parent?.detail || error.parent?.message || error.message}`;
     }
 
     throw new CustomError(`Failed to create requisition: ${message}`, 400);
@@ -378,7 +388,7 @@ export const updateRequisitionService = async (
       throw new CustomError("User not found", 401);
     }
 
-    console.log("updateRequisitionService called with:", {
+    logger.debug("updateRequisitionService called with:", {
       requisitionId,
       userId,
       requisitionDataKeys: Object.keys(requisitionData),
@@ -427,7 +437,7 @@ export const updateRequisitionService = async (
           // Ensure parsed result is an array
           productData = Array.isArray(parsed) ? parsed : [];
         } catch (parseError) {
-          console.error("Error parsing productData JSON:", parseError);
+          logger.error("Error parsing productData JSON:", parseError);
           productData = [];
         }
       } else if (typeof requisitionData.productData === "object") {
@@ -435,7 +445,7 @@ export const updateRequisitionService = async (
         productData = Object.values(requisitionData.productData);
       }
     }
-    console.log(
+    logger.debug(
       "Parsed productData:",
       productData,
       "length:",
@@ -516,7 +526,7 @@ export const updateRequisitionService = async (
           // Parse string dates
           const parsedDate = new Date(cleanedData[field]);
           if (isNaN(parsedDate.getTime())) {
-            console.error(`Invalid date for ${field}:`, cleanedData[field]);
+            logger.error(`Invalid date for ${field}:`, cleanedData[field]);
             cleanedData[field] = null;
           } else {
             cleanedData[field] = parsedDate;
@@ -525,17 +535,17 @@ export const updateRequisitionService = async (
       }
     }
 
-    console.log("Cleaned data for update:", cleanedData);
-    console.log("Product data parsed:", productData);
+    logger.debug("Cleaned data for update:", cleanedData);
+    logger.debug("Product data parsed:", productData);
 
     let result;
     try {
       result = await repo.updateRequisition(requisitionId, cleanedData);
-      console.log("Requisition update result:", result);
+      logger.debug("Requisition update result:", result);
     } catch (updateError: any) {
-      console.error("Error updating requisition fields:", updateError);
-      console.error("Update error name:", updateError.name);
-      console.error("Update error message:", updateError.message);
+      logger.error("Error updating requisition fields:", updateError);
+      logger.error("Update error name:", updateError.name);
+      logger.error("Update error message:", updateError.message);
       throw updateError;
     }
 
@@ -564,10 +574,10 @@ export const updateRequisitionService = async (
       }
 
       // Delete existing products and recreate
-      console.log("Deleting existing products for requisition:", requisitionId);
+      logger.debug("Deleting existing products for requisition:", requisitionId);
       await repo.deleteRequisitionProducts(requisitionId);
 
-      console.log("Creating new products:", validProducts.length);
+      logger.debug("Creating new products:", validProducts.length);
       for (const product of validProducts) {
         // Helper function to safely parse integer, returning null for invalid values
         const safeParseInt = (value: any): number | null => {
@@ -602,35 +612,35 @@ export const updateRequisitionService = async (
 
         // Validate required fields
         if (!normalizedProduct.productId) {
-          console.error("Invalid productId for product:", product);
+          logger.error("Invalid productId for product:", product);
           throw new CustomError("Invalid product ID", 400);
         }
 
-        console.log(
+        logger.debug(
           "Creating product with normalized data:",
           JSON.stringify(normalizedProduct, null, 2),
         );
-        console.log(
+        logger.debug(
           "Original product data was:",
           JSON.stringify(product, null, 2),
         );
         try {
           const createdProduct =
             await repo.createRequisitionProduct(normalizedProduct);
-          console.log(
+          logger.debug(
             "Successfully created product with id:",
             createdProduct.id,
           );
         } catch (productError: any) {
-          console.error("=== PRODUCT CREATION ERROR ===");
-          console.error("Error creating product:", productError);
-          console.error("Product error name:", productError.name);
-          console.error("Product error message:", productError.message);
-          console.error("Product error SQL:", productError.sql);
-          console.error("Product error parent:", productError.parent?.message);
-          console.error("Product error detail:", productError.parent?.detail);
+          logger.error("=== PRODUCT CREATION ERROR ===");
+          logger.error("Error creating product:", productError);
+          logger.error("Product error name:", productError.name);
+          logger.error("Product error message:", productError.message);
+          logger.error("Product error SQL:", productError.sql);
+          logger.error("Product error parent:", productError.parent?.message);
+          logger.error("Product error detail:", productError.parent?.detail);
           if (productError.errors) {
-            console.error(
+            logger.error(
               "Product validation errors:",
               productError.errors.map((e: any) => ({
                 field: e.path,
@@ -642,12 +652,12 @@ export const updateRequisitionService = async (
               })),
             );
           }
-          console.error("=== END PRODUCT CREATION ERROR ===");
+          logger.error("=== END PRODUCT CREATION ERROR ===");
           throw productError;
         }
       }
     } else if (productData.length > 0) {
-      console.log(
+      logger.debug(
         "No valid products found in productData, skipping product update",
       );
     }
@@ -787,18 +797,18 @@ export const updateRequisitionService = async (
 
     return result;
   } catch (error: any) {
-    console.error("Error in updateRequisitionService:", error);
-    console.error("Error name:", error.name);
-    console.error("Error message:", error.message);
-    console.error("Error parent:", error.parent?.message);
-    console.error("Error original:", error.original?.message);
+    logger.error("Error in updateRequisitionService:", error);
+    logger.error("Error name:", error.name);
+    logger.error("Error message:", error.message);
+    logger.error("Error parent:", error.parent?.message);
+    logger.error("Error original:", error.original?.message);
 
     // Log more details for Sequelize validation errors
     if (
       error.name === "SequelizeValidationError" ||
       error.name === "SequelizeUniqueConstraintError"
     ) {
-      console.error(
+      logger.error(
         "Validation errors:",
         error.errors?.map((e: any) => ({
           field: e.path,
@@ -811,18 +821,44 @@ export const updateRequisitionService = async (
 
     // Log foreign key constraint errors
     if (error.name === "SequelizeForeignKeyConstraintError") {
-      console.error("Foreign key error - table:", error.table);
-      console.error("Foreign key error - fields:", error.fields);
-      console.error("Foreign key error - index:", error.index);
+      logger.error("Foreign key error - table:", error.table);
+      logger.error("Foreign key error - fields:", error.fields);
+      logger.error("Foreign key error - index:", error.index);
     }
 
     // Log database error details
     if (error.name === "SequelizeDatabaseError") {
-      console.error("Database error SQL:", error.sql);
-      console.error("Database error parameters:", error.parameters);
+      logger.error("Database error SQL:", error.sql);
+      logger.error("Database error parameters:", error.parameters);
     }
 
-    const message = error instanceof Error ? error.message : String(error);
+    let message = error instanceof Error ? error.message : String(error);
+
+    if (
+      error.name === "SequelizeValidationError" ||
+      error.name === "SequelizeUniqueConstraintError"
+    ) {
+      if (error.errors && error.errors.length > 0) {
+        message = error.errors
+          .map(
+            (e: any) =>
+              `${e.path}: ${e.message} (value: ${JSON.stringify(e.value)})`,
+          )
+          .join("; ");
+      } else {
+        const detail =
+          error.parent?.detail ||
+          error.original?.detail ||
+          error.parent?.message ||
+          error.original?.message;
+        message = `Validation error${detail ? `: ${detail}` : ""}`;
+      }
+    } else if (error.name === "SequelizeForeignKeyConstraintError") {
+      message = `Foreign key error: ${error.table} - ${error.fields?.join(", ")} (${error.parent?.detail || error.message})`;
+    } else if (error.name === "SequelizeDatabaseError") {
+      message = `Database error: ${error.parent?.detail || error.parent?.message || error.original?.message || error.message}`;
+    }
+
     throw new CustomError(`Failed to update requisition: ${message}`, 400);
   }
 };

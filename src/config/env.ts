@@ -1,17 +1,40 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-import { parseDatabaseUrl } from '../utils/parse-database-url.js';
+import crypto from "crypto";
+import path from "path";
+import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+import { parseDatabaseUrl } from "../utils/parse-database-url.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const envPath = path.resolve(__dirname, '../../.env');
+const envPath = path.resolve(__dirname, "../../.env");
 dotenv.config({ path: envPath });
 
 const dbUrlParsed = process.env.DATABASE_URL
   ? parseDatabaseUrl(process.env.DATABASE_URL)
   : null;
+
+function resolveJwtSecret(envVarName: string): string {
+  const fromEnv = process.env[envVarName] || process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length >= 32) return fromEnv;
+
+  const isProd = (process.env.NODE_ENV || "development") === "production";
+  if (isProd) {
+    throw new Error(
+      `${envVarName} is required in production (min 32 chars). ` +
+        `Generate with: openssl rand -hex 32`,
+    );
+  }
+  // Dev/test: generate an ephemeral random secret. Tokens won't survive a restart
+  // — intentional, so accidental dev fallbacks never reach prod.
+  const generated = crypto.randomBytes(32).toString("hex");
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[env] ${envVarName} not set; generated ephemeral secret for development. ` +
+      `Set ${envVarName} in .env for stable tokens across restarts.`,
+  );
+  return generated;
+}
 
 export interface DatabaseConfig {
   host: string;
@@ -50,6 +73,14 @@ export interface LLMConfig {
   model: string;
   negotiationModel?: string;
   timeout: number;
+  /** Active provider for chat completions. Default 'openai' protects prod. */
+  provider: "openai" | "ollama" | "bedrock";
+  /** Ollama daemon base URL — separate from the legacy LLM_BASE_URL for clarity */
+  ollamaBaseURL: string;
+  /** Chat model when LLM_PROVIDER=ollama (e.g. 'llama3.1:8b') */
+  ollamaModel: string;
+  /** Chat model identifier when LLM_PROVIDER=bedrock (Phase B). */
+  bedrockModel?: string;
 }
 
 export interface OpenAIConfig {
@@ -60,7 +91,7 @@ export interface OpenAIConfig {
 }
 
 export interface VectorConfig {
-  embeddingProvider: 'openai' | 'bedrock' | 'local';
+  embeddingProvider: "openai" | "bedrock" | "local" | "ollama";
   embeddingServiceUrl: string;
   embeddingModel: string;
   embeddingDimension: number;
@@ -94,34 +125,35 @@ export interface EnvironmentConfig {
   cors: CORSConfig;
   vendorPortalUrl: string;
   chatbotFrontendUrl: string;
-  chatbotApiUrl: string;
   backendUrl: string;
   /** When set, /api/auth/* is forwarded to this auth service (same paths and contracts). */
   authServiceUrl: string;
 }
 
 export const env: EnvironmentConfig = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 5002),
-  logLevel: process.env.LOG_LEVEL || 'info',
+  logLevel: process.env.LOG_LEVEL || "info",
   database: {
-    host: process.env.DB_HOST || dbUrlParsed?.host || '127.0.0.1',
+    host: process.env.DB_HOST || dbUrlParsed?.host || "127.0.0.1",
     port: Number(process.env.DB_PORT || dbUrlParsed?.port || 5432),
-    name: process.env.DB_NAME || dbUrlParsed?.name || 'accordo',
-    username: process.env.DB_USERNAME || dbUrlParsed?.username || 'postgres',
-    password: process.env.DB_PASSWORD || dbUrlParsed?.password || 'postgres',
-    adminDatabase: process.env.DB_ADMIN_DATABASE || dbUrlParsed?.name || process.env.DB_NAME || 'postgres',
-    ssl: process.env.DB_SSL === 'true' || !!dbUrlParsed,
-    sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-    logging: process.env.DB_LOGGING === 'true',
+    name: process.env.DB_NAME || dbUrlParsed?.name || "accordo",
+    username: process.env.DB_USERNAME || dbUrlParsed?.username || "postgres",
+    password: process.env.DB_PASSWORD || dbUrlParsed?.password || "postgres",
+    adminDatabase:
+      process.env.DB_ADMIN_DATABASE ||
+      dbUrlParsed?.name ||
+      process.env.DB_NAME ||
+      "postgres",
+    ssl: process.env.DB_SSL === "true" || !!dbUrlParsed,
+    sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
+    logging: process.env.DB_LOGGING === "true",
   },
   jwt: {
-    accessSecret:
-      process.env.JWT_ACCESS_TOKEN_SECRET || process.env.JWT_SECRET || 'change-me',
-    refreshSecret:
-      process.env.JWT_REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || 'change-me',
-    accessExpiry: process.env.JWT_ACCESS_EXPIRY || '1h',
-    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+    accessSecret: resolveJwtSecret("JWT_ACCESS_TOKEN_SECRET"),
+    refreshSecret: resolveJwtSecret("JWT_REFRESH_TOKEN_SECRET"),
+    accessExpiry: process.env.JWT_ACCESS_EXPIRY || "1h",
+    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || "7d",
   },
   rateLimit: {
     windowMs: Number(process.env.RATE_LIMIT_WINDOW || 15 * 60 * 1000),
@@ -136,42 +168,63 @@ export const env: EnvironmentConfig = {
   },
   redisUrl: process.env.REDIS_URL,
   llm: {
-    baseURL: process.env.LLM_BASE_URL || 'http://localhost:11434',
-    model: process.env.LLM_MODEL || 'qwen3',
+    baseURL: process.env.LLM_BASE_URL || "http://localhost:11434",
+    model: process.env.LLM_MODEL || "qwen3",
     negotiationModel: process.env.LLM_NEGOTIATION_MODEL,
     timeout: Number(process.env.LLM_TIMEOUT || 60000),
+    provider: ((process.env.LLM_PROVIDER || "openai").toLowerCase() === "ollama"
+      ? "ollama"
+      : (process.env.LLM_PROVIDER || "openai").toLowerCase() === "bedrock"
+        ? "bedrock"
+        : "openai") as "openai" | "ollama" | "bedrock",
+    ollamaBaseURL:
+      process.env.LLM_OLLAMA_BASE_URL ||
+      process.env.LLM_BASE_URL ||
+      "http://localhost:11434",
+    ollamaModel:
+      process.env.LLM_OLLAMA_MODEL || process.env.LLM_MODEL || "llama3.1:8b",
+    bedrockModel: process.env.LLM_BEDROCK_MODEL,
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+    model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
     maxTokens: Number(process.env.OPENAI_MAX_TOKENS || 1000),
     temperature: Number(process.env.OPENAI_TEMPERATURE || 0.7),
   },
   vector: {
-    embeddingProvider: (process.env.EMBEDDING_PROVIDER || 'local') as 'openai' | 'bedrock' | 'local',
-    embeddingServiceUrl: process.env.EMBEDDING_SERVICE_URL || 'http://localhost:5003',
-    embeddingModel: process.env.EMBEDDING_MODEL || '',
+    embeddingProvider: (process.env.EMBEDDING_PROVIDER || "local") as
+      | "openai"
+      | "bedrock"
+      | "local"
+      | "ollama",
+    embeddingServiceUrl:
+      process.env.EMBEDDING_SERVICE_URL || "http://localhost:5003",
+    embeddingModel: process.env.EMBEDDING_MODEL || "",
     embeddingDimension: Number(process.env.EMBEDDING_DIMENSION || 1024),
     embeddingTimeout: Number(process.env.EMBEDDING_TIMEOUT || 30000),
     defaultTopK: Number(process.env.VECTOR_DEFAULT_TOP_K || 5),
     similarityThreshold: Number(process.env.VECTOR_SIMILARITY_THRESHOLD || 0.7),
-    enableRealTimeVectorization: process.env.ENABLE_REALTIME_VECTORIZATION !== 'false',
+    enableRealTimeVectorization:
+      process.env.ENABLE_REALTIME_VECTORIZATION !== "false",
     migrationBatchSize: Number(process.env.VECTOR_MIGRATION_BATCH_SIZE || 100),
-    awsRegion: process.env.AWS_REGION || 'us-east-1',
+    awsRegion: process.env.AWS_REGION || "us-east-1",
     awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
   cors: {
     origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
-      : '*',
+      ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
+      : "*",
     credentials: process.env.CORS_ORIGIN ? true : false,
   },
-  vendorPortalUrl: process.env.VENDOR_PORTAL_URL || 'http://localhost:5001/vendor',
-  chatbotFrontendUrl: process.env.CHATBOT_FRONTEND_URL || 'http://localhost:5001',
-  chatbotApiUrl: process.env.CHATBOT_API_URL || 'http://localhost:5002/api',
-  backendUrl: process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5002}`,
-  authServiceUrl: process.env.AUTH_SERVICE_URL?.replace(/\/$/, '') || 'http://localhost:5003',
+  vendorPortalUrl:
+    process.env.VENDOR_PORTAL_URL || "http://localhost:5001/vendor",
+  chatbotFrontendUrl:
+    process.env.CHATBOT_FRONTEND_URL || "http://localhost:5001",
+  backendUrl:
+    process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5002}`,
+  authServiceUrl:
+    process.env.AUTH_SERVICE_URL?.replace(/\/$/, "") || "http://localhost:5003",
 };
 
 export default env;

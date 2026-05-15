@@ -1,18 +1,19 @@
-import { sequelize } from '../../config/database.js';
-import env from '../../config/env.js';
-import logger from '../../config/logger.js';
-import { checkHealth as checkOpenAIHealth } from '../../services/openai.service.js';
+import { sequelize } from "../../config/database.js";
+import env from "../../config/env.js";
+import logger from "../../config/logger.js";
+import { checkHealth as checkOpenAIHealth } from "../../services/openai.service.js";
+import { checkLlmHealth } from "../../services/llm-provider/index.js";
 
 export interface ServiceStatus {
   name: string;
-  status: 'healthy' | 'unhealthy' | 'degraded';
+  status: "healthy" | "unhealthy" | "degraded";
   latency: number;
   message: string;
   details?: Record<string, unknown>;
 }
 
 export interface HealthReport {
-  status: 'healthy' | 'unhealthy' | 'degraded';
+  status: "healthy" | "unhealthy" | "degraded";
   timestamp: string;
   version: string;
   uptime: number;
@@ -31,80 +32,93 @@ async function checkDatabase(): Promise<ServiceStatus> {
     await sequelize.authenticate();
     const latency = Date.now() - start;
     return {
-      name: 'database',
-      status: 'healthy',
+      name: "database",
+      status: "healthy",
       latency,
-      message: 'Connected to PostgreSQL',
+      message: "Connected to PostgreSQL",
       details: {
         host: env.database.host,
         database: env.database.name,
-        dialect: 'postgres',
+        dialect: "postgres",
       },
     };
   } catch (error) {
     const latency = Date.now() - start;
-    logger.error('Database health check failed', { error });
+    logger.error("Database health check failed", { error });
     return {
-      name: 'database',
-      status: 'unhealthy',
+      name: "database",
+      status: "unhealthy",
       latency,
-      message: error instanceof Error ? error.message : 'Database connection failed',
+      message:
+        error instanceof Error ? error.message : "Database connection failed",
     };
   }
 }
 
 /**
- * Check Ollama LLM service
+ * Check the configured LLM provider via the provider abstraction.
+ * Reports on whichever backend `LLM_PROVIDER` selects (openai / ollama / bedrock),
+ * not the legacy `LLM_MODEL` default.
  */
 async function checkLLM(): Promise<ServiceStatus> {
   const start = Date.now();
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const response = await fetch(`${env.llm.baseURL}/api/tags`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
+    const health = await checkLlmHealth();
     const latency = Date.now() - start;
 
-    if (response.ok) {
-      const data = await response.json() as { models?: Array<{ name: string }> };
-      const modelAvailable = data.models?.some((m) => m.name.includes(env.llm.model));
-
-      return {
-        name: 'llm',
-        status: modelAvailable ? 'healthy' : 'degraded',
-        latency,
-        message: modelAvailable
-          ? `Ollama running with ${env.llm.model}`
-          : `Ollama running but ${env.llm.model} not found`,
-        details: {
-          baseUrl: env.llm.baseURL,
-          model: env.llm.model,
-          availableModels: data.models?.map((m) => m.name).slice(0, 5),
-        },
-      };
-    } else {
-      return {
-        name: 'llm',
-        status: 'unhealthy',
-        latency,
-        message: `Ollama responded with status ${response.status}`,
-      };
+    // For Ollama specifically, do an additional probe to confirm the configured
+    // model is actually installed (the daemon being up doesn't mean the model is).
+    let modelInstalled: boolean | undefined;
+    let availableModels: string[] | undefined;
+    if (health.provider === "ollama") {
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 5000);
+        const r = await fetch(`${env.llm.ollamaBaseURL}/api/tags`, {
+          signal: controller.signal,
+        });
+        clearTimeout(t);
+        if (r.ok) {
+          const data = (await r.json()) as {
+            models?: Array<{ name: string }>;
+          };
+          availableModels = data.models?.map((m) => m.name).slice(0, 10);
+          modelInstalled = data.models?.some((m) =>
+            m.name.includes(env.llm.ollamaModel),
+          );
+        }
+      } catch {
+        // Probe failure is non-fatal — primary health already passed.
+      }
     }
+
+    const overallHealthy =
+      health.available &&
+      (health.provider !== "ollama" || modelInstalled !== false);
+
+    return {
+      name: "llm",
+      status: overallHealthy ? "healthy" : "degraded",
+      latency,
+      message: overallHealthy
+        ? `${health.provider} provider running with ${health.model}`
+        : health.available && modelInstalled === false
+          ? `${health.provider} daemon up but model '${health.model}' not installed`
+          : health.error || `${health.provider} provider unavailable`,
+      details: {
+        provider: health.provider,
+        model: health.model,
+        ...(availableModels ? { availableModels } : {}),
+      },
+    };
   } catch (error) {
     const latency = Date.now() - start;
     return {
-      name: 'llm',
-      status: 'unhealthy',
+      name: "llm",
+      status: "unhealthy",
       latency,
-      message: error instanceof Error ? error.message : 'LLM service unavailable',
-      details: {
-        baseUrl: env.llm.baseURL,
-        model: env.llm.model,
-      },
+      message:
+        error instanceof Error ? error.message : "LLM provider unavailable",
     };
   }
 }
@@ -115,14 +129,18 @@ async function checkLLM(): Promise<ServiceStatus> {
 async function checkEmbeddingService(): Promise<ServiceStatus> {
   const start = Date.now();
   try {
-    const { embeddingClient } = await import('../vector/embedding.client.js');
+    const { embeddingClient } = await import("../vector/embedding.client.js");
     const health = await embeddingClient.checkHealth();
     const latency = Date.now() - start;
 
-    const isHealthy = health.status === 'healthy';
+    const isHealthy = health.status === "healthy";
     return {
-      name: 'embedding',
-      status: isHealthy ? 'healthy' : health.status === 'initializing' ? 'degraded' : 'unhealthy',
+      name: "embedding",
+      status: isHealthy
+        ? "healthy"
+        : health.status === "initializing"
+          ? "degraded"
+          : "unhealthy",
       latency,
       message: isHealthy
         ? `Embedding provider '${env.vector.embeddingProvider}' running on ${health.device}`
@@ -137,10 +155,13 @@ async function checkEmbeddingService(): Promise<ServiceStatus> {
   } catch (error) {
     const latency = Date.now() - start;
     return {
-      name: 'embedding',
-      status: 'unhealthy',
+      name: "embedding",
+      status: "unhealthy",
       latency,
-      message: error instanceof Error ? error.message : 'Embedding service unavailable',
+      message:
+        error instanceof Error
+          ? error.message
+          : "Embedding service unavailable",
       details: {
         provider: env.vector.embeddingProvider,
       },
@@ -160,7 +181,7 @@ async function checkRedis(): Promise<ServiceStatus | null> {
   try {
     // Simple TCP check for Redis
     const url = new URL(env.redisUrl);
-    const { default: net } = await import('net');
+    const { default: net } = await import("net");
 
     return new Promise((resolve) => {
       const socket = net.createConnection({
@@ -169,14 +190,14 @@ async function checkRedis(): Promise<ServiceStatus | null> {
         timeout: 5000,
       });
 
-      socket.on('connect', () => {
+      socket.on("connect", () => {
         const latency = Date.now() - start;
         socket.destroy();
         resolve({
-          name: 'redis',
-          status: 'healthy',
+          name: "redis",
+          status: "healthy",
           latency,
-          message: 'Redis connection successful',
+          message: "Redis connection successful",
           details: {
             host: url.hostname,
             port: url.port || 6379,
@@ -184,71 +205,83 @@ async function checkRedis(): Promise<ServiceStatus | null> {
         });
       });
 
-      socket.on('error', (error) => {
+      socket.on("error", (error) => {
         const latency = Date.now() - start;
         socket.destroy();
         resolve({
-          name: 'redis',
-          status: 'unhealthy',
+          name: "redis",
+          status: "unhealthy",
           latency,
           message: error.message,
         });
       });
 
-      socket.on('timeout', () => {
+      socket.on("timeout", () => {
         const latency = Date.now() - start;
         socket.destroy();
         resolve({
-          name: 'redis',
-          status: 'unhealthy',
+          name: "redis",
+          status: "unhealthy",
           latency,
-          message: 'Redis connection timeout',
+          message: "Redis connection timeout",
         });
       });
     });
   } catch (error) {
     const latency = Date.now() - start;
     return {
-      name: 'redis',
-      status: 'unhealthy',
+      name: "redis",
+      status: "unhealthy",
       latency,
-      message: error instanceof Error ? error.message : 'Redis check failed',
+      message: error instanceof Error ? error.message : "Redis check failed",
     };
   }
 }
 
 /**
- * Check OpenAI GPT-3.5 service
+ * Check OpenAI — only when it's actually used.
+ *
+ * When LLM_PROVIDER=openai → probe as the primary provider.
+ * Otherwise → only probe if an API key is configured (acts as a fallback
+ * inside openai.service.ts). Skip entirely if no key is set so we don't spam
+ * the OpenAI API on every health check.
  */
-async function checkOpenAI(): Promise<ServiceStatus> {
+async function checkOpenAI(): Promise<ServiceStatus | null> {
+  if (env.llm.provider !== "openai" && !env.openai.apiKey) return null;
+
   const start = Date.now();
+  const role = env.llm.provider === "openai" ? "primary" : "fallback";
   try {
     const health = await checkOpenAIHealth();
     const latency = Date.now() - start;
 
     return {
-      name: 'openai',
-      status: health.available ? 'healthy' : 'degraded',
+      name: "openai",
+      status: health.available
+        ? "healthy"
+        : role === "primary"
+          ? "unhealthy"
+          : "degraded",
       latency,
       message: health.available
-        ? `OpenAI GPT-3.5 available (${health.model})`
-        : health.error || 'OpenAI not available (will use Qwen3 fallback)',
+        ? `OpenAI ${role} provider available (${health.model})`
+        : health.error || `OpenAI ${role} provider unavailable`,
       details: {
+        role,
         model: health.model,
         available: health.available,
-        fallbackAvailable: true,
       },
     };
   } catch (error) {
     const latency = Date.now() - start;
     return {
-      name: 'openai',
-      status: 'degraded',
+      name: "openai",
+      status: role === "primary" ? "unhealthy" : "degraded",
       latency,
-      message: 'OpenAI check failed (will use Qwen3 fallback)',
+      message: `OpenAI ${role} provider check failed`,
       details: {
+        role,
         error: error instanceof Error ? error.message : String(error),
-        fallbackAvailable: true,
       },
     };
   }
@@ -264,12 +297,12 @@ async function checkEmailService(): Promise<ServiceStatus> {
     // AWS SES is configured
     const latency = Date.now() - start;
     return {
-      name: 'email',
-      status: 'healthy',
+      name: "email",
+      status: "healthy",
       latency,
       message: `AWS SES configured: ${env.smtp.host}:${env.smtp.port}`,
       details: {
-        provider: 'AWS SES',
+        provider: "AWS SES",
         host: env.smtp.host,
         port: env.smtp.port,
         from: env.smtp.from,
@@ -279,10 +312,10 @@ async function checkEmailService(): Promise<ServiceStatus> {
 
   const latency = Date.now() - start;
   return {
-    name: 'email',
-    status: 'degraded',
+    name: "email",
+    status: "degraded",
     latency,
-    message: 'AWS SES not configured',
+    message: "AWS SES not configured",
   };
 }
 
@@ -302,27 +335,27 @@ export async function getHealthReport(): Promise<HealthReport> {
   const services = checks.filter((s): s is ServiceStatus => s !== null);
 
   // Determine overall status
-  const hasUnhealthy = services.some((s) => s.status === 'unhealthy');
-  const hasDegraded = services.some((s) => s.status === 'degraded');
+  const hasUnhealthy = services.some((s) => s.status === "unhealthy");
+  const hasDegraded = services.some((s) => s.status === "degraded");
 
   // Database is critical - if it's down, whole system is unhealthy
-  const dbStatus = services.find((s) => s.name === 'database');
+  const dbStatus = services.find((s) => s.name === "database");
 
-  let overallStatus: 'healthy' | 'unhealthy' | 'degraded';
-  if (dbStatus?.status === 'unhealthy') {
-    overallStatus = 'unhealthy';
+  let overallStatus: "healthy" | "unhealthy" | "degraded";
+  if (dbStatus?.status === "unhealthy") {
+    overallStatus = "unhealthy";
   } else if (hasUnhealthy) {
-    overallStatus = 'degraded';
+    overallStatus = "degraded";
   } else if (hasDegraded) {
-    overallStatus = 'degraded';
+    overallStatus = "degraded";
   } else {
-    overallStatus = 'healthy';
+    overallStatus = "healthy";
   }
 
   return {
     status: overallStatus,
     timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '1.0.0',
+    version: process.env.npm_package_version || "1.0.0",
     uptime: Math.floor((Date.now() - startTime) / 1000),
     environment: env.nodeEnv,
     services,
@@ -332,11 +365,14 @@ export async function getHealthReport(): Promise<HealthReport> {
 /**
  * Get simple health status (for load balancers)
  */
-export async function getSimpleHealth(): Promise<{ status: string; message: string }> {
+export async function getSimpleHealth(): Promise<{
+  status: string;
+  message: string;
+}> {
   try {
     await sequelize.authenticate();
-    return { status: 'ok', message: 'Accordo API is running' };
+    return { status: "ok", message: "Accordo API is running" };
   } catch (error) {
-    return { status: 'error', message: 'Database connection failed' };
+    return { status: "error", message: "Database connection failed" };
   }
 }

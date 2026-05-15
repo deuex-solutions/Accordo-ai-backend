@@ -2,7 +2,8 @@
  * Vector Service - Main service for vectorization, search, and RAG operations
  */
 
-import { Op, literal, fn, col } from 'sequelize';
+import { Op, literal, fn, col, QueryTypes } from "sequelize";
+import { vectorLiteral } from "../../types/sequelize-vector.js";
 import {
   MessageEmbedding,
   DealEmbedding,
@@ -11,10 +12,10 @@ import {
   ChatbotMessage,
   ChatbotDeal,
   sequelize,
-} from '../../models/index.js';
-import { embeddingClient } from './embedding.client.js';
-import env from '../../config/env.js';
-import logger from '../../config/logger.js';
+} from "../../models/index.js";
+import { embeddingClient } from "./embedding.client.js";
+import env from "../../config/env.js";
+import logger from "../../config/logger.js";
 import type {
   VectorSearchFilters,
   VectorSearchOptions,
@@ -30,16 +31,137 @@ import type {
   PreparedContent,
   MessageContent,
   DealSummaryContent,
-} from './vector.types.js';
+} from "./vector.types.js";
 
 const VECTOR_DIMENSION = env.vector.embeddingDimension;
 const DEFAULT_TOP_K = 5;
 const DEFAULT_SIMILARITY_THRESHOLD = 0.7;
 
+// ─────────────────────────────────────────────────────────────────────────
+// pgvector SQL filter builders
+//
+// The three search functions all push WHERE clauses into raw SQL so the
+// HNSW index can be used during ORDER BY embedding <=> query. Sequelize's
+// findAll() WHERE syntax doesn't compose with raw ORDER-BY-on-vector, so we
+// translate the filter object into parameterized SQL fragments here.
+// ─────────────────────────────────────────────────────────────────────────
+
+interface SqlFilterFragment {
+  where: string;
+  replacements: Record<string, unknown>;
+}
+
+function buildMessageSqlFilters(
+  filters: VectorSearchFilters,
+): SqlFilterFragment {
+  const clauses: string[] = [];
+  const replacements: Record<string, unknown> = {};
+
+  if (filters.dealId) {
+    clauses.push("deal_id = :dealId");
+    replacements.dealId = filters.dealId;
+  }
+  if (filters.userId) {
+    clauses.push("user_id = :userId");
+    replacements.userId = filters.userId;
+  }
+  if (filters.vendorId) {
+    clauses.push("vendor_id = :vendorId");
+    replacements.vendorId = filters.vendorId;
+  }
+  if (filters.role) {
+    clauses.push("role = :role");
+    replacements.role = filters.role;
+  }
+  if (filters.outcome) {
+    clauses.push("outcome = :outcome");
+    replacements.outcome = filters.outcome;
+  }
+  if (filters.decisionAction) {
+    clauses.push("decision_action = :decisionAction");
+    replacements.decisionAction = filters.decisionAction;
+  }
+  if (filters.contentType) {
+    clauses.push("content_type = :contentType");
+    replacements.contentType = filters.contentType;
+  }
+  if (filters.minUtility !== undefined) {
+    clauses.push("utility_score >= :minUtility");
+    replacements.minUtility = filters.minUtility;
+  }
+  if (filters.maxUtility !== undefined) {
+    clauses.push("utility_score <= :maxUtility");
+    replacements.maxUtility = filters.maxUtility;
+  }
+  if (filters.dateFrom) {
+    clauses.push("created_at >= :dateFrom");
+    replacements.dateFrom = filters.dateFrom;
+  }
+  if (filters.dateTo) {
+    clauses.push("created_at <= :dateTo");
+    replacements.dateTo = filters.dateTo;
+  }
+
+  return { where: clauses.join(" AND "), replacements };
+}
+
+function buildDealSqlFilters(filters: VectorSearchFilters): SqlFilterFragment {
+  const clauses: string[] = ["embedding_type = 'summary'"];
+  const replacements: Record<string, unknown> = {};
+
+  if (filters.userId) {
+    clauses.push("user_id = :userId");
+    replacements.userId = filters.userId;
+  }
+  if (filters.vendorId) {
+    clauses.push("vendor_id = :vendorId");
+    replacements.vendorId = filters.vendorId;
+  }
+  if (filters.outcome) {
+    clauses.push("final_status = :outcome");
+    replacements.outcome = filters.outcome;
+  }
+  if (filters.productCategory) {
+    clauses.push("product_category = :productCategory");
+    replacements.productCategory = filters.productCategory;
+  }
+  if (filters.minUtility !== undefined) {
+    clauses.push("final_utility >= :minUtility");
+    replacements.minUtility = filters.minUtility;
+  }
+  if (filters.maxUtility !== undefined) {
+    clauses.push("final_utility <= :maxUtility");
+    replacements.maxUtility = filters.maxUtility;
+  }
+
+  return { where: clauses.join(" AND "), replacements };
+}
+
+function buildPatternSqlFilters(
+  patternType?: string,
+  scenario?: string,
+): SqlFilterFragment {
+  const clauses: string[] = ["is_active = true"];
+  const replacements: Record<string, unknown> = {};
+
+  if (patternType) {
+    clauses.push("pattern_type = :patternType");
+    replacements.patternType = patternType;
+  }
+  if (scenario) {
+    clauses.push("scenario = :scenario");
+    replacements.scenario = scenario;
+  }
+
+  return { where: clauses.join(" AND "), replacements };
+}
+
 /**
  * Prepare message content for embedding
  */
-export function prepareMessageContent(message: MessageContent): PreparedContent {
+export function prepareMessageContent(
+  message: MessageContent,
+): PreparedContent {
   const parts: string[] = [];
 
   // Add role and content
@@ -59,12 +181,18 @@ export function prepareMessageContent(message: MessageContent): PreparedContent 
   // Add decision info if available
   if (message.engineDecision) {
     parts.push(`Decision: ${message.engineDecision.action}`);
-    parts.push(`Utility: ${(message.engineDecision.utilityScore * 100).toFixed(1)}%`);
+    parts.push(
+      `Utility: ${(message.engineDecision.utilityScore * 100).toFixed(1)}%`,
+    );
   }
 
   return {
-    contentText: parts.join(' | '),
-    contentType: message.engineDecision ? 'decision' : message.extractedOffer ? 'offer_extract' : 'message',
+    contentText: parts.join(" | "),
+    contentType: message.engineDecision
+      ? "decision"
+      : message.extractedOffer
+        ? "offer_extract"
+        : "message",
     metadata: {
       dealId: message.dealId,
       role: message.role,
@@ -106,12 +234,12 @@ export function prepareDealSummary(deal: DealSummaryContent): PreparedContent {
     .map((m) => `${m.role}: ${m.content.substring(0, 100)}...`);
 
   if (keyMessages.length > 0) {
-    parts.push(`Key exchanges: ${keyMessages.join(' | ')}`);
+    parts.push(`Key exchanges: ${keyMessages.join(" | ")}`);
   }
 
   return {
-    contentText: parts.join('. '),
-    contentType: 'summary',
+    contentText: parts.join(". "),
+    contentType: "summary",
     metadata: {
       dealId: deal.dealId,
       status: deal.status,
@@ -125,7 +253,7 @@ export function prepareDealSummary(deal: DealSummaryContent): PreparedContent {
  */
 export async function vectorizeMessage(
   message: ChatbotMessage,
-  deal: ChatbotDeal
+  deal: ChatbotDeal,
 ): Promise<VectorizationResult> {
   const startTime = Date.now();
 
@@ -136,8 +264,12 @@ export async function vectorizeMessage(
       role: message.role,
       dealId: message.dealId,
       round: deal.round,
-      extractedOffer: message.extractedOffer as { unit_price?: number; payment_terms?: string } | undefined,
-      engineDecision: message.engineDecision as { action: string; utilityScore: number } | undefined,
+      extractedOffer: message.extractedOffer as
+        | { unit_price?: number; payment_terms?: string }
+        | undefined,
+      engineDecision: message.engineDecision as
+        | { action: string; utilityScore: number }
+        | undefined,
     };
 
     const prepared = prepareMessageContent(messageContent);
@@ -145,7 +277,7 @@ export async function vectorizeMessage(
     // Generate embedding
     const embedding = await embeddingClient.embed(
       prepared.contentText,
-      'Represent this negotiation message for retrieval'
+      "Represent this negotiation message for retrieval",
     );
 
     // Store embedding
@@ -156,10 +288,13 @@ export async function vectorizeMessage(
       vendorId: deal.vendorId || undefined,
       embedding,
       contentText: prepared.contentText,
-      contentType: prepared.contentType as 'message' | 'offer_extract' | 'decision',
+      contentType: prepared.contentType as
+        | "message"
+        | "offer_extract"
+        | "decision",
       role: message.role,
       round: deal.round,
-      outcome: deal.status !== 'NEGOTIATING' ? deal.status : null,
+      outcome: deal.status !== "NEGOTIATING" ? deal.status : null,
       utilityScore: message.utilityScore,
       decisionAction: message.decisionAction,
       metadata: {
@@ -175,10 +310,10 @@ export async function vectorizeMessage(
       processingTimeMs: Date.now() - startTime,
     };
   } catch (error) {
-    logger.error('Error vectorizing message:', error);
+    logger.error("Error vectorizing message:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
       processingTimeMs: Date.now() - startTime,
     };
   }
@@ -187,17 +322,19 @@ export async function vectorizeMessage(
 /**
  * Vectorize a deal (summary embedding)
  */
-export async function vectorizeDeal(dealId: string): Promise<VectorizationResult> {
+export async function vectorizeDeal(
+  dealId: string,
+): Promise<VectorizationResult> {
   const startTime = Date.now();
 
   try {
     // Fetch deal with messages
     const deal = await ChatbotDeal.findByPk(dealId, {
-      include: [{ model: ChatbotMessage, as: 'Messages' }],
+      include: [{ model: ChatbotMessage, as: "Messages" }],
     });
 
     if (!deal) {
-      return { success: false, error: 'Deal not found' };
+      return { success: false, error: "Deal not found" };
     }
 
     // Prepare summary content
@@ -206,8 +343,12 @@ export async function vectorizeDeal(dealId: string): Promise<VectorizationResult
       role: m.role,
       dealId: m.dealId,
       round: deal.round,
-      extractedOffer: m.extractedOffer as { unit_price?: number; payment_terms?: string } | undefined,
-      engineDecision: m.engineDecision as { action: string; utilityScore: number } | undefined,
+      extractedOffer: m.extractedOffer as
+        | { unit_price?: number; payment_terms?: string }
+        | undefined,
+      engineDecision: m.engineDecision as
+        | { action: string; utilityScore: number }
+        | undefined,
     }));
 
     const summaryContent: DealSummaryContent = {
@@ -217,7 +358,9 @@ export async function vectorizeDeal(dealId: string): Promise<VectorizationResult
       status: deal.status,
       totalRounds: deal.round,
       latestUtility: deal.latestUtility || undefined,
-      latestOffer: deal.latestOfferJson as { unit_price?: number; payment_terms?: string } | undefined,
+      latestOffer: deal.latestOfferJson as
+        | { unit_price?: number; payment_terms?: string }
+        | undefined,
       messages,
     };
 
@@ -226,12 +369,12 @@ export async function vectorizeDeal(dealId: string): Promise<VectorizationResult
     // Generate embedding
     const embedding = await embeddingClient.embed(
       prepared.contentText,
-      'Represent this negotiation summary for retrieval'
+      "Represent this negotiation summary for retrieval",
     );
 
     // Check if embedding already exists
     const existing = await DealEmbedding.findOne({
-      where: { dealId, embeddingType: 'summary' },
+      where: { dealId, embeddingType: "summary" },
     });
 
     let embeddingRecord;
@@ -253,7 +396,7 @@ export async function vectorizeDeal(dealId: string): Promise<VectorizationResult
         vendorId: deal.vendorId || undefined,
         embedding,
         contentText: prepared.contentText,
-        embeddingType: 'summary',
+        embeddingType: "summary",
         dealTitle: deal.title,
         counterparty: deal.counterparty,
         finalStatus: deal.status,
@@ -272,10 +415,10 @@ export async function vectorizeDeal(dealId: string): Promise<VectorizationResult
       processingTimeMs: Date.now() - startTime,
     };
   } catch (error) {
-    logger.error('Error vectorizing deal:', error);
+    logger.error("Error vectorizing deal:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
       processingTimeMs: Date.now() - startTime,
     };
   }
@@ -286,15 +429,19 @@ export async function vectorizeDeal(dealId: string): Promise<VectorizationResult
  */
 export async function searchSimilarMessages(
   query: string,
-  options: VectorSearchOptions = {}
+  options: VectorSearchOptions = {},
 ): Promise<MessageSearchResult[]> {
-  const { topK = DEFAULT_TOP_K, similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD, filters = {} } = options;
+  const {
+    topK = DEFAULT_TOP_K,
+    similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD,
+    filters = {},
+  } = options;
 
   try {
     // Generate query embedding
     const queryEmbedding = await embeddingClient.embed(
       query,
-      'Represent this query for retrieving relevant negotiation messages'
+      "Represent this query for retrieving relevant negotiation messages",
     );
 
     // Build where clause
@@ -305,61 +452,94 @@ export async function searchSimilarMessages(
     if (filters.vendorId) whereClause.vendorId = filters.vendorId;
     if (filters.role) whereClause.role = filters.role;
     if (filters.outcome) whereClause.outcome = filters.outcome;
-    if (filters.decisionAction) whereClause.decisionAction = filters.decisionAction;
+    if (filters.decisionAction)
+      whereClause.decisionAction = filters.decisionAction;
     if (filters.contentType) whereClause.contentType = filters.contentType;
 
     if (filters.minUtility !== undefined || filters.maxUtility !== undefined) {
       whereClause.utilityScore = {};
       if (filters.minUtility !== undefined) {
-        (whereClause.utilityScore as Record<string, number>)[Op.gte as unknown as string] = filters.minUtility;
+        (whereClause.utilityScore as Record<string, number>)[
+          Op.gte as unknown as string
+        ] = filters.minUtility;
       }
       if (filters.maxUtility !== undefined) {
-        (whereClause.utilityScore as Record<string, number>)[Op.lte as unknown as string] = filters.maxUtility;
+        (whereClause.utilityScore as Record<string, number>)[
+          Op.lte as unknown as string
+        ] = filters.maxUtility;
       }
     }
 
     if (filters.dateFrom || filters.dateTo) {
       whereClause.createdAt = {};
       if (filters.dateFrom) {
-        (whereClause.createdAt as Record<string, Date>)[Op.gte as unknown as string] = filters.dateFrom;
+        (whereClause.createdAt as Record<string, Date>)[
+          Op.gte as unknown as string
+        ] = filters.dateFrom;
       }
       if (filters.dateTo) {
-        (whereClause.createdAt as Record<string, Date>)[Op.lte as unknown as string] = filters.dateTo;
+        (whereClause.createdAt as Record<string, Date>)[
+          Op.lte as unknown as string
+        ] = filters.dateTo;
       }
     }
 
-    // Fetch all embeddings that match filters
-    const embeddings = await MessageEmbedding.findAll({
-      where: whereClause,
-      limit: topK * 3, // Fetch more than needed to account for similarity filtering
-    });
+    // pgvector ANN search: ORDER BY embedding <=> query distance (cosine)
+    // Returns rows sorted ascending by distance → lowest distance = highest similarity.
+    // similarity = 1 - cosine_distance, since all embeddings are L2-normalized.
+    const sqlFilters = buildMessageSqlFilters(filters);
+    const queryVec = vectorLiteral(queryEmbedding);
 
-    // Compute similarities and sort
-    const results: MessageSearchResult[] = embeddings
-      .map((emb) => {
-        const similarity = embeddingClient.cosineSimilarity(queryEmbedding, emb.embedding);
-        return {
-          id: emb.id,
-          similarity,
-          contentText: emb.contentText,
-          metadata: {
-            messageId: emb.messageId,
-            dealId: emb.dealId,
-            role: emb.role,
-            round: emb.round,
-            outcome: emb.outcome || undefined,
-            utilityScore: emb.utilityScore || undefined,
-            decisionAction: emb.decisionAction || undefined,
-          },
-        };
-      })
-      .filter((r) => r.similarity >= similarityThreshold)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, topK);
+    const rows = await sequelize.query<{
+      id: string;
+      message_id: string;
+      deal_id: string;
+      role: string;
+      round: number;
+      outcome: string | null;
+      utility_score: number | null;
+      decision_action: string | null;
+      content_text: string;
+      distance: string;
+    }>(
+      `SELECT
+         id, message_id, deal_id, role, round, outcome,
+         utility_score, decision_action, content_text,
+         embedding <=> :queryVec ::vector AS distance
+       FROM message_embeddings
+       ${sqlFilters.where ? `WHERE ${sqlFilters.where}` : ""}
+       ORDER BY embedding <=> :queryVec ::vector
+       LIMIT :limit`,
+      {
+        replacements: {
+          queryVec,
+          limit: topK,
+          ...sqlFilters.replacements,
+        },
+        type: QueryTypes.SELECT,
+      },
+    );
+
+    const results: MessageSearchResult[] = rows
+      .map((r) => ({
+        id: r.id,
+        similarity: 1 - Number(r.distance),
+        contentText: r.content_text,
+        metadata: {
+          messageId: r.message_id,
+          dealId: r.deal_id,
+          role: r.role,
+          round: r.round,
+          outcome: r.outcome || undefined,
+          utilityScore: r.utility_score || undefined,
+          decisionAction: r.decision_action || undefined,
+        },
+      }))
+      .filter((r) => r.similarity >= similarityThreshold);
 
     return results;
   } catch (error) {
-    logger.error('Error searching similar messages:', error);
+    logger.error("Error searching similar messages:", error);
     throw error;
   }
 }
@@ -369,69 +549,75 @@ export async function searchSimilarMessages(
  */
 export async function searchSimilarDeals(
   query: string,
-  options: VectorSearchOptions = {}
+  options: VectorSearchOptions = {},
 ): Promise<DealSearchResult[]> {
-  const { topK = DEFAULT_TOP_K, similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD, filters = {} } = options;
+  const {
+    topK = DEFAULT_TOP_K,
+    similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD,
+    filters = {},
+  } = options;
 
   try {
     // Generate query embedding
     const queryEmbedding = await embeddingClient.embed(
       query,
-      'Represent this query for retrieving relevant negotiations'
+      "Represent this query for retrieving relevant negotiations",
     );
 
-    // Build where clause
-    const whereClause: Record<string, unknown> = {
-      embeddingType: 'summary',
-    };
+    // pgvector ANN search via HNSW index, see searchSimilarMessages for rationale.
+    const sqlFilters = buildDealSqlFilters(filters);
+    const queryVec = vectorLiteral(queryEmbedding);
 
-    if (filters.userId) whereClause.userId = filters.userId;
-    if (filters.vendorId) whereClause.vendorId = filters.vendorId;
-    if (filters.outcome) whereClause.finalStatus = filters.outcome;
-    if (filters.productCategory) whereClause.productCategory = filters.productCategory;
+    const rows = await sequelize.query<{
+      id: string;
+      deal_id: string;
+      deal_title: string | null;
+      counterparty: string | null;
+      final_status: string | null;
+      total_rounds: number | null;
+      final_utility: number | null;
+      final_price: number | null;
+      content_text: string;
+      distance: string;
+    }>(
+      `SELECT
+         id, deal_id, deal_title, counterparty, final_status,
+         total_rounds, final_utility, final_price, content_text,
+         embedding <=> :queryVec ::vector AS distance
+       FROM deal_embeddings
+       WHERE ${sqlFilters.where}
+       ORDER BY embedding <=> :queryVec ::vector
+       LIMIT :limit`,
+      {
+        replacements: {
+          queryVec,
+          limit: topK,
+          ...sqlFilters.replacements,
+        },
+        type: QueryTypes.SELECT,
+      },
+    );
 
-    if (filters.minUtility !== undefined || filters.maxUtility !== undefined) {
-      whereClause.finalUtility = {};
-      if (filters.minUtility !== undefined) {
-        (whereClause.finalUtility as Record<string, number>)[Op.gte as unknown as string] = filters.minUtility;
-      }
-      if (filters.maxUtility !== undefined) {
-        (whereClause.finalUtility as Record<string, number>)[Op.lte as unknown as string] = filters.maxUtility;
-      }
-    }
-
-    // Fetch embeddings
-    const embeddings = await DealEmbedding.findAll({
-      where: whereClause,
-      limit: topK * 3,
-    });
-
-    // Compute similarities and sort
-    const results: DealSearchResult[] = embeddings
-      .map((emb) => {
-        const similarity = embeddingClient.cosineSimilarity(queryEmbedding, emb.embedding);
-        return {
-          id: emb.id,
-          similarity,
-          contentText: emb.contentText,
-          metadata: {
-            dealId: emb.dealId,
-            dealTitle: emb.dealTitle || undefined,
-            counterparty: emb.counterparty || undefined,
-            finalStatus: emb.finalStatus || undefined,
-            totalRounds: emb.totalRounds || undefined,
-            finalUtility: emb.finalUtility || undefined,
-            finalPrice: emb.finalPrice || undefined,
-          },
-        };
-      })
-      .filter((r) => r.similarity >= similarityThreshold)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, topK);
+    const results: DealSearchResult[] = rows
+      .map((r) => ({
+        id: r.id,
+        similarity: 1 - Number(r.distance),
+        contentText: r.content_text,
+        metadata: {
+          dealId: r.deal_id,
+          dealTitle: r.deal_title || undefined,
+          counterparty: r.counterparty || undefined,
+          finalStatus: r.final_status || undefined,
+          totalRounds: r.total_rounds || undefined,
+          finalUtility: r.final_utility || undefined,
+          finalPrice: r.final_price || undefined,
+        },
+      }))
+      .filter((r) => r.similarity >= similarityThreshold);
 
     return results;
   } catch (error) {
-    logger.error('Error searching similar deals:', error);
+    logger.error("Error searching similar deals:", error);
     throw error;
   }
 }
@@ -441,56 +627,77 @@ export async function searchSimilarDeals(
  */
 export async function searchPatterns(
   query: string,
-  options: VectorSearchOptions & { patternType?: string; scenario?: string } = {}
+  options: VectorSearchOptions & {
+    patternType?: string;
+    scenario?: string;
+  } = {},
 ): Promise<PatternSearchResult[]> {
-  const { topK = DEFAULT_TOP_K, similarityThreshold = 0.6, patternType, scenario } = options;
+  const {
+    topK = DEFAULT_TOP_K,
+    similarityThreshold = 0.6,
+    patternType,
+    scenario,
+  } = options;
 
   try {
     // Generate query embedding
     const queryEmbedding = await embeddingClient.embed(
       query,
-      'Represent this query for retrieving relevant negotiation patterns'
+      "Represent this query for retrieving relevant negotiation patterns",
     );
 
-    // Build where clause
-    const whereClause: Record<string, unknown> = {
-      isActive: true,
-    };
+    // pgvector ANN search via HNSW index.
+    const sqlFilters = buildPatternSqlFilters(patternType, scenario);
+    const queryVec = vectorLiteral(queryEmbedding);
 
-    if (patternType) whereClause.patternType = patternType;
-    if (scenario) whereClause.scenario = scenario;
+    const rows = await sequelize.query<{
+      id: string;
+      pattern_type: string;
+      pattern_name: string;
+      scenario: string | null;
+      avg_utility: number | null;
+      success_rate: number | null;
+      sample_count: number;
+      content_text: string;
+      distance: string;
+    }>(
+      `SELECT
+         id, pattern_type, pattern_name, scenario,
+         avg_utility, success_rate, sample_count, content_text,
+         embedding <=> :queryVec ::vector AS distance
+       FROM negotiation_patterns
+       WHERE ${sqlFilters.where}
+       ORDER BY embedding <=> :queryVec ::vector
+       LIMIT :limit`,
+      {
+        replacements: {
+          queryVec,
+          limit: topK,
+          ...sqlFilters.replacements,
+        },
+        type: QueryTypes.SELECT,
+      },
+    );
 
-    // Fetch patterns
-    const patterns = await NegotiationPattern.findAll({
-      where: whereClause,
-      limit: topK * 3,
-    });
-
-    // Compute similarities and sort
-    const results: PatternSearchResult[] = patterns
-      .map((pattern) => {
-        const similarity = embeddingClient.cosineSimilarity(queryEmbedding, pattern.embedding);
-        return {
-          id: pattern.id,
-          similarity,
-          contentText: pattern.contentText,
-          metadata: {
-            patternType: pattern.patternType,
-            patternName: pattern.patternName,
-            scenario: pattern.scenario || undefined,
-            avgUtility: pattern.avgUtility || undefined,
-            successRate: pattern.successRate || undefined,
-            sampleCount: pattern.sampleCount,
-          },
-        };
-      })
-      .filter((r) => r.similarity >= similarityThreshold)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, topK);
+    const results: PatternSearchResult[] = rows
+      .map((r) => ({
+        id: r.id,
+        similarity: 1 - Number(r.distance),
+        contentText: r.content_text,
+        metadata: {
+          patternType: r.pattern_type,
+          patternName: r.pattern_name,
+          scenario: r.scenario || undefined,
+          avgUtility: r.avg_utility || undefined,
+          successRate: r.success_rate || undefined,
+          sampleCount: r.sample_count,
+        },
+      }))
+      .filter((r) => r.similarity >= similarityThreshold);
 
     return results;
   } catch (error) {
-    logger.error('Error searching patterns:', error);
+    logger.error("Error searching patterns:", error);
     throw error;
   }
 }
@@ -500,7 +707,7 @@ export async function searchPatterns(
  */
 export async function buildAIContext(
   currentDealId: string,
-  vendorMessage: string
+  vendorMessage: string,
 ): Promise<AIContextResult> {
   const startTime = Date.now();
 
@@ -508,11 +715,11 @@ export async function buildAIContext(
     // Fetch current deal for context
     const currentDeal = await ChatbotDeal.findByPk(currentDealId);
     if (!currentDeal) {
-      throw new Error('Deal not found');
+      throw new Error("Deal not found");
     }
 
     // Build search query combining deal context and vendor message
-    const searchQuery = `${currentDeal.title} | ${currentDeal.counterparty || ''} | ${vendorMessage}`;
+    const searchQuery = `${currentDeal.title} | ${currentDeal.counterparty || ""} | ${vendorMessage}`;
 
     // Run searches in parallel
     const [similarDeals, patterns, relevantMessages] = await Promise.all([
@@ -521,22 +728,22 @@ export async function buildAIContext(
         topK: 3,
         similarityThreshold: 0.6,
         filters: {
-          outcome: 'ACCEPTED',
+          outcome: "ACCEPTED",
           minUtility: 0.7,
         },
       }),
       // Find relevant patterns
       searchPatterns(searchQuery, {
         topK: 2,
-        patternType: 'successful_negotiation',
+        patternType: "successful_negotiation",
       }),
       // Find relevant messages from past negotiations
       searchSimilarMessages(vendorMessage, {
         topK: 5,
         similarityThreshold: 0.65,
         filters: {
-          role: 'ACCORDO',
-          decisionAction: 'COUNTER',
+          role: "ACCORDO",
+          decisionAction: "COUNTER",
         },
       }),
     ]);
@@ -545,21 +752,25 @@ export async function buildAIContext(
     const contextParts: string[] = [];
 
     if (similarDeals.length > 0) {
-      contextParts.push('Similar successful negotiations:');
+      contextParts.push("Similar successful negotiations:");
       similarDeals.forEach((deal, i) => {
-        contextParts.push(`${i + 1}. ${deal.contentText} (similarity: ${(deal.similarity * 100).toFixed(1)}%)`);
+        contextParts.push(
+          `${i + 1}. ${deal.contentText} (similarity: ${(deal.similarity * 100).toFixed(1)}%)`,
+        );
       });
     }
 
     if (patterns.length > 0) {
-      contextParts.push('\nRelevant patterns:');
+      contextParts.push("\nRelevant patterns:");
       patterns.forEach((pattern) => {
-        contextParts.push(`- ${pattern.metadata.patternName}: ${pattern.contentText}`);
+        contextParts.push(
+          `- ${pattern.metadata.patternName}: ${pattern.contentText}`,
+        );
       });
     }
 
     if (relevantMessages.length > 0) {
-      contextParts.push('\nRelevant past responses:');
+      contextParts.push("\nRelevant past responses:");
       relevantMessages.slice(0, 3).forEach((msg) => {
         contextParts.push(`- ${msg.contentText}`);
       });
@@ -569,11 +780,11 @@ export async function buildAIContext(
       similarDeals,
       fewShotExamples: patterns,
       relevantMessages,
-      contextText: contextParts.join('\n'),
+      contextText: contextParts.join("\n"),
       retrievalTimeMs: Date.now() - startTime,
     };
   } catch (error) {
-    logger.error('Error building AI context:', error);
+    logger.error("Error building AI context:", error);
     throw error;
   }
 }
@@ -583,7 +794,7 @@ export async function buildAIContext(
  */
 export async function buildRAGContext(
   dealId: string,
-  currentMessage: string
+  currentMessage: string,
 ): Promise<RAGContext> {
   try {
     const aiContext = await buildAIContext(dealId, currentMessage);
@@ -591,13 +802,17 @@ export async function buildRAGContext(
     // Format for system prompt
     const systemPromptAddition = aiContext.contextText
       ? `\n\n[Retrieved Context from Similar Negotiations]\n${aiContext.contextText}`
-      : '';
+      : "";
 
     // Format few-shot examples
-    const fewShotExamples = aiContext.relevantMessages.slice(0, 2).map((msg) => msg.contentText);
+    const fewShotExamples = aiContext.relevantMessages
+      .slice(0, 2)
+      .map((msg) => msg.contentText);
 
     // Format similar negotiations
-    const similarNegotiations = aiContext.similarDeals.map((deal) => deal.contentText);
+    const similarNegotiations = aiContext.similarDeals.map(
+      (deal) => deal.contentText,
+    );
 
     // Get relevance scores
     const relevanceScores = [
@@ -612,9 +827,9 @@ export async function buildRAGContext(
       relevanceScores,
     };
   } catch (error) {
-    logger.error('Error building RAG context:', error);
+    logger.error("Error building RAG context:", error);
     return {
-      systemPromptAddition: '',
+      systemPromptAddition: "",
       fewShotExamples: [],
       similarNegotiations: [],
       relevanceScores: [],
@@ -642,46 +857,49 @@ export async function getVectorStats(): Promise<VectorStats> {
     ] = await Promise.all([
       MessageEmbedding.count(),
       MessageEmbedding.findAll({
-        attributes: ['role', [fn('COUNT', col('id')), 'count']],
-        group: ['role'],
+        attributes: ["role", [fn("COUNT", col("id")), "count"]],
+        group: ["role"],
         raw: true,
       }),
       MessageEmbedding.findAll({
-        attributes: ['outcome', [fn('COUNT', col('id')), 'count']],
+        attributes: ["outcome", [fn("COUNT", col("id")), "count"]],
         where: { outcome: { [Op.ne]: null } },
-        group: ['outcome'],
+        group: ["outcome"],
         raw: true,
       }),
       DealEmbedding.count(),
       DealEmbedding.findAll({
-        attributes: ['finalStatus', [fn('COUNT', col('id')), 'count']],
+        attributes: ["finalStatus", [fn("COUNT", col("id")), "count"]],
         where: { finalStatus: { [Op.ne]: null } },
-        group: ['finalStatus'],
+        group: ["finalStatus"],
         raw: true,
       }),
       DealEmbedding.findAll({
-        attributes: ['embeddingType', [fn('COUNT', col('id')), 'count']],
-        group: ['embeddingType'],
+        attributes: ["embeddingType", [fn("COUNT", col("id")), "count"]],
+        group: ["embeddingType"],
         raw: true,
       }),
       NegotiationPattern.count(),
       NegotiationPattern.count({ where: { isActive: true } }),
       NegotiationPattern.findAll({
-        attributes: ['patternType', [fn('COUNT', col('id')), 'count']],
-        group: ['patternType'],
+        attributes: ["patternType", [fn("COUNT", col("id")), "count"]],
+        group: ["patternType"],
         raw: true,
       }),
       embeddingClient.getHealthStatus(),
       VectorMigrationStatus.findOne({
-        order: [['createdAt', 'DESC']],
+        order: [["createdAt", "DESC"]],
       }),
     ]);
 
-    const toRecord = (arr: unknown[], keyField: string): Record<string, number> => {
+    const toRecord = (
+      arr: unknown[],
+      keyField: string,
+    ): Record<string, number> => {
       const result: Record<string, number> = {};
       for (const item of arr as Array<Record<string, unknown>>) {
-        const key = String(item[keyField] || 'unknown');
-        result[key] = Number(item['count']) || 0;
+        const key = String(item[keyField] || "unknown");
+        result[key] = Number(item["count"]) || 0;
       }
       return result;
     };
@@ -689,18 +907,18 @@ export async function getVectorStats(): Promise<VectorStats> {
     return {
       messageEmbeddings: {
         total: messageTotal,
-        byRole: toRecord(messageByRole, 'role'),
-        byOutcome: toRecord(messageByOutcome, 'outcome'),
+        byRole: toRecord(messageByRole, "role"),
+        byOutcome: toRecord(messageByOutcome, "outcome"),
       },
       dealEmbeddings: {
         total: dealTotal,
-        byStatus: toRecord(dealByStatus, 'finalStatus'),
-        byType: toRecord(dealByType, 'embeddingType'),
+        byStatus: toRecord(dealByStatus, "finalStatus"),
+        byType: toRecord(dealByType, "embeddingType"),
       },
       negotiationPatterns: {
         total: patternTotal,
         active: patternActive,
-        byType: toRecord(patternByType, 'patternType'),
+        byType: toRecord(patternByType, "patternType"),
       },
       embeddingServiceStatus: embeddingHealth,
       lastMigration: lastMigration
@@ -715,9 +933,14 @@ export async function getVectorStats(): Promise<VectorStats> {
             totalBatches: lastMigration.totalBatches,
             percentComplete:
               lastMigration.totalRecords > 0
-                ? Math.round((lastMigration.processedRecords / lastMigration.totalRecords) * 100)
+                ? Math.round(
+                    (lastMigration.processedRecords /
+                      lastMigration.totalRecords) *
+                      100,
+                  )
                 : 0,
-            estimatedTimeRemaining: lastMigration.estimatedTimeRemaining || undefined,
+            estimatedTimeRemaining:
+              lastMigration.estimatedTimeRemaining || undefined,
             processingRate: lastMigration.processingRate || undefined,
             startedAt: lastMigration.startedAt || undefined,
             completedAt: lastMigration.completedAt || undefined,
@@ -726,7 +949,7 @@ export async function getVectorStats(): Promise<VectorStats> {
         : undefined,
     };
   } catch (error) {
-    logger.error('Error getting vector stats:', error);
+    logger.error("Error getting vector stats:", error);
     throw error;
   }
 }
