@@ -7,11 +7,12 @@ import {
   CreationOptional,
   ForeignKey,
   NonAttribute,
-} from 'sequelize';
-import type { ChatbotDeal } from './chatbot-deal.js';
-import type { User } from './user.js';
+} from "sequelize";
+import { VECTOR } from "../types/sequelize-vector.js";
+import type { ChatbotDeal } from "./chatbot-deal.js";
+import type { User } from "./user.js";
 
-export type DealEmbeddingType = 'summary' | 'pattern' | 'outcome';
+export type DealEmbeddingType = "summary" | "pattern" | "outcome";
 
 export class DealEmbedding extends Model<
   InferAttributes<DealEmbedding>,
@@ -48,21 +49,23 @@ export class DealEmbedding extends Model<
 
   static associate(models: Record<string, unknown>): void {
     this.belongsTo(models.ChatbotDeal as typeof ChatbotDeal, {
-      foreignKey: 'dealId',
-      as: 'Deal',
+      foreignKey: "dealId",
+      as: "Deal",
     });
     this.belongsTo(models.User as typeof User, {
-      foreignKey: 'userId',
-      as: 'User',
+      foreignKey: "userId",
+      as: "User",
     });
     this.belongsTo(models.User as typeof User, {
-      foreignKey: 'vendorId',
-      as: 'Vendor',
+      foreignKey: "vendorId",
+      as: "Vendor",
     });
   }
 }
 
-export function initDealEmbeddingModel(sequelize: Sequelize): typeof DealEmbedding {
+export function initDealEmbeddingModel(
+  sequelize: Sequelize,
+): typeof DealEmbedding {
   DealEmbedding.init(
     {
       id: {
@@ -74,43 +77,43 @@ export function initDealEmbeddingModel(sequelize: Sequelize): typeof DealEmbeddi
       dealId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: 'deal_id',
+        field: "deal_id",
         references: {
-          model: 'chatbot_deals',
-          key: 'id',
+          model: "chatbot_deals",
+          key: "id",
         },
       },
       userId: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'user_id',
+        field: "user_id",
       },
       vendorId: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'vendor_id',
+        field: "vendor_id",
       },
       embedding: {
-        type: DataTypes.ARRAY(DataTypes.FLOAT),
+        type: VECTOR(1024),
         allowNull: false,
-        comment: 'Vector embedding (1024 dimensions for bge-large-en-v1.5)',
+        comment: "Vector embedding (pgvector vector(1024))",
       },
       contentText: {
         type: DataTypes.TEXT,
         allowNull: false,
-        field: 'content_text',
-        comment: 'Original text that was embedded (deal summary)',
+        field: "content_text",
+        comment: "Original text that was embedded (deal summary)",
       },
       embeddingType: {
-        type: DataTypes.ENUM('summary', 'pattern', 'outcome'),
+        type: DataTypes.ENUM("summary", "pattern", "outcome"),
         allowNull: false,
-        defaultValue: 'summary',
-        field: 'embedding_type',
+        defaultValue: "summary",
+        field: "embedding_type",
       },
       dealTitle: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'deal_title',
+        field: "deal_title",
       },
       counterparty: {
         type: DataTypes.STRING,
@@ -119,111 +122,112 @@ export function initDealEmbeddingModel(sequelize: Sequelize): typeof DealEmbeddi
       finalStatus: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'final_status',
-        comment: 'ACCEPTED, WALKED_AWAY, ESCALATED, NEGOTIATING',
+        field: "final_status",
+        comment: "ACCEPTED, WALKED_AWAY, ESCALATED, NEGOTIATING",
       },
       totalRounds: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'total_rounds',
+        field: "total_rounds",
       },
       finalUtility: {
         type: DataTypes.DECIMAL(10, 4),
         allowNull: true,
-        field: 'final_utility',
+        field: "final_utility",
       },
       anchorPrice: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,
-        field: 'anchor_price',
+        field: "anchor_price",
       },
       targetPrice: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,
-        field: 'target_price',
+        field: "target_price",
       },
       finalPrice: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,
-        field: 'final_price',
+        field: "final_price",
       },
       initialTerms: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'initial_terms',
+        field: "initial_terms",
       },
       finalTerms: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'final_terms',
+        field: "final_terms",
       },
       productCategory: {
         type: DataTypes.STRING,
         allowNull: true,
-        field: 'product_category',
+        field: "product_category",
       },
       negotiationDuration: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'negotiation_duration',
-        comment: 'Duration in hours from first to last message',
+        field: "negotiation_duration",
+        comment: "Duration in hours from first to last message",
       },
       successMetrics: {
         type: DataTypes.JSONB,
         allowNull: true,
-        field: 'success_metrics',
-        comment: 'Key success metrics: price_reduction_pct, terms_improvement, etc.',
+        field: "success_metrics",
+        comment:
+          "Key success metrics: price_reduction_pct, terms_improvement, etc.",
       },
       metadata: {
         type: DataTypes.JSONB,
         allowNull: true,
-        comment: 'Additional metadata for filtering and context',
+        comment: "Additional metadata for filtering and context",
       },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        field: 'created_at',
+        field: "created_at",
       },
       updatedAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        field: 'updated_at',
+        field: "updated_at",
       },
     },
     {
       sequelize,
-      tableName: 'deal_embeddings',
+      tableName: "deal_embeddings",
       timestamps: true,
       underscored: true,
       indexes: [
         {
-          name: 'idx_deal_embeddings_deal_id',
-          fields: ['deal_id'],
+          name: "idx_deal_embeddings_deal_id",
+          fields: ["deal_id"],
         },
         {
-          name: 'idx_deal_embeddings_type',
-          fields: ['embedding_type'],
+          name: "idx_deal_embeddings_type",
+          fields: ["embedding_type"],
         },
         {
-          name: 'idx_deal_embeddings_status',
-          fields: ['final_status'],
+          name: "idx_deal_embeddings_status",
+          fields: ["final_status"],
         },
         {
-          name: 'idx_deal_embeddings_utility',
-          fields: ['final_utility'],
+          name: "idx_deal_embeddings_utility",
+          fields: ["final_utility"],
         },
         {
-          name: 'idx_deal_embeddings_category',
-          fields: ['product_category'],
+          name: "idx_deal_embeddings_category",
+          fields: ["product_category"],
         },
         {
-          name: 'idx_deal_embeddings_created_at',
-          fields: ['created_at'],
+          name: "idx_deal_embeddings_created_at",
+          fields: ["created_at"],
         },
       ],
-    }
+    },
   );
   return DealEmbedding;
 }

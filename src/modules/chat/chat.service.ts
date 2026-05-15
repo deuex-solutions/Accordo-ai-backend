@@ -1,11 +1,15 @@
-import models from '../../models/index.js';
-import llmService from '../../services/llm.service.js';
-import contextService from '../../services/context.service.js';
-import logger from '../../config/logger.js';
-import type { ChatSession } from '../../models/chat-session.js';
+import models from "../../models/index.js";
+import llmService from "../../services/llm.service.js";
+import {
+  generateChatCompletion,
+  checkLlmHealth,
+} from "../../services/llm-provider/index.js";
+import contextService from "../../services/context.service.js";
+import logger from "../../config/logger.js";
+import type { ChatSession } from "../../models/chat-session.js";
 
 interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: "user" | "assistant" | "system";
   content: string;
 }
 
@@ -41,7 +45,9 @@ interface GetSessionResponse {
 /**
  * Extract BATNA and max discount/price from user message
  */
-const extractNegotiationParameters = (message: string): ExtractedParams | null => {
+const extractNegotiationParameters = (
+  message: string,
+): ExtractedParams | null => {
   const extracted: ExtractedParams = {};
 
   // Extract BATNA (Best Alternative To a Negotiated Agreement)
@@ -55,7 +61,7 @@ const extractNegotiationParameters = (message: string): ExtractedParams | null =
   for (const pattern of batnaPatterns) {
     const match = message.match(pattern);
     if (match) {
-      const value = Number.parseFloat(match[1].replace(/[,$₹€£]/g, ''));
+      const value = Number.parseFloat(match[1].replace(/[,$₹€£]/g, ""));
       if (!Number.isNaN(value)) {
         extracted.batna = value;
         break;
@@ -94,7 +100,7 @@ const extractNegotiationParameters = (message: string): ExtractedParams | null =
   for (const pattern of maxPricePatterns) {
     const match = message.match(pattern);
     if (match) {
-      const value = Number.parseFloat(match[1].replace(/[,$₹€£]/g, ''));
+      const value = Number.parseFloat(match[1].replace(/[,$₹€£]/g, ""));
       if (!Number.isNaN(value) && value > 0) {
         extracted.maxPrice = value;
         break;
@@ -113,7 +119,7 @@ export const chatService = {
     userId: number,
     message: string,
     negotiationId: string | number | null = null,
-    requisitionId: number | null = null
+    requisitionId: number | null = null,
   ): Promise<SendMessageResponse> => {
     // 1. Get or Create Chat Session
     let session: ChatSession | null;
@@ -128,14 +134,17 @@ export const chatService = {
           userId,
           negotiationId: null,
         },
-        order: [['updatedAt', 'DESC']],
+        order: [["updatedAt", "DESC"]],
       });
     }
 
     if (!session) {
       const sessionData: any = {
         userId,
-        negotiationId: typeof negotiationId === 'number' ? String(negotiationId) : negotiationId,
+        negotiationId:
+          typeof negotiationId === "number"
+            ? String(negotiationId)
+            : negotiationId,
         history: [],
       };
       session = await models.ChatSession.create(sessionData);
@@ -143,13 +152,18 @@ export const chatService = {
 
     // 2. Fetch backend context
     let contextData: any = null;
-    let contextString = '';
+    let contextString = "";
 
     try {
       if (negotiationId) {
-        contextData = await contextService.getNegotiationContext(typeof negotiationId === 'string' ? negotiationId : String(negotiationId));
+        contextData = await contextService.getNegotiationContext(
+          typeof negotiationId === "string"
+            ? negotiationId
+            : String(negotiationId),
+        );
       } else if (requisitionId) {
-        const requisitionContext = await contextService.getRequisitionContext(requisitionId);
+        const requisitionContext =
+          await contextService.getRequisitionContext(requisitionId);
         if (requisitionContext) {
           contextData = {
             requisition: requisitionContext,
@@ -167,13 +181,13 @@ export const chatService = {
         contextString = contextService.buildContextString(contextData);
       }
     } catch (error) {
-      logger.warn('Failed to fetch context:', (error as Error).message);
+      logger.warn("Failed to fetch context:", (error as Error).message);
       // Continue without context if fetch fails
     }
 
     // 3. Append User Message to History
     const history: ChatMessage[] = (session.history as ChatMessage[]) || [];
-    history.push({ role: 'user', content: message });
+    history.push({ role: "user", content: message });
 
     // 4. Prepare System Prompt with Context
     const systemPrompt = `You are Accordo, an expert negotiation AI agent representing the Buyer.
@@ -196,41 +210,41 @@ ${contextString}
 Remember: Keep internal negotiation parameters (BATNA, max discount, max price, cheapest offers) CONFIDENTIAL. Use them to guide your strategy but never reveal them to the user.`;
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: "system", content: systemPrompt },
       ...history.map((msg) => ({ role: msg.role, content: msg.content })),
     ];
 
-    // 5. Call Local LLM (Ollama)
+    // 5. Call configured LLM provider (routed by LLM_PROVIDER env)
     try {
-      // Check if LLM is available
-      const healthCheck = await llmService.checkHealth();
+      const healthCheck = await checkLlmHealth();
       if (!healthCheck.available) {
         throw new Error(
-          `Local LLM not available: ${healthCheck.error || 'Model not found'}. ` +
-            `Please ensure Ollama is running and the model is installed.`
+          `LLM provider not available: ${healthCheck.error || "unreachable"}.`,
         );
       }
 
-      const aiResponse = await llmService.chatCompletion(messages as any, {
+      const aiResponse = await generateChatCompletion(messages as any, {
         temperature: 0.7,
       });
 
       // 6. Save AI Response to History
-      history.push({ role: 'assistant', content: aiResponse });
+      history.push({ role: "assistant", content: aiResponse.content });
 
       // Update session with new history
       await session.update({ history: [...history] as any });
 
       return {
-        message: aiResponse,
+        message: aiResponse.content,
         history: history,
         sessionId: session.id,
         contextUsed: !!contextData,
         contextData: contextData || null,
       };
     } catch (error) {
-      logger.error('LLM Error:', error);
-      throw new Error(`Failed to generate response: ${(error as Error).message}`);
+      logger.error("LLM Error:", error);
+      throw new Error(
+        `Failed to generate response: ${(error as Error).message}`,
+      );
     }
   },
 
@@ -242,7 +256,7 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
     message: string,
     negotiationId: string | number | null = null,
     requisitionId: number | null = null,
-    onChunk: ((chunk: string) => void) | null = null
+    onChunk: ((chunk: string) => void) | null = null,
   ): Promise<SendMessageResponse> => {
     // Similar to sendMessage but uses streaming
     let session: ChatSession | null;
@@ -256,14 +270,17 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
           userId,
           negotiationId: null,
         },
-        order: [['updatedAt', 'DESC']],
+        order: [["updatedAt", "DESC"]],
       });
     }
 
     if (!session) {
       const sessionData: any = {
         userId,
-        negotiationId: typeof negotiationId === 'number' ? String(negotiationId) : negotiationId,
+        negotiationId:
+          typeof negotiationId === "number"
+            ? String(negotiationId)
+            : negotiationId,
         history: [],
       };
       session = await models.ChatSession.create(sessionData);
@@ -271,13 +288,18 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
 
     // Fetch context (same as above)
     let contextData: any = null;
-    let contextString = '';
+    let contextString = "";
 
     try {
       if (negotiationId) {
-        contextData = await contextService.getNegotiationContext(typeof negotiationId === 'string' ? negotiationId : String(negotiationId));
+        contextData = await contextService.getNegotiationContext(
+          typeof negotiationId === "string"
+            ? negotiationId
+            : String(negotiationId),
+        );
       } else if (requisitionId) {
-        const requisitionContext = await contextService.getRequisitionContext(requisitionId);
+        const requisitionContext =
+          await contextService.getRequisitionContext(requisitionId);
         if (requisitionContext) {
           contextData = {
             requisition: requisitionContext,
@@ -294,7 +316,7 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
         contextString = contextService.buildContextString(contextData);
       }
     } catch (error) {
-      logger.warn('Failed to fetch context:', (error as Error).message);
+      logger.warn("Failed to fetch context:", (error as Error).message);
     }
 
     // Extract and store negotiation parameters from user message
@@ -303,8 +325,10 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
       try {
         const preferences = await contextService.getUserPreferences(userId);
         const entityId = userId;
-        const entityType = 'User';
-        const context = requisitionId ? `requisition_${requisitionId}` : 'global';
+        const entityType = "User";
+        const context = requisitionId
+          ? `requisition_${requisitionId}`
+          : "global";
 
         const updatedConstraints = {
           ...((preferences as any)?.constraints || {}),
@@ -332,14 +356,19 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
           });
         }
 
-        logger.info(`Stored negotiation parameters: ${JSON.stringify(extractedParams)}`);
+        logger.info(
+          `Stored negotiation parameters: ${JSON.stringify(extractedParams)}`,
+        );
       } catch (error) {
-        logger.warn('Failed to store negotiation parameters:', (error as Error).message);
+        logger.warn(
+          "Failed to store negotiation parameters:",
+          (error as Error).message,
+        );
       }
     }
 
     const history: ChatMessage[] = (session.history as ChatMessage[]) || [];
-    history.push({ role: 'user', content: message });
+    history.push({ role: "user", content: message });
 
     const systemPrompt = `You are Accordo, an expert negotiation AI agent representing the Buyer.
 Your primary objective is to discuss the FIRST quotation with the user and negotiate the best possible deal.
@@ -361,25 +390,30 @@ ${contextString}
 Remember: Keep internal negotiation parameters (BATNA, max discount, max price, cheapest offers) CONFIDENTIAL. Use them to guide your strategy but never reveal them to the user.`;
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: "system", content: systemPrompt },
       ...history.map((msg) => ({ role: msg.role, content: msg.content })),
     ];
 
     try {
       const healthCheck = await llmService.checkHealth();
       if (!healthCheck.available) {
-        throw new Error(`Local LLM not available: ${healthCheck.error || 'Model not found'}`);
+        throw new Error(
+          `Local LLM not available: ${healthCheck.error || "Model not found"}`,
+        );
       }
 
-      let fullResponse = '';
-      await llmService.streamChatCompletion(messages as any, (chunk: string) => {
-        fullResponse += chunk;
-        if (onChunk) {
-          onChunk(chunk);
-        }
-      });
+      let fullResponse = "";
+      await llmService.streamChatCompletion(
+        messages as any,
+        (chunk: string) => {
+          fullResponse += chunk;
+          if (onChunk) {
+            onChunk(chunk);
+          }
+        },
+      );
 
-      history.push({ role: 'assistant', content: fullResponse });
+      history.push({ role: "assistant", content: fullResponse });
       await session.update({ history: [...history] as any });
 
       return {
@@ -390,15 +424,20 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
         contextData: contextData || null,
       };
     } catch (error) {
-      logger.error('LLM Stream Error:', error);
-      throw new Error(`Failed to generate stream response: ${(error as Error).message}`);
+      logger.error("LLM Stream Error:", error);
+      throw new Error(
+        `Failed to generate stream response: ${(error as Error).message}`,
+      );
     }
   },
 
   /**
    * Get chat sessions for a user
    */
-  getSessions: async (userId: number, negotiationId: string | number | null = null): Promise<SessionResponse> => {
+  getSessions: async (
+    userId: number,
+    negotiationId: string | number | null = null,
+  ): Promise<SessionResponse> => {
     const where: any = { userId };
     if (negotiationId) {
       where.negotiationId = negotiationId;
@@ -406,11 +445,11 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
 
     const sessions = await models.ChatSession.findAll({
       where,
-      order: [['updatedAt', 'DESC']],
+      order: [["updatedAt", "DESC"]],
       include: [
         {
           model: models.Negotiation,
-          as: 'Negotiation',
+          as: "Negotiation",
           required: false,
         },
       ],
@@ -422,20 +461,23 @@ Remember: Keep internal negotiation parameters (BATNA, max discount, max price, 
   /**
    * Get a specific chat session with history
    */
-  getSession: async (sessionId: string, userId: number): Promise<GetSessionResponse> => {
+  getSession: async (
+    sessionId: string,
+    userId: number,
+  ): Promise<GetSessionResponse> => {
     const session = await models.ChatSession.findOne({
       where: { id: sessionId, userId },
       include: [
         {
           model: models.Negotiation,
-          as: 'Negotiation',
+          as: "Negotiation",
           required: false,
         },
       ],
     });
 
     if (!session) {
-      throw new Error('Chat session not found');
+      throw new Error("Chat session not found");
     }
 
     return {

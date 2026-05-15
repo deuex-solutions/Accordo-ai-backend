@@ -73,6 +73,14 @@ export interface LLMConfig {
   model: string;
   negotiationModel?: string;
   timeout: number;
+  /** Active provider for chat completions. Default 'openai' protects prod. */
+  provider: "openai" | "ollama" | "bedrock";
+  /** Ollama daemon base URL — separate from the legacy LLM_BASE_URL for clarity */
+  ollamaBaseURL: string;
+  /** Chat model when LLM_PROVIDER=ollama (e.g. 'llama3.1:8b') */
+  ollamaModel: string;
+  /** Chat model identifier when LLM_PROVIDER=bedrock (Phase B). */
+  bedrockModel?: string;
 }
 
 export interface OpenAIConfig {
@@ -83,7 +91,7 @@ export interface OpenAIConfig {
 }
 
 export interface VectorConfig {
-  embeddingProvider: "openai" | "bedrock" | "local";
+  embeddingProvider: "openai" | "bedrock" | "local" | "ollama";
   embeddingServiceUrl: string;
   embeddingModel: string;
   embeddingDimension: number;
@@ -164,6 +172,18 @@ export const env: EnvironmentConfig = {
     model: process.env.LLM_MODEL || "qwen3",
     negotiationModel: process.env.LLM_NEGOTIATION_MODEL,
     timeout: Number(process.env.LLM_TIMEOUT || 60000),
+    provider: ((process.env.LLM_PROVIDER || "openai").toLowerCase() === "ollama"
+      ? "ollama"
+      : (process.env.LLM_PROVIDER || "openai").toLowerCase() === "bedrock"
+        ? "bedrock"
+        : "openai") as "openai" | "ollama" | "bedrock",
+    ollamaBaseURL:
+      process.env.LLM_OLLAMA_BASE_URL ||
+      process.env.LLM_BASE_URL ||
+      "http://localhost:11434",
+    ollamaModel:
+      process.env.LLM_OLLAMA_MODEL || process.env.LLM_MODEL || "llama3.1:8b",
+    bedrockModel: process.env.LLM_BEDROCK_MODEL,
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
@@ -175,7 +195,8 @@ export const env: EnvironmentConfig = {
     embeddingProvider: (process.env.EMBEDDING_PROVIDER || "local") as
       | "openai"
       | "bedrock"
-      | "local",
+      | "local"
+      | "ollama",
     embeddingServiceUrl:
       process.env.EMBEDDING_SERVICE_URL || "http://localhost:5003",
     embeddingModel: process.env.EMBEDDING_MODEL || "",

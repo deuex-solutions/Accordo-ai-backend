@@ -5,9 +5,15 @@ import {
   InferAttributes,
   InferCreationAttributes,
   CreationOptional,
-} from 'sequelize';
+} from "sequelize";
+import { VECTOR } from "../types/sequelize-vector.js";
 
-export type PatternType = 'successful_negotiation' | 'failed_negotiation' | 'escalation' | 'walkaway' | 'quick_acceptance';
+export type PatternType =
+  | "successful_negotiation"
+  | "failed_negotiation"
+  | "escalation"
+  | "walkaway"
+  | "quick_acceptance";
 
 export class NegotiationPattern extends Model<
   InferAttributes<NegotiationPattern>,
@@ -36,7 +42,9 @@ export class NegotiationPattern extends Model<
   declare updatedAt: CreationOptional<Date>;
 }
 
-export function initNegotiationPatternModel(sequelize: Sequelize): typeof NegotiationPattern {
+export function initNegotiationPatternModel(
+  sequelize: Sequelize,
+): typeof NegotiationPattern {
   NegotiationPattern.init(
     {
       id: {
@@ -46,150 +54,156 @@ export function initNegotiationPatternModel(sequelize: Sequelize): typeof Negoti
         allowNull: false,
       },
       embedding: {
-        type: DataTypes.ARRAY(DataTypes.FLOAT),
+        type: VECTOR(1024),
         allowNull: false,
-        comment: 'Vector embedding (1024 dimensions for bge-large-en-v1.5)',
+        comment: "Vector embedding (pgvector vector(1024))",
       },
       contentText: {
         type: DataTypes.TEXT,
         allowNull: false,
-        field: 'content_text',
-        comment: 'Pattern description text that was embedded',
+        field: "content_text",
+        comment: "Pattern description text that was embedded",
       },
       patternType: {
-        type: DataTypes.ENUM('successful_negotiation', 'failed_negotiation', 'escalation', 'walkaway', 'quick_acceptance'),
+        type: DataTypes.ENUM(
+          "successful_negotiation",
+          "failed_negotiation",
+          "escalation",
+          "walkaway",
+          "quick_acceptance",
+        ),
         allowNull: false,
-        field: 'pattern_type',
+        field: "pattern_type",
       },
       patternName: {
         type: DataTypes.STRING,
         allowNull: false,
-        field: 'pattern_name',
-        comment: 'Human-readable pattern name',
+        field: "pattern_name",
+        comment: "Human-readable pattern name",
       },
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
-        comment: 'Detailed description of the pattern',
+        comment: "Detailed description of the pattern",
       },
       scenario: {
         type: DataTypes.STRING,
         allowNull: true,
-        comment: 'Negotiation scenario: HARD, MEDIUM, SOFT, etc.',
+        comment: "Negotiation scenario: HARD, MEDIUM, SOFT, etc.",
       },
       avgUtility: {
         type: DataTypes.DECIMAL(10, 4),
         allowNull: true,
-        field: 'avg_utility',
-        comment: 'Average utility score for this pattern',
+        field: "avg_utility",
+        comment: "Average utility score for this pattern",
       },
       avgRounds: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
-        field: 'avg_rounds',
-        comment: 'Average number of negotiation rounds',
+        field: "avg_rounds",
+        comment: "Average number of negotiation rounds",
       },
       avgPriceReduction: {
         type: DataTypes.DECIMAL(10, 4),
         allowNull: true,
-        field: 'avg_price_reduction',
-        comment: 'Average price reduction percentage achieved',
+        field: "avg_price_reduction",
+        comment: "Average price reduction percentage achieved",
       },
       successRate: {
         type: DataTypes.DECIMAL(10, 4),
         allowNull: true,
-        field: 'success_rate',
-        comment: 'Success rate (0-1) for negotiations following this pattern',
+        field: "success_rate",
+        comment: "Success rate (0-1) for negotiations following this pattern",
       },
       sampleCount: {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        field: 'sample_count',
-        comment: 'Number of deals that contributed to this pattern',
+        field: "sample_count",
+        comment: "Number of deals that contributed to this pattern",
       },
       productCategories: {
         type: DataTypes.ARRAY(DataTypes.STRING),
         allowNull: true,
-        field: 'product_categories',
-        comment: 'Product categories where this pattern applies',
+        field: "product_categories",
+        comment: "Product categories where this pattern applies",
       },
       priceRanges: {
         type: DataTypes.ARRAY(DataTypes.STRING),
         allowNull: true,
-        field: 'price_ranges',
-        comment: 'Price ranges where this pattern applies',
+        field: "price_ranges",
+        comment: "Price ranges where this pattern applies",
       },
       vendorTypes: {
         type: DataTypes.ARRAY(DataTypes.STRING),
         allowNull: true,
-        field: 'vendor_types',
-        comment: 'Vendor types where this pattern is effective',
+        field: "vendor_types",
+        comment: "Vendor types where this pattern is effective",
       },
       keyFactors: {
         type: DataTypes.JSONB,
         allowNull: true,
-        field: 'key_factors',
-        comment: 'Key factors that contributed to the pattern outcome',
+        field: "key_factors",
+        comment: "Key factors that contributed to the pattern outcome",
       },
       exampleDealIds: {
         type: DataTypes.ARRAY(DataTypes.UUID),
         allowNull: true,
-        field: 'example_deal_ids',
-        comment: 'Example deal IDs that exemplify this pattern',
+        field: "example_deal_ids",
+        comment: "Example deal IDs that exemplify this pattern",
       },
       metadata: {
         type: DataTypes.JSONB,
         allowNull: true,
-        comment: 'Additional metadata for analysis',
+        comment: "Additional metadata for analysis",
       },
       isActive: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
-        field: 'is_active',
+        field: "is_active",
       },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        field: 'created_at',
+        field: "created_at",
       },
       updatedAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        field: 'updated_at',
+        field: "updated_at",
       },
     },
     {
       sequelize,
-      tableName: 'negotiation_patterns',
+      tableName: "negotiation_patterns",
       timestamps: true,
       underscored: true,
       indexes: [
         {
-          name: 'idx_negotiation_patterns_type',
-          fields: ['pattern_type'],
+          name: "idx_negotiation_patterns_type",
+          fields: ["pattern_type"],
         },
         {
-          name: 'idx_negotiation_patterns_scenario',
-          fields: ['scenario'],
+          name: "idx_negotiation_patterns_scenario",
+          fields: ["scenario"],
         },
         {
-          name: 'idx_negotiation_patterns_success_rate',
-          fields: ['success_rate'],
+          name: "idx_negotiation_patterns_success_rate",
+          fields: ["success_rate"],
         },
         {
-          name: 'idx_negotiation_patterns_active',
-          fields: ['is_active'],
+          name: "idx_negotiation_patterns_active",
+          fields: ["is_active"],
         },
         {
-          name: 'idx_negotiation_patterns_created_at',
-          fields: ['created_at'],
+          name: "idx_negotiation_patterns_created_at",
+          fields: ["created_at"],
         },
       ],
-    }
+    },
   );
   return NegotiationPattern;
 }

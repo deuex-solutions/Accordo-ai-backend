@@ -13,7 +13,7 @@
  * - Temperature: 0.7 for natural variation across rounds.
  */
 
-import { generateCompletion } from "../services/openai.service.js";
+import { generateChatCompletion } from "../services/llm-provider/index.js";
 import { getFallbackResponse } from "./fallback-templates.js";
 import logger from "../config/logger.js";
 import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
@@ -248,7 +248,8 @@ function buildInstruction(
           : "";
         const reasonHint = getCounterReasoningHint(intent.roundNumber ?? 1);
         const priceLocale = intent.currencySymbol === "₹" ? "en-IN" : "en-US";
-        const formattedCounter = intent.allowedPrice.toLocaleString(priceLocale);
+        const formattedCounter =
+          intent.allowedPrice.toLocaleString(priceLocale);
         const ceilingHint = intent.atCeiling
           ? ` This is our best position on price. Convey firmness without saying "maximum", "limit", "ceiling", "cap", or "final offer". Use phrases like "this is where we are", "our best position", "the best we can do on this", or "we've stretched as far as we can". Be clear we're firm but not confrontational.`
           : "";
@@ -360,7 +361,7 @@ export async function renderNegotiationMessage(
       hasAllowedPrice: intent.allowedPrice != null,
     });
 
-    const response = await generateCompletion(messages, {
+    const response = await generateChatCompletion(messages, {
       // Slight bump from 0.5 → 0.7 for natural variation across rounds.
       temperature: 0.7,
       // ~140 words ceiling (MESO max) plus formatting buffer.
@@ -370,6 +371,7 @@ export async function renderNegotiationMessage(
     logger.info("[PersonaRenderer] LLM response received", {
       action: intent.action,
       length: response.content.length,
+      provider: response.provider,
       model: response.model,
       fallbackUsed: response.fallbackUsed,
     });
