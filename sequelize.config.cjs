@@ -31,6 +31,7 @@ if (databaseUrl) {
     development: shared,
     test: shared,
     production: shared,
+    staging: shared,
   };
 } else {
   const shared = {
@@ -51,5 +52,6 @@ if (databaseUrl) {
       database: process.env.DB_NAME_TEST || `${shared.database}_test`,
     },
     production: shared,
+    staging: shared,
   };
 }

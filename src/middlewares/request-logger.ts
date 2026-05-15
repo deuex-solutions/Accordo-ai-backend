@@ -1,5 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
-import logger from '../config/logger.js';
+import { Request, Response, NextFunction } from "express";
+import logger from "../config/logger.js";
 
 interface RequestBody {
   [key: string]: unknown;
@@ -24,14 +24,22 @@ interface LogData {
   };
 }
 
-const sanitizeRequestBody = (body: RequestBody | undefined): RequestBody | undefined => {
+const sanitizeRequestBody = (
+  body: RequestBody | undefined,
+): RequestBody | undefined => {
   if (!body) return body;
   const sanitized = { ...body };
   // Remove sensitive fields from logging
-  const sensitiveFields = ['password', 'apiSecret', 'apiKey', 'token', 'authorization'];
+  const sensitiveFields = [
+    "password",
+    "apiSecret",
+    "apiKey",
+    "token",
+    "authorization",
+  ];
   sensitiveFields.forEach((field) => {
     if (sanitized[field]) {
-      sanitized[field] = '[REDACTED]';
+      sanitized[field] = "[REDACTED]";
     }
   });
   return sanitized;
@@ -40,11 +48,11 @@ const sanitizeRequestBody = (body: RequestBody | undefined): RequestBody | undef
 export const requestLogger = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void => {
   const start = Date.now();
 
-  res.on('finish', () => {
+  res.on("finish", () => {
     const duration = Date.now() - start;
     const logData: LogData = {
       method: req.method,
@@ -70,16 +78,14 @@ export const requestLogger = (
     }
 
     const message = `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`;
+    const ctx = { event: "http.request", requestId: req.id, ...logData };
 
     if (res.statusCode >= 500) {
-      logger.error(message, logData);
-      console.error(`error: ${message}`, logData);
+      logger.error(ctx, message);
     } else if (res.statusCode >= 400) {
-      logger.warn(message, logData);
-      console.warn(`warn: ${message}`, logData);
+      logger.warn(ctx, message);
     } else {
-      logger.info(message, logData);
-      console.info(`info: ${message}`, logData);
+      logger.info(ctx, message);
     }
   });
 

@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
-import logger from '../config/logger.js';
-import { CustomError, AppError } from '../utils/custom-error.js';
+import { Request, Response, NextFunction } from "express";
+import logger from "../config/logger.js";
+import { CustomError, AppError } from "../utils/custom-error.js";
 
 interface RequestBody {
   [key: string]: unknown;
@@ -37,8 +37,8 @@ interface ErrorLogData {
     query: Record<string, unknown>;
     body: RequestBody | undefined;
     headers: {
-      'content-type'?: string;
-      'user-agent'?: string;
+      "content-type"?: string;
+      "user-agent"?: string;
       referer?: string;
     };
     ip: string | undefined;
@@ -55,14 +55,22 @@ interface ErrorResponse {
   details?: unknown;
 }
 
-const sanitizeRequestBody = (body: RequestBody | undefined): RequestBody | undefined => {
+const sanitizeRequestBody = (
+  body: RequestBody | undefined,
+): RequestBody | undefined => {
   if (!body) return body;
   const sanitized = { ...body };
   // Remove sensitive fields from logging
-  const sensitiveFields = ['password', 'apiSecret', 'apiKey', 'token', 'authorization'];
+  const sensitiveFields = [
+    "password",
+    "apiSecret",
+    "apiKey",
+    "token",
+    "authorization",
+  ];
   sensitiveFields.forEach((field) => {
     if (sanitized[field]) {
-      sanitized[field] = '[REDACTED]';
+      sanitized[field] = "[REDACTED]";
     }
   });
   return sanitized;
@@ -71,7 +79,7 @@ const sanitizeRequestBody = (body: RequestBody | undefined): RequestBody | undef
 export const notFoundHandler = (
   req: Request,
   _res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void => {
   next(new AppError(`Route ${req.originalUrl} not found`, 404));
 };
@@ -80,7 +88,7 @@ export const errorHandler = (
   err: ErrorWithDetails,
   req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void => {
   // Determine status code
   // Priority: 1. err.statusCode (from CustomError/AppError), 2. Check error message for auth errors, 3. Default to 500
@@ -88,14 +96,14 @@ export const errorHandler = (
 
   // If no statusCode set, check for common authentication/JWT errors
   if (!statusCode) {
-    const errorMessage = err.message?.toLowerCase() || '';
+    const errorMessage = err.message?.toLowerCase() || "";
     if (
-      errorMessage.includes('jwt expired') ||
-      errorMessage.includes('token expired') ||
-      errorMessage.includes('authorization header missing') ||
-      errorMessage.includes('invalid token') ||
-      errorMessage.includes('authentication failed') ||
-      errorMessage.includes('unauthorized') ||
+      errorMessage.includes("jwt expired") ||
+      errorMessage.includes("token expired") ||
+      errorMessage.includes("authorization header missing") ||
+      errorMessage.includes("invalid token") ||
+      errorMessage.includes("authentication failed") ||
+      errorMessage.includes("unauthorized") ||
       (err instanceof CustomError && !statusCode) // CustomError should always have statusCode, but double-check
     ) {
       statusCode = 401;
@@ -105,12 +113,15 @@ export const errorHandler = (
   }
 
   // Ensure CustomError and AppError instances use their statusCode
-  if ((err instanceof CustomError || err instanceof AppError) && err.statusCode) {
+  if (
+    (err instanceof CustomError || err instanceof AppError) &&
+    err.statusCode
+  ) {
     statusCode = err.statusCode;
   }
 
   const response: ErrorResponse = {
-    message: err.message || 'Internal Server Error',
+    message: err.message || "Internal Server Error",
   };
 
   if (err.details) {
@@ -120,8 +131,8 @@ export const errorHandler = (
   // Prepare error log object with full context
   const errorLog: ErrorLogData = {
     error: {
-      message: err.message || 'Internal Server Error',
-      name: err.name || 'Error',
+      message: err.message || "Internal Server Error",
+      name: err.name || "Error",
       statusCode,
       stack: err.stack,
       details: err.details,
@@ -141,9 +152,9 @@ export const errorHandler = (
       query: req.query as Record<string, unknown>,
       body: sanitizeRequestBody(req.body as RequestBody),
       headers: {
-        'content-type': req.headers['content-type'],
-        'user-agent': req.headers['user-agent'],
-        referer: req.headers['referer'] as string | undefined,
+        "content-type": req.headers["content-type"],
+        "user-agent": req.headers["user-agent"],
+        referer: req.headers["referer"] as string | undefined,
       },
       ip: req.ip || req.socket.remoteAddress,
     },
@@ -154,17 +165,17 @@ export const errorHandler = (
     timestamp: new Date().toISOString(),
   };
 
-  // Log all errors (both 4xx and 5xx) to both console and file
+  // 5xx → error; 4xx → warn. Pino redaction handles password/token/etc. in the body.
   if (statusCode >= 500) {
-    // Server errors - log as error level
-    logger.error('API Error (5xx):', errorLog);
-    // Also log to console with full details
-    console.error('API Error (5xx):', JSON.stringify(errorLog, null, 2));
+    logger.error(
+      { event: "api.error.5xx", requestId: req.id, ...errorLog },
+      "API error (5xx)",
+    );
   } else {
-    // Client errors - log as warn level but still log full details
-    logger.warn('API Error (4xx):', errorLog);
-    // Also log to console
-    console.warn('API Error (4xx):', JSON.stringify(errorLog, null, 2));
+    logger.warn(
+      { event: "api.error.4xx", requestId: req.id, ...errorLog },
+      "API error (4xx)",
+    );
   }
 
   res.status(statusCode).json(response);

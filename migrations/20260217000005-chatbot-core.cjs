@@ -18,6 +18,12 @@ async function safeAddIndex(queryInterface, table, fields, options) {
   }
 }
 
+async function safeAddColumn(queryInterface, table, column, definition) {
+  const desc = await queryInterface.describeTable(table);
+  if (desc[column]) return;
+  await queryInterface.addColumn(table, column, definition);
+}
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // ── chatbot_templates ──
@@ -292,6 +298,15 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false,
       },
+    });
+
+    // Self-heal columns added to chatbot_deals after the original migration
+    // was first applied (this migration was edited in-place rather than via
+    // a follow-up file; without these guards, existing DBs miss the columns).
+    await safeAddColumn(queryInterface, "chatbot_deals", "open_questions", {
+      type: Sequelize.JSONB,
+      allowNull: false,
+      defaultValue: [],
     });
 
     // ── chatbot_messages ──
