@@ -4,10 +4,10 @@
  * Default model: Xenova/bge-large-en-v1.5 (1024 dimensions native).
  */
 
-import logger from '../../../config/logger.js';
-import { EmbeddingProvider } from './embedding-provider.interface.js';
-import type { EmbeddingProviderConfig } from './embedding-provider.interface.js';
-import type { EmbeddingServiceHealth } from '../vector.types.js';
+import logger from "../../../config/logger.js";
+import { EmbeddingProvider } from "./embedding-provider.interface.js";
+import type { EmbeddingProviderConfig } from "./embedding-provider.interface.js";
+import type { EmbeddingServiceHealth } from "../vector.types.js";
 
 // The feature-extraction pipeline returns a Tensor, but the generic pipeline type
 // returns a wide union. We use a typed wrapper to access .data and .dims safely.
@@ -18,50 +18,53 @@ interface TensorResult {
 
 type FeatureExtractionPipeline = (
   text: string,
-  options?: Record<string, unknown>
+  options?: Record<string, unknown>,
 ) => Promise<TensorResult>;
 
 export class LocalEmbeddingProvider extends EmbeddingProvider {
-  readonly providerName = 'local';
+  readonly providerName = "local";
   private pipeline: FeatureExtractionPipeline | null = null;
   private nativeDimension: number = 0;
 
   async initialize(): Promise<void> {
-    logger.info(`Loading local embedding model: ${this.config.model} (this may take a moment on first run)...`);
+    logger.info(
+      `Loading local embedding model: ${this.config.model} (this may take a moment on first run)...`,
+    );
 
-    // Dynamic import — ESM, large library, lazy-loaded
-    const { pipeline, env } = await import('@huggingface/transformers');
+    // Dynamic import — ESM, large library, lazy-loaded; optional dep
+    // @ts-ignore - optional dep, may not be installed if not using local embedding provider
+    const { pipeline, env } = await import("@huggingface/transformers");
 
     // Disable remote model downloads warning in production
     env.allowLocalModels = true;
 
-    const pipe = await pipeline('feature-extraction', this.config.model, {
-      dtype: 'q8' as never,
+    const pipe = await pipeline("feature-extraction", this.config.model, {
+      dtype: "q8" as never,
     });
     this.pipeline = pipe as unknown as FeatureExtractionPipeline;
 
     // Determine native dimension by running a test embedding
-    const testOutput = await this.pipeline('test', {
-      pooling: 'cls',
+    const testOutput = await this.pipeline("test", {
+      pooling: "cls",
       normalize: true,
     });
     this.nativeDimension = testOutput.dims[testOutput.dims.length - 1];
 
     logger.info(
-      `Local embedding model loaded: ${this.config.model} (native dim: ${this.nativeDimension}, target dim: ${this.config.dimension})`
+      `Local embedding model loaded: ${this.config.model} (native dim: ${this.nativeDimension}, target dim: ${this.config.dimension})`,
     );
   }
 
   async embed(text: string, instruction?: string): Promise<number[]> {
     if (!this.pipeline) {
-      throw new Error('Local embedding provider not initialized');
+      throw new Error("Local embedding provider not initialized");
     }
 
     // BGE models use instruction prefixes
     const input = instruction ? `${instruction}: ${text}` : text;
 
     const output = await this.pipeline(input, {
-      pooling: 'cls',
+      pooling: "cls",
       normalize: true,
     });
 
@@ -90,37 +93,40 @@ export class LocalEmbeddingProvider extends EmbeddingProvider {
     try {
       if (!this.pipeline) {
         return {
-          status: 'initializing',
+          status: "initializing",
           model: this.config.model,
           dimension: this.config.dimension,
-          device: 'cpu',
+          device: "cpu",
           gpu_available: false,
         };
       }
 
       // Quick test embed
-      await this.embed('health check');
+      await this.embed("health check");
 
       return {
-        status: 'healthy',
+        status: "healthy",
         model: this.config.model,
         dimension: this.config.dimension,
-        device: 'cpu',
+        device: "cpu",
         gpu_available: false,
       };
     } catch (error) {
-      logger.error('Local embedding health check failed:', error);
+      logger.error("Local embedding health check failed:", error);
       return {
-        status: 'unavailable',
+        status: "unavailable",
         model: this.config.model,
         dimension: this.config.dimension,
-        device: 'cpu',
+        device: "cpu",
         gpu_available: false,
       };
     }
   }
 
-  private truncateAndNormalize(embedding: number[], targetDim: number): number[] {
+  private truncateAndNormalize(
+    embedding: number[],
+    targetDim: number,
+  ): number[] {
     const truncated = embedding.slice(0, targetDim);
 
     // Re-normalize after truncation

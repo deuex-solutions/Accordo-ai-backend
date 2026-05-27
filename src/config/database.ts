@@ -1,14 +1,14 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { Sequelize, Options } from 'sequelize';
-import { execSync } from 'child_process';
-import pg from 'pg';
-import env from './env.js';
-import logger from './logger.js';
+import path from "path";
+import { fileURLToPath } from "url";
+import { Sequelize, Options } from "sequelize";
+import { execSync } from "child_process";
+import pg from "pg";
+import env from "./env.js";
+import logger from "./logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRoot = path.resolve(__dirname, '../../');
+const projectRoot = path.resolve(__dirname, "../../");
 
 interface ClientConfig {
   host: string;
@@ -49,15 +49,19 @@ export const ensureDatabaseExists = async (): Promise<void> => {
   // Connecting to a non-existent admin DB (e.g. "postgres") causes a FATAL
   // error on Render/Neon/Supabase where only the provisioned DB exists.
   if (process.env.DATABASE_URL) {
-    logger.info('DATABASE_URL detected — skipping ensureDatabaseExists (managed provider).');
+    logger.info(
+      "DATABASE_URL detected — skipping ensureDatabaseExists (managed provider).",
+    );
     return;
   }
 
-  const adminDatabase = env.database.adminDatabase || 'postgres';
+  const adminDatabase = env.database.adminDatabase || "postgres";
 
   // If adminDatabase is the same as the target database, nothing to create
   if (adminDatabase === env.database.name) {
-    logger.info('Admin database is the same as target — skipping ensureDatabaseExists.');
+    logger.info(
+      "Admin database is the same as target — skipping ensureDatabaseExists.",
+    );
     return;
   }
 
@@ -66,14 +70,14 @@ export const ensureDatabaseExists = async (): Promise<void> => {
   try {
     await client.connect();
     const result = await client.query(
-      'SELECT 1 FROM pg_database WHERE datname = $1',
-      [env.database.name]
+      "SELECT 1 FROM pg_database WHERE datname = $1",
+      [env.database.name],
     );
 
     if (result.rowCount === 0) {
       const dbName = env.database.name;
       if (!/^[a-zA-Z0-9_-]+$/.test(dbName)) {
-        throw new Error('Invalid database name');
+        throw new Error("Invalid database name");
       }
       await client.query(`CREATE DATABASE "${dbName}"`);
       logger.info(`Database ${env.database.name} created successfully.`);
@@ -83,7 +87,7 @@ export const ensureDatabaseExists = async (): Promise<void> => {
     // On managed DB providers the admin database or CREATE privilege may not
     // exist. This is expected — the database is already provisioned.
     logger.warn(
-      `ensureDatabaseExists skipped (${msg}). If the database is managed (Render, RDS, etc.) this is expected.`
+      `ensureDatabaseExists skipped (${msg}). If the database is managed (Render, RDS, etc.) this is expected.`,
     );
   } finally {
     await client.end().catch(() => {});
@@ -96,9 +100,11 @@ await ensureDatabaseExists();
 const sequelizeOptions: Options = {
   host: env.database.host,
   port: env.database.port,
-  dialect: 'postgres',
+  dialect: "postgres",
   dialectModule: pg,
-  logging: env.database.logging ? console.log : false,
+  logging: env.database.logging
+    ? (msg: string) => logger.debug({ event: "db.query" }, msg)
+    : false,
   dialectOptions: env.database.ssl
     ? {
         ssl: {
@@ -114,9 +120,11 @@ const databaseUrl = process.env.DATABASE_URL;
 
 export const sequelize = databaseUrl
   ? new Sequelize(databaseUrl, {
-      dialect: 'postgres',
+      dialect: "postgres",
       dialectModule: pg,
-      logging: env.database.logging ? console.log : false,
+      logging: env.database.logging
+        ? (msg: string) => logger.debug({ event: "db.query" }, msg)
+        : false,
       dialectOptions: {
         ssl: {
           require: true,
@@ -128,39 +136,41 @@ export const sequelize = databaseUrl
       env.database.name,
       env.database.username,
       env.database.password,
-      sequelizeOptions
+      sequelizeOptions,
     );
 
 export const connectDatabase = async (): Promise<void> => {
   await sequelize.authenticate();
-  logger.info('Database authenticated');
+  logger.info("Database authenticated");
 
   // Run pending migrations via sequelize-cli.
   // PRODUCTION SAFETY: Auto-migration is disabled in production to prevent
   // untested schema changes from running on startup. Run migrations manually
   // before deploying: npm run migrate
-  if (env.nodeEnv === 'production' && process.env.AUTO_MIGRATE !== 'true') {
-    logger.info('Skipping auto-migration in production (run "npm run migrate" manually before deploying)');
+  if (env.nodeEnv === "production" && process.env.AUTO_MIGRATE !== "true") {
+    logger.info(
+      'Skipping auto-migration in production (run "npm run migrate" manually before deploying)',
+    );
   } else {
     try {
-      logger.info('Running database migrations...');
-      const configPath = path.join(projectRoot, 'sequelize.config.cjs');
-      const migrationsPath = path.join(projectRoot, 'migrations');
+      logger.info("Running database migrations...");
+      const configPath = path.join(projectRoot, "sequelize.config.cjs");
+      const migrationsPath = path.join(projectRoot, "migrations");
       execSync(
         `npx sequelize-cli db:migrate --config "${configPath}" --migrations-path "${migrationsPath}"`,
-        { stdio: 'inherit', cwd: projectRoot }
+        { stdio: "inherit", cwd: projectRoot },
       );
-      logger.info('Migrations complete');
+      logger.info("Migrations complete");
     } catch (error) {
-      logger.error('Migration failed', error);
+      logger.error("Migration failed", error);
       throw error;
     }
   }
 
   // Seed data only in development (or when explicitly forced)
-  if (env.nodeEnv === 'development' || process.env.FORCE_SEED === 'true') {
-    logger.info('Running seed data (development mode)...');
-    const { seedAll } = await import('../seeders/index.js');
+  if (env.nodeEnv === "development" || process.env.FORCE_SEED === "true") {
+    logger.info("Running seed data (development mode)...");
+    const { seedAll } = await import("../seeders/index.js");
     await seedAll();
   } else {
     logger.info(`Skipping seed data (NODE_ENV=${env.nodeEnv})`);

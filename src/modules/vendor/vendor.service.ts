@@ -18,6 +18,7 @@ import type { VendorCompany } from '../../models/vendor-company.js';
 import type { Company } from '../../models/company.js';
 import type { Address } from '../../models/address.js';
 import models, { sequelize } from '../../models/index.js';
+import logger from "../../config/logger.js";
 
 interface VendorData {
   email: string;
@@ -640,7 +641,7 @@ export const createVendorStep1Service = async (
   } catch (error: any) {
     await transaction.rollback();
 
-    console.error('Step 1 Error:', {
+    logger.error('Step 1 Error:', {
       name: error.name,
       message: error.message,
       errors: error.errors,
@@ -734,7 +735,7 @@ export const updateVendorStep2Service = async (
       address: { id: address.id },
     };
   } catch (error: any) {
-    console.error('Step 2 Error:', {
+    logger.error('Step 2 Error:', {
       name: error.name,
       message: error.message,
       errors: error.errors,
@@ -913,7 +914,7 @@ export const getVendorForReviewService = async (
 
     return companyData;
   } catch (error: any) {
-    console.error('Step 5 (Review) Error:', {
+    logger.error('Step 5 (Review) Error:', {
       name: error.name,
       message: error.message,
       stack: error.stack,

@@ -7,6 +7,7 @@
  */
 
 import { createHash } from 'crypto';
+import logger from "../../../config/logger.js";
 
 /**
  * Conversation intent types for Accordo's responses
@@ -254,7 +255,7 @@ export function substituteVariables(
   const unreplacedVars = result.match(/\{[a-zA-Z]+\}/g);
   if (unreplacedVars) {
     // Log warning but don't fail - some variables may be optional
-    console.warn(
+    logger.warn(
       `Template has unreplaced variables: ${unreplacedVars.join(', ')}`
     );
   }
@@ -310,7 +311,7 @@ export function validateTemplateVariables(
   );
 
   if (missingVars.length > 0) {
-    console.warn(
+    logger.warn(
       `Missing required variables for ${intent}: ${missingVars.join(', ')}`
     );
     return false;

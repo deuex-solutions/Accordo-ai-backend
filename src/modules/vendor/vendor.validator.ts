@@ -1,9 +1,9 @@
-import Joi from 'joi';
+import Joi from "joi";
 
 const options: Joi.ValidationOptions = {
   errors: {
     wrap: {
-      label: '',
+      label: "",
     },
   },
 };
@@ -13,11 +13,13 @@ const options: Joi.ValidationOptions = {
  * @param userData - The vendor data to validate
  * @returns Joi validation result
  */
-export const validateCreateVendor = (userData: unknown): Joi.ValidationResult => {
+export const validateCreateVendor = (
+  userData: unknown,
+): Joi.ValidationResult => {
   const schema = Joi.object({
     email: Joi.string().email().required().messages({
-      'string.email': 'Email format is invalid',
-      'any.required': 'Email is required',
+      "string.email": "Email format is invalid",
+      "any.required": "Email is required",
     }),
   }).unknown(true);
 
@@ -29,15 +31,15 @@ export const validateCreateVendor = (userData: unknown): Joi.ValidationResult =>
  */
 const addressSchema = Joi.object({
   label: Joi.string().max(100).required().messages({
-    'any.required': 'Address label is required',
+    "any.required": "Address label is required",
   }),
   address: Joi.string().max(500).required().messages({
-    'any.required': 'Address is required',
+    "any.required": "Address is required",
   }),
-  city: Joi.string().max(100).allow('', null),
-  state: Joi.string().max(100).allow('', null),
-  country: Joi.string().max(100).allow('', null),
-  postalCode: Joi.string().max(20).allow('', null),
+  city: Joi.string().max(100).allow("", null),
+  state: Joi.string().max(100).allow("", null),
+  country: Joi.string().max(100).allow("", null),
+  postalCode: Joi.string().max(20).allow("", null),
   isDefault: Joi.boolean().default(false),
 });
 
@@ -46,61 +48,78 @@ const addressSchema = Joi.object({
  * @param data - The combined vendor and company data to validate
  * @returns Joi validation result
  */
-export const validateCreateVendorWithCompany = (data: unknown): Joi.ValidationResult => {
+export const validateCreateVendorWithCompany = (
+  data: unknown,
+): Joi.ValidationResult => {
   const schema = Joi.object({
     // Vendor user info (required)
     name: Joi.string().max(255).required().messages({
-      'any.required': 'Vendor name is required',
+      "any.required": "Vendor name is required",
     }),
     email: Joi.string().email().required().messages({
-      'string.email': 'Email format is invalid',
-      'any.required': 'Email is required',
+      "string.email": "Email format is invalid",
+      "any.required": "Email is required",
     }),
-    phone: Joi.string().max(20).allow('', null),
+    phone: Joi.string().max(20).allow("", null),
 
     // Company info (required)
     companyName: Joi.string().max(255).required().messages({
-      'any.required': 'Company name is required',
+      "any.required": "Company name is required",
     }),
-    establishmentDate: Joi.string().allow('', null),
-    nature: Joi.string().valid('Domestic', 'Interational').allow('', null),
-    type: Joi.string().max(150).allow('', null),
-    numberOfEmployees: Joi.string().valid('0-10', '10-100', '100-1000', '1000+').allow('', null),
-    annualTurnover: Joi.string().allow('', null),
-    industryType: Joi.string().valid('Industry1', 'Industry2').allow('', null),
-    companyLogo: Joi.string().allow('', null),
+    establishmentDate: Joi.string().allow("", null),
+    nature: Joi.string().valid("Domestic", "International").allow("", null),
+    type: Joi.string().max(150).allow("", null),
+    numberOfEmployees: Joi.string()
+      .valid("0-10", "10-100", "100-1000", "1000+")
+      .allow("", null),
+    annualTurnover: Joi.string().allow("", null),
+    industryType: Joi.string()
+      .valid(
+        "Construction",
+        "Healthcare",
+        "Transportation",
+        "Information Technology",
+        "Oil and Gas",
+        "Defence",
+        "Renewable Energy",
+        "Telecommunication",
+        "Agriculture",
+        "Other",
+      )
+      .allow("", null),
+    companyLogo: Joi.string().allow("", null),
 
     // Addresses (optional)
     addresses: Joi.array().items(addressSchema).allow(null),
 
     // Financial & Banking (optional)
-    typeOfCurrency: Joi.string().valid('INR', 'USD', 'EUR').allow('', null),
-    bankName: Joi.string().max(100).allow('', null),
-    beneficiaryName: Joi.string().max(100).allow('', null),
-    accountNumber: Joi.string().max(20).allow('', null),
-    iBanNumber: Joi.string().max(34).allow('', null),
-    swiftCode: Joi.string().max(11).allow('', null),
-    bankAccountType: Joi.string().max(50).allow('', null),
-    ifscCode: Joi.string().max(11).allow('', null),
+    typeOfCurrency: Joi.string().valid("INR", "USD", "EUR").allow("", null),
+    bankName: Joi.string().max(100).allow("", null),
+    beneficiaryName: Joi.string().max(100).allow("", null),
+    accountNumber: Joi.string().max(20).allow("", null),
+    iBanNumber: Joi.string().max(34).allow("", null),
+    swiftCode: Joi.string().max(11).allow("", null),
+    bankAccountType: Joi.string().max(50).allow("", null),
+    ifscCode: Joi.string().max(11).allow("", null),
 
     // Compliance documents (optional)
-    gstNumber: Joi.string().max(100).allow('', null),
-    panNumber: Joi.string().max(100).allow('', null),
-    msmeNumber: Joi.string().max(100).allow('', null),
-    ciNumber: Joi.string().max(100).allow('', null),
+    gstNumber: Joi.string().max(100).allow("", null),
+    panNumber: Joi.string().max(100).allow("", null),
+    msmeNumber: Joi.string().max(100).allow("", null),
+    ciNumber: Joi.string().max(100).allow("", null),
 
     // Point of contact (optional)
-    pocName: Joi.string().max(100).allow('', null),
-    pocDesignation: Joi.string().max(100).allow('', null),
-    pocEmail: Joi.string().email().allow('', null),
-    pocPhone: Joi.string().max(20).allow('', null),
-    pocWebsite: Joi.string().allow('', null),
+    pocName: Joi.string().max(100).allow("", null),
+    pocDesignation: Joi.string().max(100).allow("", null),
+    pocEmail: Joi.string().email().allow("", null),
+    pocPhone: Joi.string().max(20).allow("", null),
+    pocWebsite: Joi.string().allow("", null),
 
     // Escalation contact (optional)
-    escalationName: Joi.string().max(100).allow('', null),
-    escalationDesignation: Joi.string().max(100).allow('', null),
-    escalationEmail: Joi.string().email().allow('', null),
-    escalationPhone: Joi.string().max(20).allow('', null),
+    escalationName: Joi.string().max(100).allow("", null),
+    escalationDesignation: Joi.string().max(100).allow("", null),
+    escalationEmail: Joi.string().email().allow("", null),
+    escalationPhone: Joi.string().max(20).allow("", null),
   });
 
   return schema.validate(data, options);
@@ -114,25 +133,40 @@ export const validateStep1 = (data: unknown): Joi.ValidationResult => {
   const schema = Joi.object({
     // Vendor user info (required)
     name: Joi.string().max(255).required().messages({
-      'any.required': 'Vendor name is required',
+      "any.required": "Vendor name is required",
     }),
     email: Joi.string().email().required().messages({
-      'string.email': 'Email format is invalid',
-      'any.required': 'Email is required',
+      "string.email": "Email format is invalid",
+      "any.required": "Email is required",
     }),
-    phone: Joi.string().max(20).allow('', null),
+    phone: Joi.string().max(20).allow("", null),
 
     // Company info (required)
     companyName: Joi.string().max(255).required().messages({
-      'any.required': 'Company name is required',
+      "any.required": "Company name is required",
     }),
-    establishmentDate: Joi.string().allow('', null),
-    nature: Joi.string().valid('Domestic', 'International').allow('', null),
-    type: Joi.string().max(150).allow('', null),
-    numberOfEmployees: Joi.string().valid('0-10', '10-100', '100-1000', '1000+').allow('', null),
-    annualTurnover: Joi.string().allow('', null),
-    industryType: Joi.string().valid('Industry1', 'Industry2').allow('', null),
-    companyLogo: Joi.string().allow('', null),
+    establishmentDate: Joi.string().allow("", null),
+    nature: Joi.string().valid("Domestic", "International").allow("", null),
+    type: Joi.string().max(150).allow("", null),
+    numberOfEmployees: Joi.string()
+      .valid("0-10", "10-100", "100-1000", "1000+")
+      .allow("", null),
+    annualTurnover: Joi.string().allow("", null),
+    industryType: Joi.string()
+      .valid(
+        "Construction",
+        "Healthcare",
+        "Transportation",
+        "Information Technology",
+        "Oil and Gas",
+        "Defence",
+        "Renewable Energy",
+        "Telecommunication",
+        "Agriculture",
+        "Other",
+      )
+      .allow("", null),
+    companyLogo: Joi.string().allow("", null),
   });
 
   return schema.validate(data, options);
@@ -145,24 +179,24 @@ export const validateStep1 = (data: unknown): Joi.ValidationResult => {
 export const validateStep2 = (data: unknown): Joi.ValidationResult => {
   const schema = Joi.object({
     address: Joi.string().max(500).required().messages({
-      'any.required': 'Address is required',
-      'string.empty': 'Address is required',
+      "any.required": "Address is required",
+      "string.empty": "Address is required",
     }),
     city: Joi.string().max(100).required().messages({
-      'any.required': 'City is required',
-      'string.empty': 'City is required',
+      "any.required": "City is required",
+      "string.empty": "City is required",
     }),
     state: Joi.string().max(100).required().messages({
-      'any.required': 'State is required',
-      'string.empty': 'State is required',
+      "any.required": "State is required",
+      "string.empty": "State is required",
     }),
     country: Joi.string().max(100).required().messages({
-      'any.required': 'Country is required',
-      'string.empty': 'Country is required',
+      "any.required": "Country is required",
+      "string.empty": "Country is required",
     }),
     zipCode: Joi.string().max(20).required().messages({
-      'any.required': 'Zip code is required',
-      'string.empty': 'Zip code is required',
+      "any.required": "Zip code is required",
+      "string.empty": "Zip code is required",
     }),
   });
 
@@ -175,23 +209,25 @@ export const validateStep2 = (data: unknown): Joi.ValidationResult => {
 export const validateStep3 = (data: unknown): Joi.ValidationResult => {
   const schema = Joi.object({
     // Currency
-    typeOfCurrency: Joi.string().valid('INR', 'USD', 'EUR', 'GBP', 'AUD').allow('', null),
+    typeOfCurrency: Joi.string()
+      .valid("INR", "USD", "EUR", "GBP", "AUD")
+      .allow("", null),
 
     // Banking
-    bankName: Joi.string().max(100).allow('', null),
-    beneficiaryName: Joi.string().max(100).allow('', null),
-    accountNumber: Joi.string().max(20).allow('', null),
-    iBanNumber: Joi.string().max(34).allow('', null),
-    swiftCode: Joi.string().max(11).allow('', null),
-    bankAccountType: Joi.string().max(50).allow('', null),
-    ifscCode: Joi.string().max(11).allow('', null),
-    fullAddress: Joi.string().max(500).allow('', null),
+    bankName: Joi.string().max(100).allow("", null),
+    beneficiaryName: Joi.string().max(100).allow("", null),
+    accountNumber: Joi.string().max(20).allow("", null),
+    iBanNumber: Joi.string().max(34).allow("", null),
+    swiftCode: Joi.string().max(11).allow("", null),
+    bankAccountType: Joi.string().max(50).allow("", null),
+    ifscCode: Joi.string().max(11).allow("", null),
+    fullAddress: Joi.string().max(500).allow("", null),
 
     // Compliance documents
-    gstNumber: Joi.string().max(100).allow('', null),
-    panNumber: Joi.string().max(100).allow('', null),
-    msmeNumber: Joi.string().max(100).allow('', null),
-    ciNumber: Joi.string().max(100).allow('', null),
+    gstNumber: Joi.string().max(100).allow("", null),
+    panNumber: Joi.string().max(100).allow("", null),
+    msmeNumber: Joi.string().max(100).allow("", null),
+    ciNumber: Joi.string().max(100).allow("", null),
   });
 
   return schema.validate(data, options);
@@ -203,21 +239,21 @@ export const validateStep3 = (data: unknown): Joi.ValidationResult => {
 export const validateStep4 = (data: unknown): Joi.ValidationResult => {
   const schema = Joi.object({
     // Point of contact
-    pocName: Joi.string().max(100).allow('', null),
-    pocDesignation: Joi.string().max(100).allow('', null),
-    pocEmail: Joi.string().email().allow('', null).messages({
-      'string.email': 'POC email format is invalid',
+    pocName: Joi.string().max(100).allow("", null),
+    pocDesignation: Joi.string().max(100).allow("", null),
+    pocEmail: Joi.string().email().allow("", null).messages({
+      "string.email": "POC email format is invalid",
     }),
-    pocPhone: Joi.string().max(20).allow('', null),
-    pocWebsite: Joi.string().max(500).allow('', null),
+    pocPhone: Joi.string().max(20).allow("", null),
+    pocWebsite: Joi.string().max(500).allow("", null),
 
     // Escalation contact
-    escalationName: Joi.string().max(100).allow('', null),
-    escalationDesignation: Joi.string().max(100).allow('', null),
-    escalationEmail: Joi.string().email().allow('', null).messages({
-      'string.email': 'Escalation email format is invalid',
+    escalationName: Joi.string().max(100).allow("", null),
+    escalationDesignation: Joi.string().max(100).allow("", null),
+    escalationEmail: Joi.string().email().allow("", null).messages({
+      "string.email": "Escalation email format is invalid",
     }),
-    escalationPhone: Joi.string().max(20).allow('', null),
+    escalationPhone: Joi.string().max(20).allow("", null),
   });
 
   return schema.validate(data, options);

@@ -519,7 +519,7 @@ Vendors always bid on TOTAL contract price. `total_price` in `Offer` and config 
 
 - **Auto-migrate is disabled in production.** Run `npm run migrate` manually before each deploy. Forgetting this is the #1 deploy bug.
 - **Phrasing-history cache is per-Node-process.** Multi-instance deployments fragment fingerprints. Documented as accepted; swap to Redis behind the same `phrasing-history.ts` API if it ever matters.
-- **The `change-me` JWT fallback** in `src/config/env.ts` is only safe for tests. The container will boot with it set in production, so make your deploy fail loudly when the secret isn't provided.
+- **JWT secrets are required in production.** `resolveJwtSecret()` in `src/config/env.ts` throws at startup when `JWT_ACCESS_TOKEN_SECRET` / `JWT_REFRESH_TOKEN_SECRET` are unset under `NODE_ENV=production`. In dev a random 32-byte hex secret is generated per-process — by design, so accidental fallbacks never reach prod.
 - **`OPENAI_MODEL` defaults to `gpt-4o-mini`.** If you swap it for a more expensive model, watch `ApiUsageLog`.
 - **`humanRoundPrice` is intentionally lossy.** Don't introduce a new MESO/counter price calc that bypasses it — vendors notice "rounder" prices.
 - **`atCeiling` is a string-affecting flag**. Setting it in the intent layer changes phrasing in the persona renderer ("our best position") without telling the LLM the literal max. Don't expose the max value as a workaround.
