@@ -3,13 +3,17 @@
 This directory contains the core LangGraph-based multi-agent system.
 
 ## The Node-Contract Method
-All tracks (Vatsal, Yug, Adarsh) must adhere to the `NegotiationState` defined in `state.ts`. 
-
-1. **State as Truth**: No agent should store internal state. All updates must flow through the graph state.
-2. **Functional Nodes**: Implement agents as pure functions that take `NegotiationState` and return a `Partial<NegotiationState>`.
+...
 3. **Isolation**: Keep implementation logic in the `nodes/` folder, organized by track.
+4. **Logic Parity (Synergy)**: Every node implementation MUST reference its legacy workflow source. Use the `@source` tag in JSDoc to point to the file in `src/modules/chatbot/` being replaced.
 
-## Directory Structure
+## Synergy Traceability Matrix
+| Agent | Legacy Source | Status |
+| :--- | :--- | :--- |
+| `state_management` | `negotiation-state-machine.ts` | [DONE] |
+| `offer_parser` | `parse-offer.ts` | [IN PROGRESS] |
+| `negotiation_decision` | `decide.ts`, `weighted-utility.ts` | [TODO] |
+| `meso_generator` | `meso.ts` | [TODO] |
 - `state.ts`: The central state schema (The Contract).
 - `types.ts`: Shared enums and interfaces.
 - `index.ts`: The main graph assembly (The Skeleton).

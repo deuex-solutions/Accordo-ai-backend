@@ -48,12 +48,12 @@ export async function createNegotiationGraph() {
 
   const workflow = new StateGraph(NegotiationStateAnnotation)
     // Add Nodes
-    .addNode(NodeName.PARSE_INPUT, parseInputNode)
+    .addNode(NodeName.PARSE_INPUT, offerParsingNode)
     .addNode(NodeName.ANALYZE_SENTIMENT, analyzeSentimentNode)
     .addNode(NodeName.DECIDE_STRATEGY, decideStrategyNode)
     .addNode(NodeName.GENERATE_OFFERS, generateOffersNode)
     .addNode(NodeName.FINALIZE_RESPONSE, finalizeResponseNode)
-
+    .addNode("state_management", stateManagementNode)
     // Define Edges (The Flow)
     .addEdge("__start__", NodeName.PARSE_INPUT)
     .addEdge(NodeName.PARSE_INPUT, NodeName.ANALYZE_SENTIMENT)
