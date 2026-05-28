@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Sequelize, Options } from "sequelize";
@@ -156,10 +157,19 @@ export const connectDatabase = async (): Promise<void> => {
       logger.info("Running database migrations...");
       const configPath = path.join(projectRoot, "sequelize.config.cjs");
       const migrationsPath = path.join(projectRoot, "migrations");
-      execSync(
-        `npx sequelize-cli db:migrate --config "${configPath}" --migrations-path "${migrationsPath}"`,
-        { stdio: "inherit", cwd: projectRoot },
-      );
+      const modelsPath = path.join(projectRoot, "src/models");
+      const seedersPath = path.join(projectRoot, "src/seeders");
+
+      let command = `npx sequelize-cli db:migrate --config "${configPath}" --migrations-path "${migrationsPath}"`;
+
+      if (fs.existsSync(modelsPath)) {
+        command += ` --models-path "${modelsPath}"`;
+      }
+      if (fs.existsSync(seedersPath)) {
+        command += ` --seeders-path "${seedersPath}"`;
+      }
+
+      execSync(command, { stdio: "inherit", cwd: projectRoot });
       logger.info("Migrations complete");
     } catch (error) {
       logger.error("Migration failed", error);
