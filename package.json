@@ -48,6 +48,10 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
     "openai": "^6.17.0",
+    "@langchain/core": "^0.3.37",
+    "@langchain/langgraph": "^0.2.43",
+    "@langchain/langgraph-checkpoint-postgres": "^0.0.12",
+    "@langchain/openai": "^0.3.16",
     "pdf2pic": "^3.2.0",
     "pdfkit": "^0.16.0",
     "pg": "^8.16.3",
@@ -60,6 +64,7 @@
     "tesseract.js": "^7.0.0",
     "tiktoken": "^1.0.22",
     "toobusy-js": "^0.5.1",
+    "uuid": "^11.0.3",
     "yargs": "^17.7.2",
     "zod": "^4.3.4"
   },
