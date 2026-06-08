@@ -1,5 +1,4 @@
 import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
-import { BaseMessage } from "@langchain/core/messages";
 
 /**
  * Analysis results from intelligence agents (Track 2: Yug).
