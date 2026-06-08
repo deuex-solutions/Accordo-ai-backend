@@ -28,13 +28,22 @@ export interface Offer {
  */
 export interface IntelligenceAnalysis {
   tone?: {
-    label: string;
-    score: number;
+    sentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED";
+    formality: number; // 0-1 (0 = Casual, 1 = Formal)
+    urgency: number;   // 0-1 (0 = Relaxed, 1 = Urgent)
+    styleSignals: Record<string, number>; // The 11 signals from tone-detector.ts
   };
-  behavioralSignals?: string[];
-  sentiment?: "POSITIVE" | "NEGATIVE" | "NEUTRAL";
-  concerns?: string[];
-  urgency?: "HIGH" | "MEDIUM" | "LOW";
+  behavior?: {
+    concessionVelocity: "FAST" | "STEADY" | "SLOW" | "STALLED";
+    momentum: "ACCELERATING" | "DECELERATING" | "STABLE";
+    rigidityScore: number; // 0-1 (0 = Flexible, 1 = Rigid)
+  };
+  concerns?: Array<{
+    category: "PRICING" | "DELIVERY" | "QUALITY" | "PAYMENT_TERMS" | "OTHER";
+    description: string;
+    priority: "HIGH" | "MEDIUM" | "LOW";
+  }>;
+  urgency?: "HIGH" | "MEDIUM" | "LOW"; // Global urgency level
 }
 
 /**
