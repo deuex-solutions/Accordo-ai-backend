@@ -1,6 +1,28 @@
 import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
 
 /**
+ * Common Offer interface used across all agents.
+ * Derived from existing Offer and ParsedVendorOffer types in the codebase.
+ */
+export interface Offer {
+  totalPrice: number | null;
+  unitPrice?: number | null;
+  paymentTerms?: string | null;
+  paymentTermsDays?: number | null;
+  deliveryDate?: string | null;
+  deliveryDays?: number | null;
+  partialDelivery?: boolean | null;
+  warrantyMonths?: number | null;
+  lateDeliveryPenalty?: number | null;
+  qualityCertifications?: string[] | null;
+  advancePayment?: number | null;
+  volumeDiscount?: number | null;
+  currency?: string;
+  customParameters?: Record<string, any>;
+  isComplete?: boolean;
+}
+
+/**
  * Analysis results from intelligence agents (Track 2: Yug).
  */
 export interface IntelligenceAnalysis {
@@ -21,28 +43,6 @@ export interface IntelligenceAnalysis {
     priority: "HIGH" | "MEDIUM" | "LOW";
   }>;
   urgency?: "HIGH" | "MEDIUM" | "LOW"; // Global urgency level
-}
-
-/**
- * Common Offer interface used across all agents.
- * Derived from existing Offer and ParsedVendorOffer types in the codebase.
- */
-export interface Offer {
-  totalPrice: number | null;
-  unitPrice?: number | null;
-  paymentTerms?: string | null;
-  paymentTermsDays?: number | null;
-  deliveryDate?: string | null;
-  deliveryDays?: number | null;
-  partialDelivery?: boolean | null;
-  warrantyMonths?: number | null;
-  lateDeliveryPenalty?: number | null;
-  qualityCertifications?: string[] | null;
-  advancePayment?: number | null;
-  volumeDiscount?: number | null;
-  currency?: string;
-  customParameters?: Record<string, any>;
-  isComplete?: boolean;
 }
 
 /**
