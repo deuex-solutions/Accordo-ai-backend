@@ -116,6 +116,34 @@ export const NegotiationStateAnnotation = Annotation.Root({
   }),
 
   /**
+   * Vendor profile and historical preferences (Track 3: Adarsh).
+   */
+  vendorProfile: Annotation<any | null>({
+    reducer: (old, newest) => newest ?? old,
+    default: () => null,
+  }),
+
+  /**
+   * Multi-equivalent simultaneous offers (Track 3: Adarsh).
+   */
+  mesoOptions: Annotation<Offer[]>({
+    reducer: (old, newest) => newest ?? old,
+    default: () => [],
+  }),
+
+  /**
+   * Negotiation health and stall detection status (Track 3: Adarsh).
+   */
+  stallStatus: Annotation<{
+    isStalled: boolean;
+    roundsWithoutProgress: number;
+    momentumTrend: "UP" | "DOWN" | "STABLE";
+  } | null>({
+    reducer: (old, newest) => newest ?? old,
+    default: () => null,
+  }),
+
+  /**
    * Strategic decision from the brain (Track 1: Vatsal).
    */
   decision: Annotation<NegotiationDecision | null>({
