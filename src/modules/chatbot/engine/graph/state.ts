@@ -1,5 +1,4 @@
 import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
-import { BaseMessage } from "@langchain/core/messages";
 
 /**
  * Common Offer interface used across all agents.
@@ -84,7 +83,6 @@ export const NegotiationStateAnnotation = Annotation.Root({
   
   /**
    * Negotiation configuration and constraints.
-   * Derived from ResolvedNegotiationConfig.
    */
   config: Annotation<any | null>({
     reducer: (old, newest) => newest ?? old,
