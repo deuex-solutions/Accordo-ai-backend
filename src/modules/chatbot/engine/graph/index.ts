@@ -1,4 +1,5 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
+import { generateOffersNode } from "./nodes/generate-offers.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -29,11 +30,7 @@ const decideStrategyNode = async (state: NegotiationState) => {
   return { decision: { action: "COUNTER" as const, reasoning: "Mock reasoning", confidence: 0.9 } };
 };
 
-// TRACK 3: ADARSH (Strategy/MESO)
-const generateOffersNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.GENERATE_OFFERS}] Generating counter-offers...`);
-  return { counterOffer: { price: 1000, terms: "Net 30" } };
-};
+// TRACK 3: ADARSH (Strategy/MESO) - now imported from nodes/generate-offers.js
 
 // FINAL RESPONSE
 const finalizeResponseNode = async (state: NegotiationState) => {
