@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { decisionNode } from "../../../src/modules/chatbot/engine/graph/nodes/decision.js";
-import { NegotiationState } from "../../../src/modules/chatbot/engine/graph/state.js";
+import { decisionNode } from "@/modules/chatbot/engine/graph/nodes/decision";
+import { NegotiationState } from "@/modules/chatbot/engine/graph/state";
 
 describe("AI Eval: DecisionAgent Foundation", () => {
   it("should trigger ACCEPT if price is below target", async () => {
@@ -56,5 +56,26 @@ describe("AI Eval: DecisionAgent Foundation", () => {
 
     const result = await decisionNode(mockState);
     expect(result.decision?.action).toBe("WAIT");
+  });
+
+  // REGRESSION TESTS
+  it("should handle missing config gracefully by returning null decision", async () => {
+    const mockState = {
+      round: 1,
+      parsedOffer: { totalPrice: 1000 }
+    } as unknown as NegotiationState;
+
+    const result = await decisionNode(mockState);
+    expect(result.decision).toBeNull();
+  });
+
+  it("should handle missing parsedOffer gracefully by returning null decision", async () => {
+    const mockState = {
+      round: 1,
+      config: { targetPrice: 1000 }
+    } as unknown as NegotiationState;
+
+    const result = await decisionNode(mockState);
+    expect(result.decision).toBeNull();
   });
 });
