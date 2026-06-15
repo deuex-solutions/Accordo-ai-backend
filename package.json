@@ -50,7 +50,7 @@
     "openai": "^6.17.0",
     "@langchain/core": "^0.3.37",
     "@langchain/langgraph": "^0.2.43",
-    "@langchain/langgraph-checkpoint-postgres": "^0.0.12",
+    "@langchain/langgraph-checkpoint-postgres": "^0.1.2",
     "@langchain/openai": "^0.3.16",
     "pdf2pic": "^3.2.0",
     "pdfkit": "^0.16.0",
