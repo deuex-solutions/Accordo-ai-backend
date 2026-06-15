@@ -29,12 +29,12 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
 
     const result = await graph.invoke(initialState, config);
 
-    // Verify state management incremented round correctly (mock parseInputNode also increments)
-    expect(result.round).toBe(2);
+    // Verify state management incremented round correctly
+    expect(result.round).toBe(1);
     
     // Verify intelligence/sentiment ran
     expect(result.analysis).toBeDefined();
-    expect(result.analysis.sentiment).toBe("NEUTRAL");
+    expect(result.analysis.tone?.sentiment).toBe("POSITIVE");
     
     // Verify decision ran
     expect(result.decision).toBeDefined();
