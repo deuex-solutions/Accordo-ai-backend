@@ -1,12 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
-import { responseGenerationNode } from "../../../src/modules/chatbot/engine/graph/nodes/response-generation.js";
-import { NegotiationState } from "../../../src/modules/chatbot/engine/graph/state.js";
-import { HumanMessage } from "@langchain/core/messages";
+import { responseGenerationNode } from "@/modules/chatbot/engine/graph/nodes/response-generation";
+import { NegotiationState } from "@/modules/chatbot/engine/graph/state";
+class HumanMessage {
+  content: string;
+  constructor(content: string) { this.content = content; }
+  _getType() { return "human"; }
+}
 
 // Mock the LLM service to avoid actual API calls and test the pipeline
-vi.mock("../../../src/services/llm.service.js", () => ({
+vi.mock("@/services/llm.service", () => ({
   chatCompletion: vi.fn().mockResolvedValue("Mocked PM response recognizing the situation and offering a counter.")
 }));
+
+vi.mock("@langchain/core/messages", () => {
+  return {
+    AIMessage: class {
+      content: string;
+      constructor(content: string) { this.content = content; }
+      _getType() { return "ai"; }
+    }
+  };
+});
 
 describe("AI Eval: ResponseGenerationAgent", () => {
   it("should generate an AIMessage based on ACCEPT decision", async () => {
@@ -44,5 +58,35 @@ describe("AI Eval: ResponseGenerationAgent", () => {
     const mockState = {} as NegotiationState;
     const result = await responseGenerationNode(mockState);
     expect(result.messages).toBeUndefined();
+  });
+
+  // REGRESSION TESTS
+  it("should handle ESCALATE decision properly and request fallback/escalation response", async () => {
+    const mockState = {
+      round: 6,
+      messages: [new HumanMessage("We will not drop the price any further.")],
+      config: { currency: "USD" },
+      decision: { action: "ESCALATE", reasoning: "Reached max rounds", utilityScore: 0.2 },
+      parsedOffer: { totalPrice: 1200 },
+      counterOffer: null
+    } as unknown as NegotiationState;
+
+    const result = await responseGenerationNode(mockState);
+    expect(result.messages).toBeDefined();
+    expect(result.messages![0].content).toContain("Mocked PM response");
+  });
+
+  it("should handle missing counterOffer when action is COUNTER gracefully", async () => {
+    const mockState = {
+      round: 2,
+      messages: [new HumanMessage("Best price is 1200.")],
+      config: { currency: "USD" },
+      decision: { action: "COUNTER", reasoning: "No counter generated yet", utilityScore: 0.5 },
+      parsedOffer: { totalPrice: 1200 },
+      counterOffer: null // Missing counter offer
+    } as unknown as NegotiationState;
+
+    const result = await responseGenerationNode(mockState);
+    expect(result.messages).toBeDefined();
   });
 });
