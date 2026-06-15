@@ -36,6 +36,7 @@ export const decisionNode = async (state: NegotiationState) => {
   const extendedOffer = {
     total_price: parsedOffer.totalPrice ?? undefined,
     payment_terms_days: parsedOffer.paymentTermsDays ?? undefined,
+    payment_terms: parsedOffer.paymentTermsDays ? `Net ${parsedOffer.paymentTermsDays}` : undefined,
     delivery_days: parsedOffer.deliveryDays ?? undefined,
     warranty_months: parsedOffer.warrantyMonths ?? undefined,
   };
