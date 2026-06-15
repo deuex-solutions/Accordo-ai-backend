@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { vendorProfilingNode } from "../../../src/modules/chatbot/engine/graph/nodes/vendor-profiling.js";
-import { NegotiationState } from "../../../src/modules/chatbot/engine/graph/state.js";
+import { vendorProfilingNode } from "@/modules/chatbot/engine/graph/nodes/vendor-profiling";
+import { NegotiationState } from "@/modules/chatbot/engine/graph/state";
 
 describe("AI Eval: VendorProfilingAgent", () => {
   it("should generate a default preference profile when no history exists", async () => {
@@ -34,5 +34,17 @@ describe("AI Eval: VendorProfilingAgent", () => {
     // Terms was selected 1 out of 3 times, weight is updated too
     expect(result.vendorProfile.termsWeight).toBeGreaterThan(0.5);
     expect(result.vendorProfile.lastSelectedOfferType).toBe("terms");
+  });
+
+  // REGRESSION TESTS
+  it("should handle malformed mesoSelections history gracefully without crashing", async () => {
+    const mockState = {
+      vendorId: "invalid-db-id", // Force DB or catch block
+      mesoSelections: [ null, undefined, { wrongKey: "test" } ]
+    } as any;
+
+    const result = await vendorProfilingNode(mockState);
+    expect(result.vendorProfile).toBeDefined();
+    expect(result.vendorProfile.priceWeight).toBeDefined();
   });
 });

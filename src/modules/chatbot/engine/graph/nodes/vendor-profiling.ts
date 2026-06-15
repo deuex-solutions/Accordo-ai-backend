@@ -14,7 +14,19 @@ import { buildPreferenceProfile } from "../../meso.js";
 export const vendorProfilingNode = async (state: NegotiationState) => {
   // Use the legacy profile builder logic
   // state might be missing mesoSelections in the root schema, so we cast to any for the legacy function
-  const profileData = buildPreferenceProfile(state as any);
+  let profileData;
+  try {
+    profileData = buildPreferenceProfile(state as any);
+  } catch (error) {
+    profileData = {
+      priceWeight: 0.5,
+      termsWeight: 0.5,
+      deliveryWeight: 0.5,
+      warrantyWeight: 0.5,
+      lastSelectedOfferType: null,
+      selectionHistory: []
+    };
+  }
 
   if (!state.vendorId) {
     return { vendorProfile: profileData };
