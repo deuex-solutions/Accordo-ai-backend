@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { stallRecoveryNode } from "../../../src/modules/chatbot/engine/graph/nodes/stall-recovery.js";
-import { NegotiationState } from "../../../src/modules/chatbot/engine/graph/state.js";
+import { stallRecoveryNode } from "@/modules/chatbot/engine/graph/nodes/stall-recovery";
+import { NegotiationState } from "@/modules/chatbot/engine/graph/state";
 
 describe("AI Eval: StallRecoveryAgent", () => {
   it("should not detect stall on early rounds", async () => {
@@ -62,5 +62,17 @@ describe("AI Eval: StallRecoveryAgent", () => {
 
     const result = await stallRecoveryNode(mockState);
     expect(result.stallStatus?.momentumTrend).toBe("DOWN");
+  });
+
+  // REGRESSION TESTS
+  it("should handle missing parsedOffer gracefully without crashing", async () => {
+    const mockState = {
+      round: 2,
+      parsedOffer: null,
+      metadata: {}
+    } as unknown as NegotiationState;
+
+    const result = await stallRecoveryNode(mockState);
+    expect(result).toEqual({});
   });
 });

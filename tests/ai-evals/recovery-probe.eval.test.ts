@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { recoveryProbeNode } from "../../../src/modules/chatbot/engine/graph/nodes/recovery-probe.js";
-import { NegotiationState } from "../../../src/modules/chatbot/engine/graph/state.js";
+import { recoveryProbeNode } from "@/modules/chatbot/engine/graph/nodes/recovery-probe";
+import { NegotiationState } from "@/modules/chatbot/engine/graph/state";
 
 describe("AI Eval: RecoveryProbeAgent", () => {
   it("should not trigger recovery if not stalled", async () => {
@@ -58,5 +58,30 @@ describe("AI Eval: RecoveryProbeAgent", () => {
     const result = await recoveryProbeNode(mockState);
     expect(result.metadata?.recoveryStrategy).toBe("ESCALATE");
     expect(result.decision?.action).toBe("ESCALATE");
+  });
+
+  // REGRESSION TESTS
+  it("should handle missing counterOffer when applying value-add gracefully", async () => {
+    const mockState = {
+      stallStatus: { isStalled: true, roundsWithoutProgress: 3, momentumTrend: "DOWN" },
+      counterOffer: null, // Critical missing state
+      metadata: {}
+    } as NegotiationState;
+
+    const result = await recoveryProbeNode(mockState);
+    expect(result.metadata?.recoveryStrategy).toBe("VALUE_ADD");
+    expect(result.counterOffer).toBeUndefined(); // Should not create a counterOffer out of thin air
+  });
+
+  it("should handle missing decision object when escalating gracefully", async () => {
+    const mockState = {
+      stallStatus: { isStalled: true, roundsWithoutProgress: 5, momentumTrend: "STABLE" },
+      decision: null, // Critical missing state
+      metadata: {}
+    } as unknown as NegotiationState;
+
+    const result = await recoveryProbeNode(mockState);
+    expect(result.metadata?.recoveryStrategy).toBe("ESCALATE");
+    expect(result.decision).toBeUndefined(); // Should handle gracefully
   });
 });
