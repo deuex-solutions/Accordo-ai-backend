@@ -22,6 +22,16 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
       messages: [new HumanMessage("I want a discount on the latest offer.")],
       dealId: "workflow-test-123",
       round: 0,
+      config: {
+        priceQuantity: { targetUnitPrice: 800, maxAcceptablePrice: 1000 },
+        priority: "MEDIUM",
+        paymentTerms: { minDays: 15, maxDays: 45 },
+        parameterWeights: { targetUnitPrice: 50, paymentTermsDays: 50 }
+      },
+      parsedOffer: {
+        totalPrice: 900,
+        paymentTermsDays: 30
+      }
     };
 
     const threadId = uuidv4();
