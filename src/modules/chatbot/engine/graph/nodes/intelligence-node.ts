@@ -5,47 +5,66 @@ import { analyzeBehavior } from "../../behavioral-analyzer.js";
 import { extractVendorConcerns, ConcernMessage, VendorConcern } from "../../concern-extractor.js";
 import logger from "../../../../../config/logger.js";
 
-/**
- * IntelligenceNode (Track 2: Yug)
- * 
- * Orchestrates the legacy intelligence extractors (Tone, Behavior, Concerns)
- * and maps their outputs to the strict NegotiationState Analysis schema.
- */
-export const analyzeSentimentNode = async (state: NegotiationState) => {
-  logger.info(`[Node: ${NodeName.ANALYZE_SENTIMENT}] Executing Intelligence Analysis...`);
-
-  // 1. Prepare messages for legacy extractors
+// Helper to convert LangChain messages to the format expected by the legacy analysis modules
+function prepareMessages(state: NegotiationState) {
   const rawMessages = state.messages || [];
-  // Ensure we only pass valid string content to the legacy modules
-  const messages = rawMessages.map(m => ({
+  return rawMessages.map(m => ({
     role: m._getType() === "human" ? "VENDOR" : m._getType() === "ai" ? "ACCORDO" : "SYSTEM",
     content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-    createdAt: new Date().toISOString(), // LangChain messages don't have createdAt, mock for behavior analyzer
-    // For behavior analyzer, we need extracted offers in the message history if available
+    createdAt: new Date().toISOString(),
     extractedOffer: m._getType() === "human" && m.id === state.metadata?.lastParsedMessageId ? state.parsedOffer : null
   })) as any[];
+}
 
+/**
+ * Tone Analysis Node - runs tone and style detection (Phase 6.2)
+ */
+export const toneAnalysisNode = async (state: NegotiationState) => {
+  logger.info(`[Node: tone_analysis] Analyzing vendor tone and style...`);
+  const messages = prepareMessages(state);
   const vendorMessages = messages.filter(m => m.role === "VENDOR");
   const latestVendorMessage = vendorMessages.length > 0 ? vendorMessages[vendorMessages.length - 1].content : "";
 
-  // 2. TONE & STYLE EXTRACTION
   const vendorTone = detectVendorTone(messages);
   const vendorStyle = detectVendorStyle(latestVendorMessage, messages);
-  const strictFirmness = detectStrictFirmness(latestVendorMessage);
 
-  // Map to IntelligenceAnalysis.tone
   let sentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED" = "NEUTRAL";
   if (vendorTone.primaryTone === "friendly" || vendorTone.primaryTone === "casual") sentiment = "POSITIVE";
   if (vendorTone.primaryTone === "firm") sentiment = "NEGATIVE";
   if (vendorStyle.hostility) sentiment = "NEGATIVE";
 
-  // 3. BEHAVIORAL ANALYSIS
+  return {
+    analysis: {
+      tone: {
+        sentiment,
+        formality: vendorStyle.formality,
+        urgency: vendorTone.primaryTone === "urgent" ? 1.0 : (vendorTone.allTones.urgent ? 0.5 : 0.0),
+        styleSignals: {
+          hostility: vendorStyle.hostility ? 1 : 0,
+          hasQuestion: vendorStyle.hasQuestion ? 1 : 0,
+          isNumberOnly: vendorStyle.isNumberOnly ? 1 : 0,
+          repeatedOfferCount: vendorStyle.repeatedOfferCount
+        }
+      }
+    }
+  };
+};
+
+/**
+ * Behavioral Analysis Node - concession velocity, momentum, and rigidity (Phase 6.2)
+ */
+export const behavioralAnalysisNode = async (state: NegotiationState) => {
+  logger.info(`[Node: behavioral_analysis] Analyzing vendor behavior...`);
+  const messages = prepareMessages(state);
+  const vendorMessages = messages.filter(m => m.role === "VENDOR");
+  const latestVendorMessage = vendorMessages.length > 0 ? vendorMessages[vendorMessages.length - 1].content : "";
+
+  const strictFirmness = detectStrictFirmness(latestVendorMessage);
   const behaviorSignals = analyzeBehavior(messages, state.round || 1);
 
-  // Map to IntelligenceAnalysis.behavior
   let mappedVelocity: "FAST" | "STEADY" | "SLOW" | "STALLED" = "STEADY";
   if (behaviorSignals.isStalling) mappedVelocity = "STALLED";
-  else if (behaviorSignals.concessionVelocity > 500) mappedVelocity = "FAST"; // Heuristic
+  else if (behaviorSignals.concessionVelocity > 500) mappedVelocity = "FAST";
   else if (behaviorSignals.concessionVelocity < 50) mappedVelocity = "SLOW";
 
   let mappedMomentum: "ACCELERATING" | "DECELERATING" | "STABLE" = "STABLE";
@@ -58,7 +77,24 @@ export const analyzeSentimentNode = async (state: NegotiationState) => {
   if (behaviorSignals.isConverging) rigidity -= 0.3;
   rigidity = Math.max(0, Math.min(1, rigidity));
 
-  // 4. CONCERN EXTRACTION
+  return {
+    analysis: {
+      behavior: {
+        concessionVelocity: mappedVelocity,
+        momentum: mappedMomentum,
+        rigidityScore: rigidity
+      }
+    }
+  };
+};
+
+/**
+ * Concern Extraction Node - semantic issue extraction (Phase 6.2)
+ */
+export const concernExtractionNode = async (state: NegotiationState) => {
+  logger.info(`[Node: concern_extraction] Extracting vendor concerns...`);
+  const messages = prepareMessages(state);
+
   const rawConcerns = extractVendorConcerns(messages as ConcernMessage[]);
   const mappedConcerns = rawConcerns.map((c: VendorConcern) => {
     let category: "PRICING" | "DELIVERY" | "QUALITY" | "PAYMENT_TERMS" | "OTHER" = "OTHER";
@@ -78,35 +114,47 @@ export const analyzeSentimentNode = async (state: NegotiationState) => {
     };
   });
 
-  // 5. GLOBAL URGENCY
+  return {
+    analysis: {
+      concerns: mappedConcerns
+    }
+  };
+};
+
+/**
+ * Merge Analysis Node - consolidates parallel analysis outputs (Phase 6.2)
+ */
+export const mergeAnalysisNode = async (state: NegotiationState) => {
+  logger.info(`[Node: merge_analysis] Merging parallel analysis results...`);
+  
+  const currentAnalysis = state.analysis || {};
+  
+  // Calculate global urgency based on merged tone and concerns
   let globalUrgency: "HIGH" | "MEDIUM" | "LOW" = "LOW";
-  if (vendorTone.primaryTone === "urgent" || mappedConcerns.some(c => c.priority === "HIGH" && c.category === "DELIVERY")) {
+  
+  const hasDeliveryHighConcern = currentAnalysis.concerns?.some(
+    c => c.priority === "HIGH" && c.category === "DELIVERY"
+  );
+
+  const toneUrgency = currentAnalysis.tone?.urgency || 0;
+
+  if (toneUrgency === 1.0 || hasDeliveryHighConcern) {
     globalUrgency = "HIGH";
-  } else if (vendorTone.allTones.urgent && vendorTone.allTones.urgent > 0) {
+  } else if (toneUrgency === 0.5) {
     globalUrgency = "MEDIUM";
   }
 
-  // Construct final analysis object
-  const analysis: IntelligenceAnalysis = {
-    tone: {
-      sentiment,
-      formality: vendorStyle.formality,
-      urgency: globalUrgency === "HIGH" ? 1.0 : globalUrgency === "MEDIUM" ? 0.5 : 0.0,
-      styleSignals: {
-        hostility: vendorStyle.hostility ? 1 : 0,
-        hasQuestion: vendorStyle.hasQuestion ? 1 : 0,
-        isNumberOnly: vendorStyle.isNumberOnly ? 1 : 0,
-        repeatedOfferCount: vendorStyle.repeatedOfferCount
-      }
-    },
-    behavior: {
-      concessionVelocity: mappedVelocity,
-      momentum: mappedMomentum,
-      rigidityScore: rigidity
-    },
-    concerns: mappedConcerns,
-    urgency: globalUrgency
-  };
+  // Update tone urgency to match global urgency score
+  const updatedTone = currentAnalysis.tone ? {
+    ...currentAnalysis.tone,
+    urgency: globalUrgency === "HIGH" ? 1.0 : globalUrgency === "MEDIUM" ? 0.5 : 0.0
+  } : undefined;
 
-  return { analysis };
+  return {
+    analysis: {
+      ...currentAnalysis,
+      tone: updatedTone,
+      urgency: globalUrgency
+    }
+  };
 };

@@ -1,5 +1,11 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
-import { analyzeSentimentNode } from "./nodes/intelligence-node.js";
+import { 
+  toneAnalysisNode, 
+  behavioralAnalysisNode, 
+  concernExtractionNode, 
+  mergeAnalysisNode 
+} from "./nodes/intelligence-node.js";
+import { ragContextNode } from "./nodes/rag-context.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -40,22 +46,35 @@ export async function createNegotiationGraph() {
   const workflow = new StateGraph(NegotiationStateAnnotation)
     // Add Nodes
     .addNode(NodeName.PARSE_INPUT, offerParsingNode)
-    .addNode(NodeName.ANALYZE_SENTIMENT, analyzeSentimentNode)
+    .addNode(NodeName.TONE_ANALYSIS, toneAnalysisNode)
+    .addNode(NodeName.BEHAVIORAL_ANALYSIS, behavioralAnalysisNode)
+    .addNode(NodeName.CONCERN_EXTRACTION, concernExtractionNode)
+    .addNode(NodeName.RAG_CONTEXT, ragContextNode)
+    .addNode(NodeName.MERGE_ANALYSIS, mergeAnalysisNode)
     .addNode(NodeName.DECIDE_STRATEGY, decideStrategyNode)
     .addNode(NodeName.GENERATE_OFFERS, generateOffersNode)
     .addNode(NodeName.FINALIZE_RESPONSE, finalizeResponseNode)
     .addNode("state_management", stateManagementNode)
     // Define Edges (The Flow)
     .addEdge("__start__", NodeName.PARSE_INPUT)
-    .addEdge(NodeName.PARSE_INPUT, NodeName.ANALYZE_SENTIMENT)
-    .addEdge(NodeName.ANALYZE_SENTIMENT, NodeName.DECIDE_STRATEGY)
+    // Parallel fan-out
+    .addEdge(NodeName.PARSE_INPUT, NodeName.TONE_ANALYSIS)
+    .addEdge(NodeName.PARSE_INPUT, NodeName.BEHAVIORAL_ANALYSIS)
+    .addEdge(NodeName.PARSE_INPUT, NodeName.CONCERN_EXTRACTION)
+    .addEdge(NodeName.PARSE_INPUT, NodeName.RAG_CONTEXT)
+    // Fan-in / Merge
+    .addEdge(NodeName.TONE_ANALYSIS, NodeName.MERGE_ANALYSIS)
+    .addEdge(NodeName.BEHAVIORAL_ANALYSIS, NodeName.MERGE_ANALYSIS)
+    .addEdge(NodeName.CONCERN_EXTRACTION, NodeName.MERGE_ANALYSIS)
+    .addEdge(NodeName.RAG_CONTEXT, NodeName.MERGE_ANALYSIS)
+    // Sequential continuation
+    .addEdge(NodeName.MERGE_ANALYSIS, NodeName.DECIDE_STRATEGY)
     .addEdge(NodeName.DECIDE_STRATEGY, "state_management")
     .addEdge("state_management", NodeName.GENERATE_OFFERS)
     .addEdge(NodeName.GENERATE_OFFERS, NodeName.FINALIZE_RESPONSE)
     .addEdge(NodeName.FINALIZE_RESPONSE, "__end__");
 
   return workflow.compile({
-    checkpointer,
-    // Add interrupt_before: [NodeName.HUMAN_INTERVENTION] later
+    checkpointer: checkpointer as any,
   });
 }
