@@ -1,4 +1,6 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
+import { emailNotificationNode } from "./nodes/email-notification.js";
+import { documentGenerationNode } from "./nodes/document-generation.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -11,11 +13,7 @@ import { stateManagementNode } from "./nodes/state-management.js";
  * These should be replaced by actual implementations from each track.
  */
 
-// TRACK 1: VATSAL (Core Logic)
-const offerParsingNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.PARSE_INPUT}] Processing vendor message...`);
-  return { round: (state.round || 0) + 1 };
-};
+
 
 // TRACK 2: YUG (Intelligence)
 const analyzeSentimentNode = async (state: NegotiationState) => {
@@ -56,6 +54,8 @@ export async function createNegotiationGraph() {
     .addNode(NodeName.GENERATE_OFFERS, generateOffersNode)
     .addNode(NodeName.FINALIZE_RESPONSE, finalizeResponseNode)
     .addNode("state_management", stateManagementNode)
+    .addNode(NodeName.EMAIL_NOTIFICATION, emailNotificationNode)
+    .addNode(NodeName.DOCUMENT_GENERATION, documentGenerationNode)
     // Define Edges (The Flow)
     .addEdge("__start__", NodeName.PARSE_INPUT)
     .addEdge(NodeName.PARSE_INPUT, NodeName.ANALYZE_SENTIMENT)
@@ -63,10 +63,12 @@ export async function createNegotiationGraph() {
     .addEdge(NodeName.DECIDE_STRATEGY, "state_management")
     .addEdge("state_management", NodeName.GENERATE_OFFERS)
     .addEdge(NodeName.GENERATE_OFFERS, NodeName.FINALIZE_RESPONSE)
-    .addEdge(NodeName.FINALIZE_RESPONSE, "__end__");
+    .addEdge(NodeName.FINALIZE_RESPONSE, NodeName.EMAIL_NOTIFICATION)
+    .addEdge(NodeName.EMAIL_NOTIFICATION, NodeName.DOCUMENT_GENERATION)
+    .addEdge(NodeName.DOCUMENT_GENERATION, "__end__");
 
   return workflow.compile({
-    checkpointer,
+    checkpointer: checkpointer as any,
     // Add interrupt_before: [NodeName.HUMAN_INTERVENTION] later
   });
 }
