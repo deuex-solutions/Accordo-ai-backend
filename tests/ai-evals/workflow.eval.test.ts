@@ -1,20 +1,21 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
-import { createNegotiationGraph } from "@/modules/chatbot/engine/graph/index";
+import { describe, it, expect, vi } from "vitest";
+import { MemorySaver } from "@langchain/langgraph";
+
+// Mock the checkpointer to return MemorySaver directly
+const mockMemorySaver = new MemorySaver();
+vi.mock("../../src/modules/chatbot/engine/graph/checkpointer.js", () => {
+  return {
+    getCheckpointer: () => {
+      return mockMemorySaver;
+    },
+  };
+});
+
+import { createNegotiationGraph } from "../../src/modules/chatbot/engine/graph/index.js";
 import { HumanMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
-import { getCheckpointer } from "@/modules/chatbot/engine/graph/checkpointer";
 
 describe("AI Eval: Multi-Agent Workflow Integrated", () => {
-  beforeAll(async () => {
-    // Setup the checkpointer schema for LangGraph testing
-    const checkpointer = await getCheckpointer();
-    try {
-      await checkpointer.setup();
-    } catch (err) {
-      // Ignore schema exists errors
-    }
-  });
-
   it("should compile the workflow and route through nodes correctly", async () => {
     const graph = await createNegotiationGraph();
     
@@ -22,6 +23,13 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
       messages: [new HumanMessage("I want a discount on the latest offer.")],
       dealId: "workflow-test-123",
       round: 0,
+      config: {
+        priceQuantity: { targetUnitPrice: 800, maxAcceptablePrice: 1000 },
+        parameterWeights: { targetUnitPrice: 100 },
+      },
+      parsedOffer: {
+        totalPrice: 900,
+      },
     };
 
     const threadId = uuidv4();
@@ -29,8 +37,8 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
 
     const result = await graph.invoke(initialState, config);
 
-    // Verify state management incremented round correctly (mock parseInputNode also increments)
-    expect(result.round).toBe(2);
+    // Verify state management incremented round correctly
+    expect(result.round).toBe(1);
     
     // Verify intelligence/sentiment ran
     expect(result.analysis).toBeDefined();
@@ -39,6 +47,7 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     // Verify decision ran
     expect(result.decision).toBeDefined();
     expect(result.decision.action).toBe("COUNTER");
+    expect(result.decision.utilityScore).toBe(0.5); // verified that weightedUtilityNode ran!
 
     // Verify MESO generated offers
     expect(result.counterOffer).toBeDefined();
