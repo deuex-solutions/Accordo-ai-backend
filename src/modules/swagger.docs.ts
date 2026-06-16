@@ -770,6 +770,316 @@
  *         description: Deal reset successfully
  */
 
+/**
+ * @swagger
+ * /api/chatbot/deals/{dealId}/lookup:
+ *   get:
+ *     summary: Look up a deal by ID only
+ *     description: Returns the deal details along with its RFQ and Vendor context.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Deal lookup details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, format: uuid }
+ *                     rfqId: { type: integer, example: 10 }
+ *                     vendorId: { type: integer, example: 5 }
+ *                     status: { type: string, example: "NEGOTIATING" }
+ *       404:
+ *         description: Deal not found
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/messages:
+ *   post:
+ *     summary: Send a message (Unified endpoint for INSIGHTS / CONVERSATION modes)
+ *     description: |
+ *       Processes a vendor message and invokes the LangGraph state machine.
+ *       In CONVERSATION mode, the compiled StateGraph executes to perform sentiment analysis,
+ *       decision logic, counter-offer selection, response rendering, and phrasing history checks.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [INSIGHTS, CONVERSATION]
+ *           default: CONVERSATION
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content: { type: string, example: "I can offer $95 with Net 30 payment terms" }
+ *               role: { type: string, enum: [VENDOR, ACCORDO], default: VENDOR }
+ *     responses:
+ *       200:
+ *         description: Message processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deal: { $ref: '#/components/schemas/Deal' }
+ *                     messages: { type: array, items: { $ref: '#/components/schemas/Message' } }
+ *                     latestMessage: { type: object }
+ *                     conversationState: { type: object }
+ *                     dealStatus: { type: string }
+ *                     meso: { type: array, items: { type: object } }
+ *                     decision: { type: object }
+ *                     explainability: { type: object }
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/behavioral:
+ *   get:
+ *     summary: Get behavioral analysis data for a deal
+ *     description: Returns concession velocity, behavioral signals, and round convergence metrics.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Behavioral analysis details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     concessionVelocity: { type: number, example: 0.05 }
+ *                     momentum: { type: string, example: "ACCELERATING" }
+ *                     rigidity: { type: string, example: "RIGID" }
+ *                     roundHistory: { type: array, items: { type: object } }
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/explainability:
+ *   get:
+ *     summary: Get explainability data for a deal
+ *     description: Returns decision explainability metrics, including target pricing and last decision logic.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Explainability metrics
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/vendor-scenarios:
+ *   get:
+ *     summary: Get profit-based counter-offer scenarios for vendor
+ *     description: Calculates dynamic HARD, MEDIUM, and SOFT package chips.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Scenario chips
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 HARD: { type: array, items: { type: string } }
+ *                 MEDIUM: { type: array, items: { type: string } }
+ *                 SOFT: { type: array, items: { type: string } }
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/meso/select:
+ *   post:
+ *     summary: Handle MESO package selection
+ *     description: Sets the deal status to ACCEPTED when the vendor selects a package.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [optionIndex]
+ *             properties:
+ *               optionIndex: { type: integer, example: 1 }
+ *     responses:
+ *       200:
+ *         description: Package selected, status changed to ACCEPTED
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/meso/others:
+ *   post:
+ *     summary: Handle custom "Others" vendor offer submission
+ *     description: Evaluates custom price and terms and triggers a PM response.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [totalPrice, paymentTermsDays]
+ *             properties:
+ *               totalPrice: { type: number, example: 95000 }
+ *               paymentTermsDays: { type: integer, example: 30 }
+ *     responses:
+ *       200:
+ *         description: Offer processed
+ */
+
+/**
+ * @swagger
+ * /api/chatbot/requisitions/{rfqId}/vendors/{vendorId}/deals/{dealId}/final-offer/confirm:
+ *   post:
+ *     summary: Confirm final offer response
+ *     description: Confirms whether vendor accepts the current deal as final or continues.
+ *     tags: [Chatbot]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rfqId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: vendorId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [isConfirmedFinal]
+ *             properties:
+ *               isConfirmedFinal: { type: boolean, example: true }
+ *     responses:
+ *       200:
+ *         description: Final offer status updated
+ */
+
 // ==================== BID COMPARISON ====================
 
 /**
@@ -1004,6 +1314,177 @@
  *     responses:
  *       200:
  *         description: Embedding service status
+ */
+
+/**
+ * @swagger
+ * /api/vector/search/deals:
+ *   post:
+ *     summary: Search similar negotiation deals
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [query]
+ *             properties:
+ *               query: { type: string, example: "deals containing IT software products" }
+ *               topK: { type: integer, default: 5 }
+ *               similarityThreshold: { type: number, default: 0.7 }
+ *     responses:
+ *       200:
+ *         description: Similar deals found
+ */
+
+/**
+ * @swagger
+ * /api/vector/search/patterns:
+ *   post:
+ *     summary: Search for behavioral or strategy patterns
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [query]
+ *             properties:
+ *               query: { type: string, example: "aggressive price bargaining" }
+ *               topK: { type: integer, default: 5 }
+ *               similarityThreshold: { type: number, default: 0.6 }
+ *     responses:
+ *       200:
+ *         description: Patterns found
+ */
+
+/**
+ * @swagger
+ * /api/vector/context/{dealId}:
+ *   post:
+ *     summary: Build RAG context for a deal
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [message]
+ *             properties:
+ *               message: { type: string }
+ *     responses:
+ *       200:
+ *         description: RAG context compiled
+ */
+
+/**
+ * @swagger
+ * /api/vector/embed/message/{messageId}:
+ *   post:
+ *     summary: Manually vectorize/embed a message
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Message embedded successfully
+ */
+
+/**
+ * @swagger
+ * /api/vector/embed/deal/{dealId}:
+ *   post:
+ *     summary: Manually vectorize/embed all messages in a deal
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: dealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Deal embedded successfully
+ */
+
+/**
+ * @swagger
+ * /api/vector/stats:
+ *   get:
+ *     summary: Get vector database and embedding statistics
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Vector stats retrieved
+ */
+
+/**
+ * @swagger
+ * /api/vector/migrate:
+ *   post:
+ *     summary: Start vector database migration job
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               type: { type: string, enum: [messages, deals, patterns, full], default: full }
+ *               batchSize: { type: integer, default: 100 }
+ *     responses:
+ *       200:
+ *         description: Migration started
+ */
+
+/**
+ * @swagger
+ * /api/vector/migrate/status:
+ *   get:
+ *     summary: Get status of the ongoing vector migration job
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Migration status details
+ */
+
+/**
+ * @swagger
+ * /api/vector/migrate/cancel:
+ *   post:
+ *     summary: Cancel the ongoing vector migration job
+ *     tags: [Vector]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Migration cancelled
  */
 
 // ==================== REQUISITION ====================

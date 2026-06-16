@@ -1,4 +1,5 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
+import { analyzeSentimentNode } from "./nodes/sentiment-analyzer.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -10,18 +11,6 @@ import { stateManagementNode } from "./nodes/state-management.js";
  * MOCK NODES FOR TRACK INITIALIZATION
  * These should be replaced by actual implementations from each track.
  */
-
-// TRACK 1: VATSAL (Core Logic)
-const offerParsingNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.PARSE_INPUT}] Processing vendor message...`);
-  return { round: (state.round || 0) + 1 };
-};
-
-// TRACK 2: YUG (Intelligence)
-const analyzeSentimentNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.ANALYZE_SENTIMENT}] Analyzing tone and behavior...`);
-  return { analysis: { sentiment: "NEUTRAL" as const } };
-};
 
 // TRACK 1: VATSAL (Core Logic)
 const decideStrategyNode = async (state: NegotiationState) => {
@@ -66,7 +55,7 @@ export async function createNegotiationGraph() {
     .addEdge(NodeName.FINALIZE_RESPONSE, "__end__");
 
   return workflow.compile({
-    checkpointer,
+    checkpointer: checkpointer as any,
     // Add interrupt_before: [NodeName.HUMAN_INTERVENTION] later
   });
 }
