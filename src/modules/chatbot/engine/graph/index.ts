@@ -1,4 +1,5 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
+import { bidComparisonNode } from "./nodes/bid-comparison.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -56,6 +57,7 @@ export async function createNegotiationGraph() {
     .addNode(NodeName.GENERATE_OFFERS, generateOffersNode)
     .addNode(NodeName.FINALIZE_RESPONSE, finalizeResponseNode)
     .addNode("state_management", stateManagementNode)
+    .addNode(NodeName.BID_COMPARISON, bidComparisonNode)
     // Define Edges (The Flow)
     .addEdge("__start__", NodeName.PARSE_INPUT)
     .addEdge(NodeName.PARSE_INPUT, NodeName.ANALYZE_SENTIMENT)
@@ -63,7 +65,8 @@ export async function createNegotiationGraph() {
     .addEdge(NodeName.DECIDE_STRATEGY, "state_management")
     .addEdge("state_management", NodeName.GENERATE_OFFERS)
     .addEdge(NodeName.GENERATE_OFFERS, NodeName.FINALIZE_RESPONSE)
-    .addEdge(NodeName.FINALIZE_RESPONSE, "__end__");
+    .addEdge(NodeName.FINALIZE_RESPONSE, NodeName.BID_COMPARISON)
+    .addEdge(NodeName.BID_COMPARISON, "__end__");
 
   return workflow.compile({
     checkpointer,

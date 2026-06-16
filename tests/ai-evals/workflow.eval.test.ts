@@ -3,6 +3,20 @@ import { createNegotiationGraph } from "@/modules/chatbot/engine/graph/index";
 import { HumanMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
 import { getCheckpointer } from "@/modules/chatbot/engine/graph/checkpointer";
+import { MemorySaver } from "@langchain/langgraph";
+
+vi.mock("@/modules/chatbot/engine/graph/checkpointer", () => {
+  let memoryCheckpointer: any = null;
+  return {
+    getCheckpointer: async () => {
+      if (!memoryCheckpointer) {
+        memoryCheckpointer = new MemorySaver();
+        memoryCheckpointer.setup = async () => {};
+      }
+      return memoryCheckpointer;
+    }
+  };
+});
 
 describe("AI Eval: Multi-Agent Workflow Integrated", () => {
   beforeAll(async () => {
