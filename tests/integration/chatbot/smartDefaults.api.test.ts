@@ -53,8 +53,6 @@ describe('Smart Defaults API - Date Extraction', () => {
     vendor = await models.VendorCompany.create(createMockVendor({ companyId: company.id }));
 
     // Generate auth token
-    console.log("TEST_JWT_SECRET:", TEST_JWT_SECRET);
-    console.log("ENV_ACCESS_SECRET:", env.jwt.accessSecret);
     authToken = jwt.sign(
       { userId: user.id, userType: user.userType, companyId: company.id },
       TEST_JWT_SECRET,
