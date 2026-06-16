@@ -24,6 +24,7 @@ export enum NodeName {
   FINALIZE_RESPONSE = "finalize_response",
   HUMAN_INTERVENTION = "human_intervention",
   BID_COMPARISON = "bid_comparison",
+  PHRASING_HISTORY = "phrasing_history",
 }
 
 export interface AgentNodeResult {
