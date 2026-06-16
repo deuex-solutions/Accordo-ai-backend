@@ -1,5 +1,6 @@
-// Set JWT secret BEFORE importing any modules that use it
-process.env.JWT_ACCESS_SECRET = 'test-secret-key';
+// Set test environment secrets
+process.env.JWT_ACCESS_TOKEN_SECRET = 'test-secret-key-length-32-characters-long';
+process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_TOKEN_SECRET;
 process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-key';
 
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
@@ -21,7 +22,7 @@ import {
 import jwt from 'jsonwebtoken';
 
 // Test JWT secret
-const TEST_JWT_SECRET = 'test-secret-key';
+const TEST_JWT_SECRET = process.env.JWT_ACCESS_TOKEN_SECRET || 'test-secret-key-length-32-characters-long';
 
 describe('Smart Defaults API - Date Extraction', () => {
   let app: Express;
@@ -52,6 +53,8 @@ describe('Smart Defaults API - Date Extraction', () => {
     vendor = await models.VendorCompany.create(createMockVendor({ companyId: company.id }));
 
     // Generate auth token
+    console.log("TEST_JWT_SECRET:", TEST_JWT_SECRET);
+    console.log("ENV_ACCESS_SECRET:", env.jwt.accessSecret);
     authToken = jwt.sign(
       { userId: user.id, userType: user.userType, companyId: company.id },
       TEST_JWT_SECRET,
@@ -82,8 +85,12 @@ describe('Smart Defaults API - Date Extraction', () => {
       // Act
       const response = await request(app)
         .get(`/api/chatbot/requisitions/${requisition.id}/vendors/${vendor.id}/smart-defaults`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
+        .set('Authorization', `Bearer ${authToken}`);
+
+      if (response.status !== 200) {
+        console.log("UNAUTHORIZED BODY:", response.body);
+      }
+      expect(response.status).toBe(200);
 
       // Assert
       expect(response.body.data).toBeDefined();
