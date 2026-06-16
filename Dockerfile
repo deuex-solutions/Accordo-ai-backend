@@ -1,5 +1,5 @@
 FROM node:20-alpine AS deps
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ libc6-compat
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -14,7 +14,7 @@ RUN npm prune --production && npm install sequelize-cli
 
 
 FROM node:20-alpine AS runtime
-RUN apk add --no-cache graphicsmagick ghostscript wget
+RUN apk add --no-cache graphicsmagick ghostscript wget libc6-compat
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
