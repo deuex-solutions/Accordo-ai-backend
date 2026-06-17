@@ -1,13 +1,15 @@
 import { NegotiationState, NegotiationDecision } from "../state.js";
+import { resolveNegotiationConfig, calculateWeightedUtilityFromResolved } from "../../weighted-utility.js";
 
 /**
- * DecisionAgent (Track 1: Vatsal) - Phase 3.1 Foundation
+ * DecisionAgent (Track 1: Vatsal) - Phase 4.1 Advanced
  * 
  * @source src/modules/chatbot/engine/decide.ts
  * 
  * Synergy Mandate:
- * - Implements basic "Accept" trigger if price <= target_price
- * - Implements "Escalate" trigger if round_number > 5
+ * - Implements weighted utility scoring
+ * - Implements "Walk Away" logic
+ * - Adds post-decision safety guard (Strict Ceiling check)
  */
 export const decisionNode = async (state: NegotiationState) => {
   if (!state.config || !state.parsedOffer) {
@@ -16,13 +18,8 @@ export const decisionNode = async (state: NegotiationState) => {
 
   const { config, parsedOffer, round } = state;
 
-  // Extract config targets safely
-  const targetPrice = config.parameters?.total_price?.target ?? config.targetPrice ?? 1000;
-  const maxAcceptablePrice = config.parameters?.total_price?.max_acceptable ?? config.maxAcceptablePrice ?? 1500;
-  
   const currentPrice = parsedOffer.totalPrice;
 
-  // Handle missing price
   if (currentPrice == null) {
     return {
       decision: {
@@ -33,37 +30,67 @@ export const decisionNode = async (state: NegotiationState) => {
     };
   }
 
-  // Hard Escalate trigger if round > 5
-  if (round > 5) {
+  // 1. Resolve configuration and calculate weighted utility
+  const resolvedConfig = resolveNegotiationConfig(undefined, config);
+  
+  const extendedOffer = {
+    total_price: parsedOffer.totalPrice ?? undefined,
+    payment_terms_days: parsedOffer.paymentTermsDays ?? undefined,
+    payment_terms: parsedOffer.paymentTermsDays ? `Net ${parsedOffer.paymentTermsDays}` : undefined,
+    delivery_days: parsedOffer.deliveryDays ?? undefined,
+    warranty_months: parsedOffer.warrantyMonths ?? undefined,
+  };
+
+  const utilityResult = calculateWeightedUtilityFromResolved(extendedOffer as any, resolvedConfig);
+  const { totalUtility, recommendation, thresholds } = utilityResult;
+
+  // 2. Hard Escalate trigger if round > maxRounds (default 5)
+  if (round > resolvedConfig.maxRounds) {
     return {
       decision: {
         action: "ESCALATE",
-        reasoning: `Round number ${round} exceeds maximum threshold of 5.`,
+        reasoning: `Round number ${round} exceeds maximum threshold of ${resolvedConfig.maxRounds}.`,
         confidence: 1.0,
+        utilityScore: totalUtility,
         parametersFailed: ["round"]
       } as NegotiationDecision
     };
   }
 
-  // Basic Accept trigger: if price is less than or equal to the target price
-  if (currentPrice <= targetPrice) {
+  // 3. "Walk Away" logic based on utility thresholds
+  if (totalUtility < thresholds.walkAway) {
     return {
       decision: {
-        action: "ACCEPT",
-        reasoning: `Price ${currentPrice} is at or below target price ${targetPrice}.`,
-        confidence: 0.95,
-        parametersMet: ["totalPrice"]
+        action: "WALK_AWAY",
+        reasoning: `Utility score ${totalUtility.toFixed(2)} is below walk-away threshold ${thresholds.walkAway}.`,
+        confidence: 1.0,
+        utilityScore: totalUtility
       } as NegotiationDecision
     };
   }
 
-  // Default to Counter
+  // 4. Post-decision safety guard (Strict Ceiling check)
+  if (recommendation === "ACCEPT" && currentPrice > resolvedConfig.maxAcceptablePrice) {
+    return {
+      decision: {
+        action: "COUNTER",
+        reasoning: `Utility suggests ACCEPT, but price ${currentPrice} exceeds strict ceiling ${resolvedConfig.maxAcceptablePrice}. Forcing COUNTER.`,
+        confidence: 1.0,
+        utilityScore: totalUtility,
+        parametersFailed: ["totalPrice"]
+      } as NegotiationDecision
+    };
+  }
+
+  // Proceed with utility-based recommendation
   return {
     decision: {
-      action: "COUNTER",
-      reasoning: `Price ${currentPrice} is above target ${targetPrice}. Proceeding to formulate counter strategy.`,
-      confidence: 0.8,
-      parametersFailed: ["totalPrice"]
+      action: recommendation as any,
+      reasoning: `Utility score ${totalUtility.toFixed(2)} dictates ${recommendation}.`,
+      confidence: 0.9,
+      utilityScore: totalUtility,
+      parametersMet: recommendation === "ACCEPT" ? ["utility"] : [],
+      parametersFailed: recommendation !== "ACCEPT" ? ["utility"] : []
     } as NegotiationDecision
   };
 };

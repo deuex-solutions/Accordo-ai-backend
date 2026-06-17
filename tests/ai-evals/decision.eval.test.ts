@@ -6,7 +6,7 @@ describe("AI Eval: DecisionAgent Foundation", () => {
   it("should trigger ACCEPT if price is below target", async () => {
     const mockState = {
       round: 2,
-      config: { targetPrice: 1000 },
+      config: { total_price: { target: 1000, max_acceptable: 1500 } },
       parsedOffer: { totalPrice: 950 }
     } as unknown as NegotiationState;
 
@@ -17,7 +17,7 @@ describe("AI Eval: DecisionAgent Foundation", () => {
   it("should trigger ACCEPT if price is exactly target", async () => {
     const mockState = {
       round: 3,
-      config: { targetPrice: 1000 },
+      config: { total_price: { target: 1000, max_acceptable: 1500 } },
       parsedOffer: { totalPrice: 1000 }
     } as unknown as NegotiationState;
 
@@ -28,7 +28,7 @@ describe("AI Eval: DecisionAgent Foundation", () => {
   it("should trigger COUNTER if price is above target", async () => {
     const mockState = {
       round: 2,
-      config: { targetPrice: 1000 },
+      config: { total_price: { target: 1000, max_acceptable: 1500 } },
       parsedOffer: { totalPrice: 1200 }
     } as unknown as NegotiationState;
 
@@ -39,7 +39,7 @@ describe("AI Eval: DecisionAgent Foundation", () => {
   it("should trigger ESCALATE if round is greater than 5", async () => {
     const mockState = {
       round: 6,
-      config: { targetPrice: 1000 },
+      config: { total_price: { target: 1000, max_acceptable: 1500 }, max_rounds: 5 },
       parsedOffer: { totalPrice: 1100 }
     } as unknown as NegotiationState;
 
