@@ -5,9 +5,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['tests/ai-evals/**/*.test.ts'],
+    setupFiles: './tests/helpers/setup.ts',
+    include: ['tests/integration/**/*.test.ts', 'tests/ai-evals/**/*.test.ts'],
     alias: {
       '@': path.resolve(__dirname, './src')
     }
-  },
+  }
 });
