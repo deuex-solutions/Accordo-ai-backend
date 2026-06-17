@@ -36,6 +36,9 @@ import { ChatbotMessage } from '../../../models/chatbot-message.js';
 import { checkScopeGuard } from '../engine/scope-guard.js';
 import { classifyError, getErrorFallbackResponse } from '../engine/error-recovery.js';
 import { sanitizeNegotiationHistory } from '../engine/history-sanitizer.js';
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { v4 as uuidv4 } from "uuid";
+import { createNegotiationGraph } from "../engine/graph/index.js";
 
 /**
  * Input for processing a conversation turn
@@ -68,7 +71,7 @@ export async function processConversationTurn(
 ): Promise<ProcessConversationTurnResult> {
   const { dealId, vendorMessage, userId } = input;
 
-  logger.info('[ProcessConversationTurn] Starting turn processing', {
+  logger.info('[ProcessConversationTurn] Starting turn processing via LangGraph', {
     dealId,
     userId,
     messageLength: vendorMessage.length,
@@ -99,98 +102,53 @@ export async function processConversationTurn(
     // Step 2: Load conversation history for context
     const conversationHistory = await loadConversationHistory(dealId);
 
-    // Step 3: Classify vendor intent
-    const vendorIntent = await classifyVendorIntent(
-      vendorMessage,
-      conversationHistory
-    );
-
-    logger.info('[ProcessConversationTurn] Vendor intent classified', {
-      dealId,
-      vendorIntent,
+    // Step 3: Map history to LangGraph message formats
+    const historyMessages = conversationHistory.map((msg) => {
+      if (msg.role === 'VENDOR') {
+        return new HumanMessage({ content: msg.content, id: uuidv4() });
+      } else {
+        return new AIMessage({ content: msg.content, id: uuidv4() });
+      }
     });
 
-    // Step 4: Handle refusals if detected
-    let refusalType: RefusalType | undefined;
-    let nextIntent: ConvoIntent;
+    const latestMessage = new HumanMessage({ content: vendorMessage, id: uuidv4() });
 
-    if (vendorIntent === 'REFUSAL') {
-      refusalType = await classifyRefusal(vendorMessage);
-      nextIntent = handleRefusal(convoState, refusalType);
-
-      logger.info('[ProcessConversationTurn] Refusal handled', {
-        dealId,
-        refusalType,
-        nextIntent,
-      });
-    } else if (vendorIntent === 'SMALL_TALK') {
-      // Handle small talk
-      nextIntent = handleSmallTalk(convoState);
-    } else {
-      // Step 5: Determine next Accordo intent using state machine
-      nextIntent = determineNextIntent(convoState, vendorIntent, vendorMessage);
-    }
-
-    logger.info('[ProcessConversationTurn] Next intent determined', {
+    // Step 4: Compile graph and prepare input state
+    const graph = await createNegotiationGraph();
+    const initialState = {
+      messages: [...historyMessages, latestMessage],
       dealId,
-      nextIntent,
-      currentPhase: convoState.phase,
-    });
+      round: deal.round,
+      metadata: {
+        convoState,
+        userId,
+        mode: "CONVERSATION",
+        dealStatus: deal.status,
+      }
+    };
 
-    // Step 6: For COUNTER intent, check if we need decision engine
-    // (This will be integrated with decision engine in future)
-    const shouldUseDecisionEngine = nextIntent === 'COUNTER' &&
-      (containsPriceInfo(vendorMessage) || containsTermsInfo(vendorMessage));
+    // Step 5: Invoke the graph
+    const config = { configurable: { thread_id: dealId } };
+    const finalState = await graph.invoke(initialState, config);
 
-    if (shouldUseDecisionEngine) {
-      logger.info('[ProcessConversationTurn] Should use decision engine', {
-        dealId,
-      });
-      // TODO: Integrate with decision engine
-      // For now, use COUNTER template
-    }
+    // Step 6: Extract results
+    const accordoMessage = finalState.metadata?.accordoMessage || "";
+    const accordoIntent = finalState.metadata?.accordoIntent as ConvoIntent;
+    const updatedState = finalState.metadata?.convoState as ConvoState;
+    const vendorIntent = finalState.metadata?.vendorIntent as VendorIntent;
+    const refusalType = finalState.metadata?.refusalType as RefusalType;
 
-    // Step 7: Prepare template variables
-    const templateVariables = await prepareTemplateVariables(
-      deal,
-      template,
-      convoState,
-      nextIntent,
-      vendorMessage
-    );
-
-    // Step 8: Generate Accordo message using templates
-    const accordoMessage = generateConversationMessage(
-      dealId,
-      deal.round,
-      nextIntent,
-      templateVariables
-    );
-
-    logger.info('[ProcessConversationTurn] Message generated', {
-      dealId,
-      intent: nextIntent,
-      messageLength: accordoMessage.length,
-    });
-
-    // Step 9: Update conversation state
-    const updatedState = updateConvoState(
-      convoState,
-      vendorIntent,
-      nextIntent
-    );
-
-    // Step 10: Save updated state to database
+    // Step 7: Save updated state to database
     await saveDealState(deal, updatedState);
 
-    logger.info('[ProcessConversationTurn] Turn processing complete', {
+    logger.info('[ProcessConversationTurn] Turn processing complete via LangGraph', {
       dealId,
       stateSummary: getStateSummary(updatedState),
     });
 
     return {
       accordoMessage,
-      accordoIntent: nextIntent,
+      accordoIntent,
       updatedState,
       vendorIntent,
       refusalType,
@@ -295,7 +253,7 @@ async function loadConversationHistory(
 /**
  * Prepare template variables based on deal context and intent
  */
-async function prepareTemplateVariables(
+export async function prepareTemplateVariables(
   deal: ChatbotDeal,
   template: ChatbotTemplate | null,
   convoState: ConvoState,

@@ -34,6 +34,18 @@ export const stateManagementNode = async (state: NegotiationState) => {
     updates.waitingForHuman = true;
   }
 
+  const isConvo = metadata?.mode === "CONVERSATION";
+  let updatedConvoState = metadata?.convoState;
+
+  if (isConvo && decision && metadata?.convoState) {
+    const { updateConvoState } = await import("../../../convo/enhanced-convo-router.js");
+    updatedConvoState = updateConvoState(
+      metadata.convoState,
+      metadata.vendorIntent,
+      decision.action as any
+    );
+  }
+
   return {
     ...updates,
     metadata: {
@@ -41,6 +53,7 @@ export const stateManagementNode = async (state: NegotiationState) => {
       dealStatus: nextDealStatus,
       lastTransition: decision ? decision.action : "INITIALIZE",
       transitionTime: new Date().toISOString(),
+      convoState: updatedConvoState,
     },
   };
 };
