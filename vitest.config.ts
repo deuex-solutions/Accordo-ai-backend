@@ -8,8 +8,9 @@ export default defineConfig({
     env: {
       DB_NAME: 'accordo_test',
       NODE_ENV: 'test',
-      JWT_ACCESS_TOKEN_SECRET: 'test-secret-key',
-      JWT_REFRESH_TOKEN_SECRET: 'test-refresh-secret-key',
+      DATABASE_URL: '',
+      JWT_ACCESS_TOKEN_SECRET: 'test-secret-key-length-32-characters-long',
+      JWT_REFRESH_TOKEN_SECRET: 'test-refresh-secret-key-length-32-characters-long',
     },
     setupFiles: './tests/helpers/setup.ts',
     include: [

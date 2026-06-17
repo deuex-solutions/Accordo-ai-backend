@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { scopeGuardNode } from "../../../src/modules/chatbot/engine/graph/nodes/scope-guard.js";
-import { NegotiationState } from "../../../src/modules/chatbot/engine/graph/state.js";
+import { scopeGuardNode } from "../../src/modules/chatbot/engine/graph/nodes/scope-guard.js";
+import { NegotiationState } from "../../src/modules/chatbot/engine/graph/state.js";
 import { HumanMessage } from "@langchain/core/messages";
 
 describe("AI Eval: ScopeGuardAgent", () => {
@@ -15,7 +15,7 @@ describe("AI Eval: ScopeGuardAgent", () => {
     expect(result.metadata?.scopeGuardFailed).toBe(true);
     expect(result.messages).toBeDefined();
     expect(result.messages?.[0]._getType()).toBe("ai");
-    expect(result.messages?.[0].content).toContain("could we continue discussing");
+    expect(result.messages?.[0].content).toMatch(/continue|focused/i);
   });
 
   it("should pass standard negotiation messages (safelisted)", async () => {

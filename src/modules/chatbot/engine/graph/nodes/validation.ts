@@ -1,5 +1,5 @@
 import { NegotiationState } from "../state.js";
-import { validateLlmOutput } from "../../../../llm/validate-llm-output.js";
+import { validateLlmOutput } from "../../../../../llm/validate-llm-output.js";
 import { AIMessage } from "@langchain/core/messages";
 
 /**

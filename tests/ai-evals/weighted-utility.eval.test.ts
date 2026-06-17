@@ -46,7 +46,7 @@ describe("Track 1 Week 6: Weighted Utility & HITL Interruption Hooks", () => {
 
     const initialState = {
       messages: [new HumanMessage("We want to negotiate.")],
-      dealId: "deal-hitl-123",
+      dealId: "d0000000-0000-0000-0000-000000000123",
       round: 0,
       config: {
         priceQuantity: { targetUnitPrice: 800000, maxAcceptablePrice: 1200000 },
