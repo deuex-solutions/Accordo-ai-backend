@@ -1,4 +1,4 @@
-import { NegotiationState } from "../graph/state.js";
+import { NegotiationState } from "../state.js";
 import { transition, actionToEvent, DealState } from "../../negotiation-state-machine.js";
 
 /**

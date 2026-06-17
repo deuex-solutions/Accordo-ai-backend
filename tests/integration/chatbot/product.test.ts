@@ -209,17 +209,17 @@ describe('Product Validator', () => {
   describe('productIdSchema', () => {
     it('should validate a valid product ID', () => {
       const data = {
-        productid: 1,
+        productId: 1,
       };
 
       const { error, value } = productIdSchema.validate(data);
       expect(error).toBeUndefined();
-      expect(value.productid).toBe(1);
+      expect(value.productId).toBe(1);
     });
 
     it('should reject non-positive product ID', () => {
       const data = {
-        productid: 0,
+        productId: 0,
       };
 
       const { error } = productIdSchema.validate(data);
@@ -228,7 +228,7 @@ describe('Product Validator', () => {
 
     it('should reject non-integer product ID', () => {
       const data = {
-        productid: 1.5,
+        productId: 1.5,
       };
 
       const { error } = productIdSchema.validate(data);
