@@ -23,6 +23,7 @@ export enum NodeName {
   GENERATE_OFFERS = "generate_offers",
   FINALIZE_RESPONSE = "finalize_response",
   HUMAN_INTERVENTION = "human_intervention",
+  WEIGHTED_UTILITY = "weighted_utility",
 }
 
 export interface AgentNodeResult {
