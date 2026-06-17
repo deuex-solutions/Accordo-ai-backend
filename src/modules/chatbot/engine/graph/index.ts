@@ -4,23 +4,14 @@ import { decideStrategyNode } from "./nodes/decide-strategy.js";
 import { generateOffersNode } from "./nodes/generate-offers.js";
 import { weightedUtilityNode } from "./nodes/weighted-utility.js";
 import { humanInterventionNode } from "./nodes/human-intervention.js";
+import { emailNotificationNode } from "./nodes/email-notification.js";
+import { documentGenerationNode } from "./nodes/document-generation.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
 import { NodeName } from "./types.js";
 import { getCheckpointer } from "./checkpointer.js";
 import { stateManagementNode } from "./nodes/state-management.js";
-
-/**
- * MOCK NODES FOR TRACK INITIALIZATION
- * These should be replaced by actual implementations from each track.
- */
-
-// FINAL RESPONSE
-const finalizeResponseNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.FINALIZE_RESPONSE}] Preparing final message...`);
-  return { metadata: { lastUpdated: new Date().toISOString() } };
-};
 
 /**
  * Routing logic for human-in-the-loop validation
@@ -44,6 +35,12 @@ const routeAfterOffers = (state: NegotiationState) => {
   return NodeName.FINALIZE_RESPONSE;
 };
 
+// FINAL RESPONSE
+const finalizeResponseNode = async (state: NegotiationState) => {
+  console.log(`[Node: ${NodeName.FINALIZE_RESPONSE}] Preparing final message...`);
+  return { metadata: { lastUpdated: new Date().toISOString() } };
+};
+
 /**
  * GRAPH DEFINITION
  * This is the common "skeleton" that all three tracks will build upon.
@@ -61,6 +58,8 @@ export async function createNegotiationGraph() {
     .addNode(NodeName.HUMAN_INTERVENTION, humanInterventionNode)
     .addNode(NodeName.FINALIZE_RESPONSE, finalizeResponseNode)
     .addNode("state_management", stateManagementNode)
+    .addNode(NodeName.EMAIL_NOTIFICATION, emailNotificationNode)
+    .addNode(NodeName.DOCUMENT_GENERATION, documentGenerationNode)
     // Define Edges (The Flow)
     .addEdge("__start__", NodeName.PARSE_INPUT)
     .addEdge(NodeName.PARSE_INPUT, NodeName.ANALYZE_SENTIMENT)
@@ -78,7 +77,9 @@ export async function createNegotiationGraph() {
       }
     )
     .addEdge(NodeName.HUMAN_INTERVENTION, NodeName.FINALIZE_RESPONSE)
-    .addEdge(NodeName.FINALIZE_RESPONSE, "__end__");
+    .addEdge(NodeName.FINALIZE_RESPONSE, NodeName.EMAIL_NOTIFICATION)
+    .addEdge(NodeName.EMAIL_NOTIFICATION, NodeName.DOCUMENT_GENERATION)
+    .addEdge(NodeName.DOCUMENT_GENERATION, "__end__");
 
   return workflow.compile({
     checkpointer: checkpointer as any,
