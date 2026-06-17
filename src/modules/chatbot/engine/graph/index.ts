@@ -1,3 +1,5 @@
+import { offerParsingNode } from "./nodes/offer-parser.js";
+
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
 import { NodeName } from "./types.js";
@@ -10,7 +12,7 @@ import { stateManagementNode } from "./nodes/state-management.js";
  */
 
 // TRACK 1: VATSAL (Core Logic)
-const parseInputNode = async (state: NegotiationState) => {
+const offerParsingNode = async (state: NegotiationState) => {
   console.log(`[Node: ${NodeName.PARSE_INPUT}] Processing vendor message...`);
   return { round: (state.round || 0) + 1 };
 };
@@ -58,15 +60,13 @@ export async function createNegotiationGraph() {
     .addEdge("__start__", NodeName.PARSE_INPUT)
     .addEdge(NodeName.PARSE_INPUT, NodeName.ANALYZE_SENTIMENT)
     .addEdge(NodeName.ANALYZE_SENTIMENT, NodeName.DECIDE_STRATEGY)
-    .addEdge(NodeName.DECIDE_STRATEGY, NodeName.GENERATE_OFFERS)
+    .addEdge(NodeName.DECIDE_STRATEGY, "state_management")
+    .addEdge("state_management", NodeName.GENERATE_OFFERS)
     .addEdge(NodeName.GENERATE_OFFERS, NodeName.FINALIZE_RESPONSE)
     .addEdge(NodeName.FINALIZE_RESPONSE, "__end__");
 
   return workflow.compile({
     checkpointer,
     // Add interrupt_before: [NodeName.HUMAN_INTERVENTION] later
-  });
-}
-eName.HUMAN_INTERVENTION] later
   });
 }

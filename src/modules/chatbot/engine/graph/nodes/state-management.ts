@@ -1,5 +1,5 @@
 import { NegotiationState } from "../graph/state.js";
-import { transition, actionToEvent, DealState } from "../negotiation-state-machine.js";
+import { transition, actionToEvent, DealState } from "../../negotiation-state-machine.js";
 
 /**
  * StateManagementAgent (Track 1: Vatsal)
