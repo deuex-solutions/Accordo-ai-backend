@@ -1,4 +1,13 @@
 import { expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env variables first
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // CRITICAL: Set env vars BEFORE importing any modules that read them.
 // The database module reads DB_NAME at import time, so it must be set first.
