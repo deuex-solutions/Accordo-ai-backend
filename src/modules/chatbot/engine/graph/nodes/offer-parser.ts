@@ -1,6 +1,6 @@
 import { NegotiationState, Offer } from "../state.js";
 import { parseOfferRegex } from "../../parse-offer.js";
-import { SupportedCurrency } from "../../../../services/currency.service.js";
+import { SupportedCurrency } from "../../../../../services/currency.service.js";
 
 /**
  * OfferParsingAgent (Track 1: Vatsal)
