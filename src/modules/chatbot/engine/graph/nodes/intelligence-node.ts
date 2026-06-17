@@ -43,7 +43,9 @@ export const toneAnalysisNode = async (state: NegotiationState) => {
           hostility: vendorStyle.hostility ? 1 : 0,
           hasQuestion: vendorStyle.hasQuestion ? 1 : 0,
           isNumberOnly: vendorStyle.isNumberOnly ? 1 : 0,
-          repeatedOfferCount: vendorStyle.repeatedOfferCount
+          repeatedOfferCount: vendorStyle.repeatedOfferCount,
+          hasGreeting: vendorStyle.hasGreeting ? 1 : 0,
+          formality: vendorStyle.formality
         }
       }
     }

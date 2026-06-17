@@ -18,8 +18,12 @@ export function wrapSerializer(baseSerde: any) {
     async dumpsTyped(value: any): Promise<[string, Uint8Array]> {
       const [type, blob] = await baseSerde.dumpsTyped(value);
       
-      // Only compress json type if it exceeds 512 bytes to avoid overhead on tiny updates
-      if (type === "json" && blob.length > 512) {
+      // Only compress json type if it exceeds 512 bytes to avoid overhead on tiny updates.
+      // Do not compress metadata objects (which have "source" and "step" keys) because
+      // the Postgres checkpointer database schema stores metadata as a JSONB column (not binary bytea),
+      // and attempts to write gzip bytes to JSONB will fail serialization.
+      const isMetadata = value && typeof value === "object" && "source" in value && "step" in value;
+      if (type === "json" && blob.length > 512 && !isMetadata) {
         try {
           const compressed = zlib.gzipSync(blob);
           logger.debug(`[Checkpointer] Compressed state from ${blob.length} to ${compressed.length} bytes`);
