@@ -12,6 +12,8 @@ import { weightedUtilityNode } from "./nodes/weighted-utility.js";
 import { humanInterventionNode } from "./nodes/human-intervention.js";
 import { emailNotificationNode } from "./nodes/email-notification.js";
 import { documentGenerationNode } from "./nodes/document-generation.js";
+import { bidComparisonNode } from "./nodes/bid-comparison.js";
+import { phrasingHistoryNode } from "./nodes/phrasing-history.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -70,6 +72,8 @@ export async function createNegotiationGraph() {
     .addNode("state_management", stateManagementNode)
     .addNode(NodeName.EMAIL_NOTIFICATION, emailNotificationNode)
     .addNode(NodeName.DOCUMENT_GENERATION, documentGenerationNode)
+    .addNode(NodeName.BID_COMPARISON, bidComparisonNode)
+    .addNode(NodeName.PHRASING_HISTORY, phrasingHistoryNode)
     // Define Edges (The Flow)
     .addEdge("__start__", NodeName.PARSE_INPUT)
     // Parallel fan-out
@@ -97,7 +101,9 @@ export async function createNegotiationGraph() {
       }
     )
     .addEdge(NodeName.HUMAN_INTERVENTION, NodeName.FINALIZE_RESPONSE)
-    .addEdge(NodeName.FINALIZE_RESPONSE, NodeName.EMAIL_NOTIFICATION)
+    .addEdge(NodeName.FINALIZE_RESPONSE, NodeName.PHRASING_HISTORY)
+    .addEdge(NodeName.PHRASING_HISTORY, NodeName.BID_COMPARISON)
+    .addEdge(NodeName.BID_COMPARISON, NodeName.EMAIL_NOTIFICATION)
     .addEdge(NodeName.EMAIL_NOTIFICATION, NodeName.DOCUMENT_GENERATION)
     .addEdge(NodeName.DOCUMENT_GENERATION, "__end__");
 

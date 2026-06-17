@@ -31,6 +31,8 @@ export enum NodeName {
   WEIGHTED_UTILITY = "weighted_utility",
   EMAIL_NOTIFICATION = "email_notification",
   DOCUMENT_GENERATION = "document_generation",
+  BID_COMPARISON = "bid_comparison",
+  PHRASING_HISTORY = "phrasing_history",
 }
 
 export interface AgentNodeResult {
