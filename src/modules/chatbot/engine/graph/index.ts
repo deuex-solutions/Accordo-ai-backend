@@ -1,4 +1,6 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
+import { analyzeSentimentNode } from "./nodes/intelligence-node.js";
+import { decideStrategyNode } from "./nodes/decide-strategy.js";
 import { generateOffersNode } from "./nodes/generate-offers.js";
 
 import { StateGraph } from "@langchain/langgraph";
@@ -11,26 +13,6 @@ import { stateManagementNode } from "./nodes/state-management.js";
  * MOCK NODES FOR TRACK INITIALIZATION
  * These should be replaced by actual implementations from each track.
  */
-
-// TRACK 1: VATSAL (Core Logic)
-const offerParsingNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.PARSE_INPUT}] Processing vendor message...`);
-  return { round: (state.round || 0) + 1 };
-};
-
-// TRACK 2: YUG (Intelligence)
-const analyzeSentimentNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.ANALYZE_SENTIMENT}] Analyzing tone and behavior...`);
-  return { analysis: { sentiment: "NEUTRAL" as const } };
-};
-
-// TRACK 1: VATSAL (Core Logic)
-const decideStrategyNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.DECIDE_STRATEGY}] Determining next move...`);
-  return { decision: { action: "COUNTER" as const, reasoning: "Mock reasoning", confidence: 0.9 } };
-};
-
-// TRACK 3: ADARSH (Strategy/MESO) - now imported from nodes/generate-offers.js
 
 // FINAL RESPONSE
 const finalizeResponseNode = async (state: NegotiationState) => {

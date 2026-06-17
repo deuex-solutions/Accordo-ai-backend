@@ -14,6 +14,7 @@ export default defineConfig({
     setupFiles: './tests/helpers/setup.ts',
     include: [
       'tests/integration/**/*.test.ts',
+      'tests/ai-evals/**/*.test.ts',
     ],
     coverage: {
       provider: 'v8',

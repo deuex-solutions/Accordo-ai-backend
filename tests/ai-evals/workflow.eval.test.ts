@@ -22,6 +22,16 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
       messages: [new HumanMessage("I want a discount on the latest offer.")],
       dealId: "workflow-test-123",
       round: 0,
+      config: {
+        priceQuantity: { targetUnitPrice: 800, maxAcceptablePrice: 1000 },
+        priority: "MEDIUM",
+        paymentTerms: { minDays: 15, maxDays: 45 },
+        parameterWeights: { targetUnitPrice: 50, paymentTermsDays: 50 }
+      },
+      parsedOffer: {
+        totalPrice: 900,
+        paymentTermsDays: 30
+      }
     };
 
     const threadId = uuidv4();
@@ -29,12 +39,12 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
 
     const result = await graph.invoke(initialState, config);
 
-    // Verify state management incremented round correctly (mock parseInputNode also increments)
-    expect(result.round).toBe(2);
+    // Verify state management incremented round correctly
+    expect(result.round).toBe(1);
     
     // Verify intelligence/sentiment ran
     expect(result.analysis).toBeDefined();
-    expect(result.analysis.sentiment).toBe("NEUTRAL");
+    expect(result.analysis.tone?.sentiment).toBe("POSITIVE");
     
     // Verify decision ran
     expect(result.decision).toBeDefined();
