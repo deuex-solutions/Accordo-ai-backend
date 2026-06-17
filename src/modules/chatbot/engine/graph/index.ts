@@ -1,6 +1,7 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
 import { analyzeSentimentNode } from "./nodes/intelligence-node.js";
 import { decideStrategyNode } from "./nodes/decide-strategy.js";
+import { generateOffersNode } from "./nodes/generate-offers.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -12,15 +13,6 @@ import { stateManagementNode } from "./nodes/state-management.js";
  * MOCK NODES FOR TRACK INITIALIZATION
  * These should be replaced by actual implementations from each track.
  */
-
-// TRACK 1: VATSAL (Core Logic)
-// now imported from nodes/decide-strategy.js
-
-// TRACK 3: ADARSH (Strategy/MESO)
-const generateOffersNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.GENERATE_OFFERS}] Generating counter-offers...`);
-  return { counterOffer: { price: 1000, terms: "Net 30" } };
-};
 
 // FINAL RESPONSE
 const finalizeResponseNode = async (state: NegotiationState) => {
