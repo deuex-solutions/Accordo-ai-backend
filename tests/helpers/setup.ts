@@ -13,13 +13,14 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 // The database module reads DB_NAME at import time, so it must be set first.
 process.env.NODE_ENV = 'test';
 process.env.DB_NAME = process.env.DB_NAME_TEST || 'accordo_test';
+process.env.DATABASE_URL = '';
 process.env.JWT_ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_TOKEN_SECRET || 'test-secret-key-length-32-characters-long';
 process.env.JWT_REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_TOKEN_SECRET || 'test-refresh-secret-key-length-32-characters-long';
 process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_TOKEN_SECRET;
 process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_TOKEN_SECRET;
 
 // Import AFTER env vars are configured
-import sequelize from '../../src/config/database.js';
+const { default: sequelize } = await import('../../src/config/database.js');
 
 // Safety: abort if connected to the dev database
 const dbName = (sequelize as any).config?.database || process.env.DB_NAME;
