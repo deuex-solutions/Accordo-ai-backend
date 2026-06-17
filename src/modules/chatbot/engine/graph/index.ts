@@ -1,5 +1,6 @@
 import { offerParsingNode } from "./nodes/offer-parser.js";
 import { analyzeSentimentNode } from "./nodes/intelligence-node.js";
+import { decideStrategyNode } from "./nodes/decide-strategy.js";
 
 import { StateGraph } from "@langchain/langgraph";
 import { NegotiationState, NegotiationStateAnnotation } from "./state.js";
@@ -13,10 +14,7 @@ import { stateManagementNode } from "./nodes/state-management.js";
  */
 
 // TRACK 1: VATSAL (Core Logic)
-const decideStrategyNode = async (state: NegotiationState) => {
-  console.log(`[Node: ${NodeName.DECIDE_STRATEGY}] Determining next move...`);
-  return { decision: { action: "COUNTER" as const, reasoning: "Mock reasoning", confidence: 0.9 } };
-};
+// now imported from nodes/decide-strategy.js
 
 // TRACK 3: ADARSH (Strategy/MESO)
 const generateOffersNode = async (state: NegotiationState) => {
