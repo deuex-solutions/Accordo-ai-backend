@@ -25,11 +25,14 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
       round: 0,
       config: {
         priceQuantity: { targetUnitPrice: 800, maxAcceptablePrice: 1000 },
-        parameterWeights: { targetUnitPrice: 100 },
+        priority: "MEDIUM",
+        paymentTerms: { minDays: 15, maxDays: 45 },
+        parameterWeights: { targetUnitPrice: 50, paymentTermsDays: 50 }
       },
       parsedOffer: {
         totalPrice: 900,
-      },
+        paymentTermsDays: 30
+      }
     };
 
     const threadId = uuidv4();
@@ -42,7 +45,7 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     
     // Verify intelligence/sentiment ran
     expect(result.analysis).toBeDefined();
-    expect(result.analysis.sentiment).toBe("NEUTRAL");
+    expect(result.analysis.tone?.sentiment).toBe("POSITIVE");
     
     // Verify decision ran
     expect(result.decision).toBeDefined();
