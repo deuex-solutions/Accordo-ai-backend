@@ -11,6 +11,51 @@ vi.mock("../../src/modules/chatbot/engine/graph/checkpointer.js", () => {
   };
 });
 
+// Mock database models to avoid database queries during the workflow E2E run
+vi.mock("../../src/models/index.js", () => {
+  return {
+    default: {
+      ChatbotDeal: {
+        findByPk: vi.fn().mockResolvedValue({
+          id: "workflow-test-123",
+          status: "NEGOTIATING",
+          Messages: [],
+        }),
+      },
+    },
+  };
+});
+
+// Mock context service queries
+vi.mock("../../src/services/context.service.js", () => {
+  return {
+    getRequisitionContext: vi.fn().mockResolvedValue({
+      id: 1,
+      rfqId: "rfq-test",
+      subject: "Test Requisition",
+      category: "Test Category",
+    }),
+    getUserPreferences: vi.fn().mockResolvedValue({
+      batna: 800,
+      maxDiscount: 0.2,
+      priceWeight: 50,
+      deliveryWeight: 50,
+    }),
+  };
+});
+
+// Mock vector service queries
+vi.mock("../../src/modules/vector/vector.service.js", () => {
+  return {
+    buildRAGContext: vi.fn().mockResolvedValue({
+      systemPromptAddition: "[Retrieved Context] Similar successful negotiation details...",
+      fewShotExamples: ["past response 1", "past response 2"],
+      similarNegotiations: ["negotiation 1"],
+      relevanceScores: [0.85],
+    }),
+  };
+});
+
 import { createNegotiationGraph } from "../../src/modules/chatbot/engine/graph/index.js";
 import { HumanMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
@@ -22,6 +67,8 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     const initialState = {
       messages: [new HumanMessage("I want a discount on the latest offer.")],
       dealId: "workflow-test-123",
+      rfqId: 1,
+      vendorId: 2,
       round: 0,
       config: {
         priceQuantity: { targetUnitPrice: 800, maxAcceptablePrice: 1000 },
@@ -51,6 +98,12 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     expect(result.decision).toBeDefined();
     expect(result.decision.action).toBe("COUNTER");
     expect(result.decision.utilityScore).toBe(0.5); // verified that weightedUtilityNode ran!
+
+    // Verify RAG context was assembled and fused in metadata
+    expect(result.metadata.ragContext).toBeDefined();
+    expect(result.metadata.ragContext.requisition?.rfqId).toBe("rfq-test");
+    expect(result.metadata.ragContext.preferences?.batna).toBe(800);
+    expect(result.metadata.ragContext.vectorRAG?.systemPromptAddition).toContain("Similar successful negotiation");
 
     // Verify MESO generated offers
     expect(result.counterOffer).toBeDefined();
