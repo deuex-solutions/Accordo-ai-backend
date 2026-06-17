@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    setupFiles: './tests/helpers/setup.ts',
     env: {
       DB_NAME: 'accordo_test',
       NODE_ENV: 'test',
@@ -12,10 +13,14 @@ export default defineConfig({
       JWT_REFRESH_TOKEN_SECRET: 'test-refresh-secret-key',
     },
     include: [
+      'tests/integration/**/*.test.ts',
       'tests/ai-evals/**/*.test.ts',
     ],
     testTimeout: 30000,
     fileParallelism: false,
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
   },
   resolve: {
     alias: {

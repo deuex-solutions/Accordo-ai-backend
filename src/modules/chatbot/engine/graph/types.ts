@@ -28,6 +28,9 @@ export enum NodeName {
   GENERATE_OFFERS = "generate_offers",
   FINALIZE_RESPONSE = "finalize_response",
   HUMAN_INTERVENTION = "human_intervention",
+  WEIGHTED_UTILITY = "weighted_utility",
+  EMAIL_NOTIFICATION = "email_notification",
+  DOCUMENT_GENERATION = "document_generation",
 }
 
 export interface AgentNodeResult {
