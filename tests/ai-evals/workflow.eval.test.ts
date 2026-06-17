@@ -11,47 +11,7 @@ vi.mock("../../src/modules/chatbot/engine/graph/checkpointer.js", () => {
   };
 });
 
-// Mock models to return standard mock data for the email & document nodes
-vi.mock("../../src/models/index.js", () => {
-  return {
-    default: {
-      ChatbotDeal: {
-        findByPk: vi.fn().mockResolvedValue({
-          id: "workflow-test-123",
-          status: "NEGOTIATING",
-          Contract: { id: 1, Vendor: { name: "Vendor A", email: "vendor@test.com" } },
-          Requisition: { id: 1, subject: "Req A", Project: { name: "Proj A" }, toJSON: function() { return this; } },
-          Messages: [],
-        }),
-      },
-    },
-  };
-});
-
-// Mock email service
-vi.mock("../../src/services/email.service.js", () => {
-  return {
-    sendVendorAttachedEmail: vi.fn(),
-    sendStatusChangeEmail: vi.fn(),
-  };
-});
-
-// Mock PDF generator
-vi.mock("../../src/modules/chatbot/pdf/deal-summary-pdf-generator.js", () => {
-  return {
-    saveDealSummaryPDF: vi.fn().mockResolvedValue("/uploads/pdfs/summary.pdf"),
-  };
-});
-
-// Mock bid comparison service
-vi.mock("../../src/modules/bid-comparison/bid-comparison.service.js", () => {
-  return {
-    generateAndSendComparison: vi.fn(),
-    checkCompletionStatus: vi.fn().mockResolvedValue({ allCompleted: false }),
-  };
-});
-
-import { createNegotiationGraph } from "../../src/modules/chatbot/engine/graph/index";
+import { createNegotiationGraph } from "../../src/modules/chatbot/engine/graph/index.js";
 import { HumanMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
 
@@ -62,7 +22,6 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     const initialState = {
       messages: [new HumanMessage("I want a discount on the latest offer.")],
       dealId: "workflow-test-123",
-      rfqId: 1,
       round: 0,
       config: {
         priceQuantity: { targetUnitPrice: 800, maxAcceptablePrice: 1000 },
@@ -86,11 +45,12 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     
     // Verify intelligence/sentiment ran
     expect(result.analysis).toBeDefined();
-    expect(result.analysis.sentiment).toBe("NEUTRAL");
+    expect(result.analysis.tone?.sentiment).toBe("POSITIVE");
     
     // Verify decision ran
     expect(result.decision).toBeDefined();
     expect(result.decision.action).toBe("COUNTER");
+    expect(result.decision.utilityScore).toBe(0.5); // verified that weightedUtilityNode ran!
 
     // Verify MESO generated offers
     expect(result.counterOffer).toBeDefined();
