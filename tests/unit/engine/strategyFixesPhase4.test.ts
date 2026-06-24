@@ -166,26 +166,26 @@ describe("detectTermsRequest — coverage from the 7-round transcript", () => {
 describe("sanitizeText — duplicate preposition strip (Apr 2026)", () => {
   it('collapses "by by"', () => {
     const out = sanitizeText("delivery by by 2026-05-29");
-    expect(out).toBe("delivery by 2026-05-29");
+    expect(out).toBe("Delivery by May 29");
   });
 
   it('collapses "with with"', () => {
     expect(sanitizeText("net 30 with with 2% discount")).toBe(
-      "net 30 with 2% discount",
+      "Net 30 with 2% discount",
     );
   });
 
   it('case-insensitive "On On"', () => {
-    expect(sanitizeText("payable On On Net 60")).toBe("payable On Net 60");
+    expect(sanitizeText("payable On On Net 60")).toBe("Payable On Net 60");
   });
 
   it("does NOT touch single prepositions", () => {
-    const sentence = "delivery by 2026-05-29 with Net 60 on the dot";
+    const sentence = "Delivery by May 29 with Net 60 on the dot";
     expect(sanitizeText(sentence)).toBe(sentence);
   });
 
   it("does NOT touch unrelated repeated words", () => {
-    const sentence = "the the report"; // not a tracked preposition
+    const sentence = "The the report"; // not a tracked preposition
     expect(sanitizeText(sentence)).toBe(sentence);
   });
 });

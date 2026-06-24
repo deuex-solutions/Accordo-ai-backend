@@ -2888,7 +2888,22 @@ export const generatePMResponseAsyncService = async (
 
     // Build resolved config for MESO generation (needed for multiple checks)
     const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
-    const resolvedConfig = resolveNegotiationConfig(wizardConfig || {});
+    const legacyConfig = deal.negotiationConfigJson as any;
+    const resolvedConfig = resolveNegotiationConfig(
+      wizardConfig,
+      legacyConfig
+        ? {
+            total_price:
+              legacyConfig.parameters?.total_price ??
+              (legacyConfig.parameters as any)?.unit_price,
+            accept_threshold: legacyConfig.accept_threshold,
+            escalate_threshold: legacyConfig.escalate_threshold,
+            walkaway_threshold: legacyConfig.walkaway_threshold,
+            max_rounds: legacyConfig.max_rounds,
+            priority: legacyConfig.priority,
+          }
+        : undefined,
+    );
     // Deal currency is stored on the negotiation config at deal creation (see createDealWithConfigService).
     // Threaded through to all MESO generators so every option's price label uses the requisition currency.
     const dealCurrency = ((deal.negotiationConfigJson as any)?.currency ||
@@ -7541,7 +7556,22 @@ export const processFinalOfferConfirmationService = async (
 
     // Get resolved config for MESO generation
     const wizardConfig = (deal.negotiationConfigJson as any)?.wizardConfig;
-    const resolvedConfig = resolveNegotiationConfig(wizardConfig || {});
+    const legacyConfig = deal.negotiationConfigJson as any;
+    const resolvedConfig = resolveNegotiationConfig(
+      wizardConfig,
+      legacyConfig
+        ? {
+            total_price:
+              legacyConfig.parameters?.total_price ??
+              (legacyConfig.parameters as any)?.unit_price,
+            accept_threshold: legacyConfig.accept_threshold,
+            escalate_threshold: legacyConfig.escalate_threshold,
+            walkaway_threshold: legacyConfig.walkaway_threshold,
+            max_rounds: legacyConfig.max_rounds,
+            priority: legacyConfig.priority,
+          }
+        : undefined,
+    );
     // Deal currency is stored on the negotiation config at deal creation (chatbot.service.ts ~L607)
     const dealCurrency = ((deal.negotiationConfigJson as any)?.currency ||
       "USD") as SupportedCurrency;

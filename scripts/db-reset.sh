@@ -67,7 +67,9 @@ echo "3/4  Running migrations..."
 cd "$PROJECT_ROOT"
 npx sequelize-cli db:migrate \
   --config "$PROJECT_ROOT/sequelize.config.cjs" \
-  --migrations-path "$PROJECT_ROOT/migrations"
+  --migrations-path "$PROJECT_ROOT/migrations" \
+  --models-path "$PROJECT_ROOT/src/models" \
+  --seeders-path "$PROJECT_ROOT/src/seeders"
 
 echo "4/4  Running seed data..."
 npx tsx "$PROJECT_ROOT/scripts/seed.ts"
