@@ -550,23 +550,35 @@ export const vendorEnterChat = async (
   // Build opening message content from quote
   let grandTotal = 0;
   let totalUnits = 0;
+  const productLines: string[] = [];
+
   vendorQuote.products.forEach((p) => {
     const unitPrice =
       typeof p.quotedPrice === "number"
         ? p.quotedPrice
         : parseFloat(p.quotedPrice as string) || 0;
     const quantity = p.quantity || 0;
-    grandTotal += unitPrice * quantity;
+    const lineTotal = unitPrice * quantity;
+    grandTotal += lineTotal;
     totalUnits += quantity;
+
+    const productName = p.productName || "Unnamed Product";
+    productLines.push(
+      `${productName}: ${quantity} units, total price = ${formatCurrency(lineTotal, requisitionCurrency)}`
+    );
   });
 
   const terms = vendorQuote.additionalTerms;
   let termsText = "";
   if (terms?.paymentTerms) {
-    termsText += `\nPayment Terms: ${terms.paymentTerms === "net_payment" ? `Net ${terms.netPaymentDay || 30} days` : "Advance/Post payment"}`;
+    termsText += `\nPayment terms: ${terms.paymentTerms === "net_payment" ? `Net ${terms.netPaymentDay || 30} days` : "Advance/Post payment"}`;
   }
 
-  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\nUnits: ${totalUnits} units\nTotal Price: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}\n\nI look forward to discussing the details.`;
+  const productBreakdownText = productLines.length > 0
+    ? `\n\n${productLines.join("\n")}`
+    : "";
+
+  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\nUnits: ${totalUnits}\nTotal price: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}${productBreakdownText}\n\nI look forward to discussing the details.`;
 
   // Build payment terms string for extracted offer
   const paymentTermsStr =

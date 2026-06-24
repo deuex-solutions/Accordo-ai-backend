@@ -126,12 +126,14 @@ export const sequelize = databaseUrl
       logging: env.database.logging
         ? (msg: string) => logger.debug({ event: "db.query" }, msg)
         : false,
-      dialectOptions: {
-        ssl: {
-          require: true,
-          rejectUnauthorized: env.database.sslRejectUnauthorized,
-        },
-      },
+      dialectOptions: env.database.ssl
+        ? {
+            ssl: {
+              require: true,
+              rejectUnauthorized: env.database.sslRejectUnauthorized,
+            },
+          }
+        : undefined,
     })
   : new Sequelize(
       env.database.name,

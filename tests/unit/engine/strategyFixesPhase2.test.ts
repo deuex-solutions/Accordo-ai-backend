@@ -119,6 +119,22 @@ describe("P2.4: first-counter regression cap (decide.ts)", () => {
     expect(counter).toBeLessThanOrEqual(29_900);
   });
 
+  it("does not force the counter to max_acceptable immediately when vendor's offer is above budget", () => {
+    const config = makeConfig();
+    const vendorOffer: Offer = {
+      total_price: 60_000,
+      payment_terms: "Net 60",
+    };
+    // Round 1
+    const decision = decideNextMove(config, vendorOffer, 1);
+    const counter = decision.counterOffer?.total_price ?? 0;
+    // Target is 19,900, max is 29,900.
+    // 88% of 60K is 52.8K, which is > 29,900.
+    // We should not immediately offer 29,900. We should counter below 29,900 to have room to negotiate.
+    expect(counter).toBeLessThan(29_900);
+    expect(counter).toBeGreaterThan(19_900);
+  });
+
   it("does not cap when vendor's offer is missing", () => {
     const config = makeConfig();
     const vendorOffer: Offer = {

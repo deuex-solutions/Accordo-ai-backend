@@ -286,7 +286,7 @@ export function generateFinalOfferPrompt(
   varyingParameters: string[]
 ): string {
   // Format the stalled value for display
-  let formattedValue = String(stalledValue);
+  let formattedValue = stalledValue === null || stalledValue === undefined ? '' : String(stalledValue);
   if (stalledParameter === 'price' && typeof stalledValue === 'number') {
     formattedValue = `$${stalledValue.toLocaleString()}`;
   } else if (stalledParameter === 'payment_terms_days' && typeof stalledValue === 'number') {
@@ -319,7 +319,8 @@ export function generateFinalOfferPrompt(
       return `You've held firm on ${formattedValue} payment terms for ${consecutiveRounds} consecutive rounds. Is this a hard requirement for your organization? Understanding this will help us reach an agreement faster.`;
 
     case 'delivery_days':
-      return `I see the ${formattedValue} delivery timeline has remained consistent. Is this delivery date fixed, or is there room for adjustment if we can find agreement on other terms?`;
+      const deliveryText = formattedValue ? `${formattedValue} ` : '';
+      return `I see the ${deliveryText}delivery timeline has remained consistent. Is this delivery date fixed, or is there room for adjustment if we can find agreement on other terms?`;
 
     case 'warranty_months':
       return `You've maintained a ${formattedValue} warranty position throughout our discussion. Is this your final stance on warranty coverage?`;

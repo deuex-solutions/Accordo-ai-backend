@@ -4,12 +4,15 @@ const dotenv = require("dotenv");
 const envPath = path.resolve(__dirname, ".env");
 dotenv.config({ path: envPath });
 
-const useSSL = process.env.DB_SSL === "true";
 const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false";
 
 // Support DATABASE_URL connection string (Render, Heroku, etc.)
 // When DATABASE_URL is set, it takes precedence over individual DB_* vars.
 const databaseUrl = process.env.DATABASE_URL;
+
+const useSSL =
+  process.env.DB_SSL === "true" ||
+  (!!databaseUrl && process.env.DB_SSL !== "false");
 
 const sslDialectOptions = {
   ssl: {
@@ -24,7 +27,7 @@ if (databaseUrl) {
     url: databaseUrl,
     dialect: "postgres",
     logging: process.env.DB_LOGGING === "true" ? console.log : false,
-    dialectOptions: sslDialectOptions,
+    ...(useSSL ? { dialectOptions: sslDialectOptions } : {}),
   };
 
   module.exports = {

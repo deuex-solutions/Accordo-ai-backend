@@ -14,13 +14,21 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // Helpers
 // ─────────────────────────────────────────────
 
+// Mock dotenv.config globally for require-based loads to prevent .env from overriding process.env
+const { createRequire } = require('module');
+const req = createRequire(import.meta.url);
+try {
+  const dotenv = req('dotenv');
+  dotenv.config = () => ({ parsed: {} });
+} catch (e) {
+  // Ignore if dotenv is not loadable
+}
+
 /**
  * Loads the sequelize config fresh by clearing the require cache.
  * The config is a CJS module so we use require() via createRequire.
  */
 function loadConfig(): Record<string, any> {
-  const { createRequire } = require('module');
-  const req = createRequire(import.meta.url);
   const configPath = require('path').resolve(
     __dirname,
     '../../../sequelize.config.cjs',
@@ -48,6 +56,8 @@ const TRACKED_VARS = [
 beforeEach(() => {
   for (const key of TRACKED_VARS) {
     envSnapshot[key] = process.env[key];
+    // Delete to start with a clean slate
+    delete process.env[key];
   }
 });
 

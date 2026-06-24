@@ -327,10 +327,11 @@ function calculateCounterPrice(
   // made a counter; this protects the FIRST counter when there is none.
   if (vendorOffer.total_price != null && vendorOffer.total_price > 0) {
     const minCounterPrice = vendorOffer.total_price * 0.88; // floor: 12% below vendor
-    // Only apply when our config target allows us to go that high (i.e. the
-    // floor is still ≤ max_acceptable). Otherwise hold at config max.
-    const cappedFloor = Math.min(minCounterPrice, max_acceptable);
-    counterPrice = Math.max(counterPrice, cappedFloor);
+    // Only apply the regression cap if the floor is within our max acceptable budget.
+    // Otherwise, do not apply this floor so we can start countering below max_acceptable.
+    if (minCounterPrice <= max_acceptable) {
+      counterPrice = Math.max(counterPrice, minCounterPrice);
+    }
   }
 
   // Guard: counter price must never be 0 or negative — fall back to target
@@ -551,8 +552,11 @@ export function calculateDynamicCounter(
   // simpler counter-price path above.
   if (vendorOffer.total_price != null && vendorOffer.total_price > 0) {
     const minCounterPrice = vendorOffer.total_price * 0.88;
-    const cappedFloor = Math.min(minCounterPrice, max_acceptable);
-    counterPrice = Math.max(counterPrice, cappedFloor);
+    // Only apply the regression cap if the floor is within our max acceptable budget.
+    // Otherwise, do not apply this floor so we can start countering below max_acceptable.
+    if (minCounterPrice <= max_acceptable) {
+      counterPrice = Math.max(counterPrice, minCounterPrice);
+    }
   }
 
   // Guard: counter price must never be 0 or negative — fall back to target

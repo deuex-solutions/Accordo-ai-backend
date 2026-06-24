@@ -45,18 +45,19 @@ describe("Humanization Audit — Sprint 1", () => {
     });
 
     it("humanizes ISO dates", () => {
+      const nextYear = new Date().getFullYear() + 1;
       const intent = buildNegotiationIntent({
         action: "COUNTER",
         utilityScore: 0.5,
         counterPrice: 50000,
         counterPaymentTerms: null,
-        counterDelivery: "2026-03-15",
+        counterDelivery: `${nextYear}-03-15`,
         concerns: [],
         tone: "formal",
         targetPrice: 45000,
         maxAcceptablePrice: 55000,
       });
-      expect(intent.allowedDelivery).toBe("March 15, 2026");
+      expect(intent.allowedDelivery).toBe(`March 15, ${nextYear}`);
     });
   });
 

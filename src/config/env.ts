@@ -137,7 +137,9 @@ export const env: EnvironmentConfig = {
       dbUrlParsed?.name ||
       process.env.DB_NAME ||
       "postgres",
-    ssl: process.env.DB_SSL === "true" || !!dbUrlParsed,
+    ssl:
+      process.env.DB_SSL === "true" ||
+      (!!dbUrlParsed && process.env.DB_SSL !== "false"),
     sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
     logging: process.env.DB_LOGGING === "true",
   },

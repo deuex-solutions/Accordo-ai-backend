@@ -455,7 +455,7 @@ describe("buildNegotiationIntent – commercialPosition", () => {
     const intent = buildNegotiationIntent(
       makeInput({ utilityScore: 0.35, tone: "formal" }),
     );
-    expect(intent.commercialPosition).toContain("budget constraints");
+    expect(intent.commercialPosition).toContain("room");
   });
 
   it("selects friendly ACCEPT position when tone is friendly", () => {
@@ -469,14 +469,14 @@ describe("buildNegotiationIntent – commercialPosition", () => {
     const intent = buildNegotiationIntent(
       makeInput({ action: "ACCEPT", tone: "formal" }),
     );
-    expect(intent.commercialPosition).toContain("formal");
+    expect(intent.commercialPosition).toContain("acceptance");
   });
 
   it("selects firm WALK_AWAY position when tone is firm", () => {
     const intent = buildNegotiationIntent(
       makeInput({ action: "WALK_AWAY", tone: "firm" }),
     );
-    expect(intent.commercialPosition).toContain("limit");
+    expect(intent.commercialPosition).toContain("reached");
   });
 });
 
@@ -571,7 +571,7 @@ describe("Persona: firm vendor — take it or leave it", () => {
     expect(intent.firmness).toBe(0.9);
     expect(intent.vendorTone).toBe("firm");
     expect(intent.allowedPrice).toBeUndefined();
-    expect(intent.commercialPosition).toContain("limit");
+    expect(intent.commercialPosition).toContain("reached");
   });
 });
 

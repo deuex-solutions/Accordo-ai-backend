@@ -58,6 +58,7 @@ describe("recordPhrasing / getPhrasings", () => {
     recordPhrasing("deal-1", "COUNTER", "Thanks for the quick update today");
     expect(getPhrasings("deal-1")).toEqual([
       "COUNTER|thanks:for:the:quick:update",
+      "OPENER|COUNTER|thanks:for:the",
     ]);
   });
 
@@ -69,7 +70,7 @@ describe("recordPhrasing / getPhrasings", () => {
     recordPhrasing("deal-1", "COUNTER", "Thanks for the quick update today");
     recordPhrasing("deal-1", "COUNTER", "Thanks for the quick update tomorrow");
     // Same first-5-words → same fingerprint → only one entry
-    expect(getPhrasings("deal-1")).toHaveLength(1);
+    expect(getPhrasings("deal-1")).toHaveLength(2);
   });
 
   it("isolates phrasings between different deals", () => {
@@ -77,9 +78,11 @@ describe("recordPhrasing / getPhrasings", () => {
     recordPhrasing("deal-B", "COUNTER", "Appreciate the proposal here today");
     expect(getPhrasings("deal-A")).toEqual([
       "COUNTER|thanks:for:the:update:today",
+      "OPENER|COUNTER|thanks:for:the",
     ]);
     expect(getPhrasings("deal-B")).toEqual([
       "COUNTER|appreciate:the:proposal:here:today",
+      "OPENER|COUNTER|appreciate:the:proposal",
     ]);
   });
 
@@ -93,7 +96,7 @@ describe("recordPhrasing / getPhrasings", () => {
     recordPhrasing("deal-1", "COUNTER", "Good to hear back from you");
     const list = getPhrasings("deal-1");
     expect(list[0]).toContain("thanks:for:sharing:the:update");
-    expect(list[2]).toContain("good:to:hear:back:from");
+    expect(list[4]).toContain("good:to:hear:back:from");
   });
 
   it("hasRecentPhrasing returns true when fingerprint already used", () => {

@@ -53,6 +53,7 @@ export class Contract extends Model<
 
   // Associations
   declare Requisition?: NonAttribute<any>;
+  declare ChatbotDeal?: NonAttribute<any>;
 
   static associate(models: Record<string, typeof Model>): void {
     this.belongsTo(models.Requisition as ModelStatic<Model>, {
@@ -68,6 +69,10 @@ export class Contract extends Model<
       as: 'Company',
     });
     this.hasMany(models.Po as ModelStatic<Model>, { foreignKey: 'contractId', as: 'PurchaseOrders' });
+    this.belongsTo(models.ChatbotDeal as ModelStatic<Model>, {
+      foreignKey: 'chatbotDealId',
+      as: 'ChatbotDeal',
+    });
     this.belongsTo(Contract as unknown as ModelStatic<Model>, { foreignKey: 'previousContractId', as: 'PreviousContract', constraints: false });
     this.hasMany(Contract as unknown as ModelStatic<Model>, { foreignKey: 'previousContractId', as: 'FollowUpContracts', constraints: false });
   }
