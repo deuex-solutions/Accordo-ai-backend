@@ -63,7 +63,12 @@ export async function getCheckpointer() {
   
   // Use connectionString if available, otherwise construct config from env.database
   const poolConfig = connectionString
-    ? { connectionString }
+    ? {
+        connectionString,
+        ssl: env.database.ssl
+          ? { rejectUnauthorized: env.database.sslRejectUnauthorized }
+          : false,
+      }
     : {
         host: env.database.host,
         port: env.database.port,
