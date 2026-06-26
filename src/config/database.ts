@@ -150,18 +150,23 @@ export const syncAllSequences = async (): Promise<void> => {
       DECLARE
           r RECORD;
           max_id INT;
-          seq_name TEXT;
       BEGIN
           FOR r IN 
-              SELECT table_name, column_name 
-              FROM information_schema.columns 
-              WHERE table_schema = 'public' 
-                AND column_default LIKE 'nextval(%'
+              SELECT 
+                  t.relname AS table_name,
+                  a.attname AS column_name,
+                  s.oid AS seq_oid
+              FROM pg_class s
+              JOIN pg_depend d ON d.objid = s.oid
+              JOIN pg_class t ON t.oid = d.refobjid
+              JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
+              WHERE s.relkind = 'S' 
+                AND t.relkind = 'r'
+                AND d.deptype IN ('a', 'i')
           LOOP
-              seq_name := substring(r.column_default from 'nextval\\(''([^'']+)'''::text);
               EXECUTE format('SELECT COALESCE(MAX(%I), 0) FROM %I', r.column_name, r.table_name) INTO max_id;
               IF max_id > 0 THEN
-                  EXECUTE format('SELECT setval(%L, %s)', seq_name, max_id);
+                  PERFORM setval(r.seq_oid, max_id);
               END IF;
           END LOOP;
       END $$;
