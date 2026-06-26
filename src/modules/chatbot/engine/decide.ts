@@ -864,10 +864,10 @@ export function decideNextMove(
         : null;
       const pmDays = pmCounterTerms ? extractPaymentDays(pmCounterTerms) : null;
 
-      // Terms are acceptable if: vendor terms match or are shorter (better for buyer = shorter payment)
+      // Terms are acceptable if: vendor terms match or are longer (better for buyer = longer payment)
       // OR if PM didn't specify terms
       const termsAcceptable =
-        pmDays === null || vendorDays === null || vendorDays <= pmDays;
+        pmDays === null || vendorDays === null || vendorDays >= pmDays;
 
       if (termsAcceptable) {
         return {
@@ -1394,8 +1394,10 @@ export function decideWithWeightedUtility(
         ? extractPaymentDays(vendorOffer.payment_terms)
         : null;
       const pmDays = pmCounterTerms ? extractPaymentDays(pmCounterTerms) : null;
+      // Terms are acceptable if: vendor terms match or are longer (better for buyer = longer payment)
+      // OR if PM didn't specify terms
       const termsAcceptable =
-        pmDays === null || vendorDays === null || vendorDays <= pmDays;
+        pmDays === null || vendorDays === null || vendorDays >= pmDays;
 
       if (termsAcceptable) {
         return {

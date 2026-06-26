@@ -255,3 +255,49 @@ describe("P2.3: vendor-convergence ACCEPT (smoke / behavior contract)", () => {
     );
   });
 });
+
+describe("P2.5: auto-accept payment terms logic", () => {
+  it("rejects auto-accept if vendor offers shorter terms than PM counter (worse for buyer)", () => {
+    const config = makeConfig({ priority: "MEDIUM" });
+    const previousPmOffer: Offer = {
+      total_price: 25_000,
+      payment_terms: "Net 60",
+    };
+    const vendorOffer: Offer = {
+      total_price: 24_000, // Meets price criteria
+      payment_terms: "Net 30", // Shorter terms (worse for buyer)
+    };
+    const decision = decideNextMove(config, vendorOffer, 2, null, previousPmOffer);
+    expect(decision.action).not.toBe("ACCEPT");
+  });
+
+  it("permits auto-accept if vendor offers equal terms to PM counter", () => {
+    const config = makeConfig({ priority: "MEDIUM" });
+    const previousPmOffer: Offer = {
+      total_price: 25_000,
+      payment_terms: "Net 60",
+    };
+    const vendorOffer: Offer = {
+      total_price: 24_000, // Meets price criteria
+      payment_terms: "Net 60", // Same terms
+    };
+    const decision = decideNextMove(config, vendorOffer, 2, null, previousPmOffer);
+    expect(decision.action).toBe("ACCEPT");
+  });
+
+  it("permits auto-accept if vendor offers longer terms than PM counter (better for buyer)", () => {
+    const config = makeConfig({ priority: "MEDIUM" });
+    const previousPmOffer: Offer = {
+      total_price: 25_000,
+      payment_terms: "Net 60",
+    };
+    const vendorOffer: Offer = {
+      total_price: 24_000, // Meets price criteria
+      payment_terms: "Net 90", // Longer terms
+    };
+    const decision = decideNextMove(config, vendorOffer, 2, null, previousPmOffer);
+    expect(decision.action).toBe("ACCEPT");
+  });
+});
+
+
