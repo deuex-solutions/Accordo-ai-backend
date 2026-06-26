@@ -142,6 +142,36 @@ export const sequelize = databaseUrl
       sequelizeOptions,
     );
 
+export const syncAllSequences = async (): Promise<void> => {
+  try {
+    logger.info("Synchronizing database sequences...");
+    await sequelize.query(`
+      DO $$
+      DECLARE
+          r RECORD;
+          max_id INT;
+          seq_name TEXT;
+      BEGIN
+          FOR r IN 
+              SELECT table_name, column_name 
+              FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+                AND column_default LIKE 'nextval(%'
+          LOOP
+              seq_name := substring(r.column_default from 'nextval\\(''([^'']+)'''::text);
+              EXECUTE format('SELECT COALESCE(MAX(%I), 0) FROM %I', r.column_name, r.table_name) INTO max_id;
+              IF max_id > 0 THEN
+                  EXECUTE format('SELECT setval(%L, %s)', seq_name, max_id);
+              END IF;
+          END LOOP;
+      END $$;
+    `);
+    logger.info("Database sequences synchronized successfully");
+  } catch (err) {
+    logger.error("Failed to synchronize database sequences", err);
+  }
+};
+
 export const connectDatabase = async (): Promise<void> => {
   await sequelize.authenticate();
   logger.info("Database authenticated");
@@ -173,6 +203,7 @@ export const connectDatabase = async (): Promise<void> => {
 
       execSync(command, { stdio: "inherit", cwd: projectRoot });
       logger.info("Migrations complete");
+      await syncAllSequences();
     } catch (error) {
       logger.error("Migration failed", error);
       throw error;
@@ -184,6 +215,7 @@ export const connectDatabase = async (): Promise<void> => {
     logger.info("Running seed data (development mode)...");
     const { seedAll } = await import("../seeders/index.js");
     await seedAll();
+    await syncAllSequences();
   } else {
     logger.info(`Skipping seed data (NODE_ENV=${env.nodeEnv})`);
   }

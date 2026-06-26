@@ -13,7 +13,18 @@ async function safeAddIndex(queryInterface, table, fields, options) {
   try {
     await queryInterface.addIndex(table, fields, options);
   } catch (e) {
-    if (e.message && e.message.includes("already exists")) return;
+    const msg = e.message || '';
+    const origMsg = e.original?.message || '';
+    const parentMsg = e.parent?.message || '';
+    const code = e.original?.code || e.parent?.code || '';
+    if (
+      msg.includes('already exists') ||
+      origMsg.includes('already exists') ||
+      parentMsg.includes('already exists') ||
+      code === '42P07'
+    ) {
+      return;
+    }
     throw e;
   }
 }

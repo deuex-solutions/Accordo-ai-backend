@@ -22,6 +22,7 @@ import {
 import {
   computeExplainability,
   totalUtility,
+  priceUtility,
   type NegotiationConfig,
 } from "./engine/utility.js";
 import {
@@ -1753,12 +1754,17 @@ export const processVendorMessageService = async (
     }
 
     // Make decision
+    const negotiationState = deal.convoStateJson as NegotiationState | null;
+    const previousPmOffer = negotiationState
+      ? getLastPmCounter(negotiationState)
+      : null;
+
     const decision = decideNextMove(
       config,
       extractedOffer,
       newRound,
-      undefined,
-      undefined,
+      negotiationState,
+      previousPmOffer,
       behavioralSigs,
       adaptiveStrat,
     );
@@ -2555,13 +2561,16 @@ export const generatePMResponseAsyncService = async (
     // above max causes incorrect deal closure (e.g. ₹3,51,500 accepted when
     // max is ₹3,49,000).
     const effectiveCeiling = maxAcceptable ?? null;
+    const currentPriceUtility = currentVendorPrice != null ? priceUtility(config, currentVendorPrice) : 0;
     const isVendorConverging =
       !isVendorAffirmative &&
+      deal.round >= 4 &&
       currentVendorPrice != null &&
       effectiveCeiling != null &&
       currentVendorPrice <= effectiveCeiling &&
       previousVendorPrice != null &&
-      currentVendorPrice < previousVendorPrice;
+      currentVendorPrice < previousVendorPrice &&
+      currentPriceUtility >= 0.35;
     if (isVendorConverging) {
       logger.info(
         `[Phase2] Vendor-convergence ACCEPT — vendor moved from ${previousVendorPrice} to ${currentVendorPrice} (within ceiling ${maxAcceptable})`,
