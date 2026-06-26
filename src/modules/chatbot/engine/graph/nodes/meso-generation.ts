@@ -44,7 +44,7 @@ export const mesoGenerationNode = async (state: NegotiationState) => {
     vendorOffer,
     state.round,
     targetUtility,
-    resolvedConfig.currency || "USD",
+    state.config?.currency || "USD",
     lastAccordoCounterPrice
   );
 

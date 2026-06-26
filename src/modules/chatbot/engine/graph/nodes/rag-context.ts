@@ -13,7 +13,7 @@ import logger from "../../../../../config/logger.js";
  * 
  * Also implements dynamic context window management.
  */
-export const ragContextNode = async (state: NegotiationState) => {
+export const ragContextNode = async (state: NegotiationState): Promise<Partial<NegotiationState>> => {
   logger.info(`[Node: rag_context] Assembling RAG context...`);
 
   const dealId = state.dealId;

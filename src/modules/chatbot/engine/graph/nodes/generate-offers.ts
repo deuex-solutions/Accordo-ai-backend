@@ -52,10 +52,11 @@ export const generateOffersNode = async (state: NegotiationState) => {
        const parsed = parseOfferRegex(text, reqCurrency);
        if (parsed.total_price != null || parsed.payment_terms_days != null || parsed.delivery_days != null) {
          const extOffer: ExtendedOffer = {
-           total_price: parsed.total_price ?? undefined,
-           payment_terms_days: parsed.payment_terms_days ?? undefined,
-           delivery_days: parsed.delivery_days ?? undefined,
-           warranty_months: parsed.warranty_months ?? undefined
+           total_price: parsed.total_price ?? null,
+           payment_terms: parsed.payment_terms ?? null,
+           payment_terms_days: parsed.payment_terms_days ?? null,
+           delivery_days: parsed.delivery_days ?? null,
+           warranty_months: null
          };
          histories = trackOffer(histories, extOffer, roundIdx);
          roundIdx++;
@@ -82,10 +83,11 @@ export const generateOffersNode = async (state: NegotiationState) => {
 
   if (isCounter && state.parsedOffer && state.config) {
     const extVendorOffer: ExtendedOffer = {
-      total_price: state.parsedOffer.totalPrice ?? undefined,
-      payment_terms_days: state.parsedOffer.paymentTermsDays ?? undefined,
-      delivery_days: state.parsedOffer.deliveryDays ?? undefined,
-      warranty_months: state.parsedOffer.warrantyMonths ?? undefined
+      total_price: state.parsedOffer.totalPrice ?? null,
+      payment_terms: state.parsedOffer.paymentTerms ?? null,
+      payment_terms_days: state.parsedOffer.paymentTermsDays ?? null,
+      delivery_days: state.parsedOffer.deliveryDays ?? null,
+      warranty_months: state.parsedOffer.warrantyMonths ?? null
     };
 
     // Extract last accordo counter price from history if available

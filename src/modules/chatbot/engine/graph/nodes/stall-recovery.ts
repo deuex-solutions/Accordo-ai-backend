@@ -20,11 +20,12 @@ export const stallRecoveryNode = async (state: NegotiationState) => {
 
   // Map state.parsedOffer to legacy ExtendedOffer schema expected by trackOffer
   const extendedOffer: ExtendedOffer = {
-    total_price: state.parsedOffer.totalPrice ?? undefined,
-    payment_terms_days: state.parsedOffer.paymentTermsDays ?? undefined,
-    delivery_days: state.parsedOffer.deliveryDays ?? undefined,
-    warranty_months: state.parsedOffer.warrantyMonths ?? undefined,
-    partial_delivery_allowed: state.parsedOffer.partialDelivery ?? undefined,
+    total_price: state.parsedOffer.totalPrice ?? null,
+    payment_terms: state.parsedOffer.paymentTerms ?? null,
+    payment_terms_days: state.parsedOffer.paymentTermsDays ?? null,
+    delivery_days: state.parsedOffer.deliveryDays ?? null,
+    warranty_months: state.parsedOffer.warrantyMonths ?? null,
+    partial_delivery_allowed: state.parsedOffer.partialDelivery ?? null,
   };
 
   // Track the new offer in history

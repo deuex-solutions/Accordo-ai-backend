@@ -46,10 +46,11 @@ export const decideStrategyNode = async (state: NegotiationState) => {
 
   // 2. Map state.parsedOffer to legacy ExtendedOffer for the engine
   const extVendorOffer: ExtendedOffer = {
-    total_price: state.parsedOffer.totalPrice ?? undefined,
-    payment_terms_days: state.parsedOffer.paymentTermsDays ?? undefined,
-    delivery_days: state.parsedOffer.deliveryDays ?? undefined,
-    warranty_months: state.parsedOffer.warrantyMonths ?? undefined
+    total_price: state.parsedOffer.totalPrice ?? null,
+    payment_terms: state.parsedOffer.paymentTerms ?? null,
+    payment_terms_days: state.parsedOffer.paymentTermsDays ?? null,
+    delivery_days: state.parsedOffer.deliveryDays ?? null,
+    warranty_months: state.parsedOffer.warrantyMonths ?? null
   };
 
   // 3. Compute the current weighted utility
@@ -57,7 +58,7 @@ export const decideStrategyNode = async (state: NegotiationState) => {
 
   // 4. Adapt to Yug's Intelligence
   // If Yug's node flagged high urgency, we might want to increase our likelihood to ACCEPT or lower expectations.
-  const isUrgent = state.analysis?.urgency === "HIGH" || state.analysis?.tone?.urgency > 0.7;
+  const isUrgent = state.analysis?.urgency === "HIGH" || (state.analysis?.tone?.urgency ?? 0) > 0.7;
 
     // 5. Determine Action based on new Utility Engine
     let action: NegotiationDecision["action"] = "COUNTER";
