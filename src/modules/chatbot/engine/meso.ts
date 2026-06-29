@@ -669,8 +669,11 @@ function generatePriceFocusedOffer(
   bestPrice = Math.max(priceFloor, bestPrice);
   bestPrice = humanRoundPrice(Math.round(bestPrice * 100) / 100);
 
-  // MEDIUM payment terms
-  const mediumPaymentDays = getMediumPaymentDays(config);
+  // MEDIUM payment terms (never less than vendor's current offer)
+  let mediumPaymentDays = getMediumPaymentDays(config);
+  if (vendorOffer.payment_terms_days != null && vendorOffer.payment_terms_days > mediumPaymentDays) {
+    mediumPaymentDays = vendorOffer.payment_terms_days;
+  }
 
   // BEST delivery (fastest)
   const bestDeliveryDays = getBestDeliveryDays(config, vendorOffer);
@@ -747,8 +750,11 @@ function generateBalancedOffer(
     lastAccordoCounterPrice,
   );
 
-  // MEDIUM payment terms
-  const mediumPaymentDays = getMediumPaymentDays(config);
+  // MEDIUM payment terms (never less than vendor's current offer)
+  let mediumPaymentDays = getMediumPaymentDays(config);
+  if (vendorOffer.payment_terms_days != null && vendorOffer.payment_terms_days > mediumPaymentDays) {
+    mediumPaymentDays = vendorOffer.payment_terms_days;
+  }
 
   // BEST delivery (fastest)
   const bestDeliveryDays = getBestDeliveryDays(config, vendorOffer);

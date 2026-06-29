@@ -789,10 +789,10 @@ export function decideNextMove(
       }
       return {
         action: "COUNTER",
-        utilityScore: 0,
+        utilityScore: totalUtility(config, counter),
         counterOffer: counter,
         reasons: [
-          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${max}. I can offer ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`,
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget ceiling of ${cs}${max}. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`,
         ],
       };
     }
@@ -1363,10 +1363,10 @@ export function decideWithWeightedUtility(
       );
       return {
         action: "COUNTER",
-        utilityScore: 0,
+        utilityScore: utilityResult.totalUtility,
         counterOffer,
         reasons: [
-          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget ceiling of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
         ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
