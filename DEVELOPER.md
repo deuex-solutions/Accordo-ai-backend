@@ -4,7 +4,7 @@ This guide is for engineers working on `Accordo-ai-backend`. For a high-level in
 
 ## Service in one paragraph
 
-A TypeScript / Express backend that owns the procurement domain (requisitions, vendors, contracts, POs) and the negotiation engine (utility-based decision making with INSIGHTS and CONVERSATION modes). Identity / RBAC live in the separate `Accordo-auth` service; both share a Postgres database. The negotiation engine is deterministic — when CONVERSATION mode talks to an LLM, it does so through a hard-boundary intent layer with strict validation, fabrication catches, and template fallbacks that themselves go through the same validator.
+A TypeScript / Express backend that owns the procurement domain (requisitions, vendors, contracts, POs) and the multi-agent AI negotiation engine. Identity / RBAC live in the separate `Accordo-auth` service; both share a Postgres database. Built on a stateful **LangGraph Directed Acyclic Graph (DAG)** agent network (`src/modules/chatbot/engine/graph`), the subsystem orchestrates 4 autonomous agent teams (Intake, Intelligence, Strategy, Output). Under the **"Engine as Pure Tools"** paradigm, mathematical algorithms (`decide.ts`, `weighted-utility.ts`, `meso.ts`) act as stateless deterministic tools called exclusively by graph nodes. All module controllers are unified into `*.routes.ts` files mounted via `src/routes.ts`.
 
 ## Tech stack
 
