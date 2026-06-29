@@ -51,17 +51,21 @@ export interface NegotiationConfig {
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 export function priceUtility(config: NegotiationConfig, price: number) {
-  // CRITICAL FIX (Jan 2026): Use TARGET as the 100% utility point, not ANCHOR
-  // The anchor is our opening position (aggressive), target is what we actually want
-  // This ensures we only ACCEPT when vendor meets or beats our target, not just our anchor
-  // UPDATED Feb 2026: Now uses total_price instead of unit_price
   const priceConfig = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
   if (!priceConfig) return 0;
   const { target, max_acceptable } = priceConfig;
-  if (price <= target) return 1;  // At or below target = 100% utility
-  if (price >= max_acceptable) return 0;  // At or above max = 0% utility
-  // Linear interpolation between target and max_acceptable
-  return clamp01(1 - (price - target) / (max_acceptable - target));
+  if (price <= target) return 1;
+  if (price === max_acceptable) return 0;
+  if (price < max_acceptable) {
+    return clamp01(1 - (price - target) / Math.max(1, max_acceptable - target));
+  }
+
+  // Soft-margin exponential decay strictly BEYOND max_acceptable
+  const excess = price - max_acceptable;
+  const toleranceBand = Math.max(1, max_acceptable * 0.15);
+  const softUtility = 0.05 * Math.exp(-excess / toleranceBand);
+
+  return Math.max(0.001, softUtility);
 }
 
 /**

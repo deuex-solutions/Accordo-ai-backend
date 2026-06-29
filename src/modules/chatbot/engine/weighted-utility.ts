@@ -150,7 +150,11 @@ export function extractValueFromOffer(
 export function buildWeightedConfig(
   step2Data: {
     targetUnitPrice?: number;
+    minUnitPrice?: number;
+    minTotalPrice?: number;
     maxAcceptablePrice?: number;
+    maxUnitPrice?: number;
+    maxTotalPrice?: number;
     paymentTermsMin?: number;
     paymentTermsMax?: number;
     deliveryDate?: string | Date;
@@ -175,14 +179,19 @@ export function buildWeightedConfig(
   const defaults = getDefaultParameterConfigs();
   const parameters: Record<string, WeightedParameterConfig> = {};
 
+  const targetVal = step2Data.minTotalPrice ?? step2Data.minUnitPrice ?? step2Data.targetUnitPrice ?? 0;
+  const maxVal = step2Data.maxTotalPrice ?? step2Data.maxUnitPrice ?? step2Data.maxAcceptablePrice ?? targetVal;
+
+  const priceWeight = step4Weights.minTotalPrice ?? step4Weights.unitPrice ?? step4Weights.targetUnitPrice ?? 0;
+
   // Build unit price config
-  if (step4Weights.unitPrice && step4Weights.unitPrice > 0) {
+  if (priceWeight > 0) {
     parameters.unitPrice = {
       id: "unitPrice",
       ...defaults.unitPrice,
-      weight: step4Weights.unitPrice,
-      target: step2Data.targetUnitPrice ?? 0,
-      max: step2Data.maxAcceptablePrice ?? step2Data.targetUnitPrice ?? 0,
+      weight: priceWeight,
+      target: targetVal,
+      max: maxVal,
     } as WeightedParameterConfig;
   }
 
@@ -987,8 +996,14 @@ function calculatePriceUtility(
   maxAcceptable: number
 ): number {
   if (price <= target) return 1;
-  if (price >= maxAcceptable) return 0;
-  return 1 - (price - target) / (maxAcceptable - target);
+  if (price === maxAcceptable) return 0;
+  if (price < maxAcceptable) {
+    return 1 - (price - target) / Math.max(1, maxAcceptable - target);
+  }
+  const excess = price - maxAcceptable;
+  const toleranceBand = Math.max(1, maxAcceptable * 0.15);
+  const softUtility = 0.05 * Math.exp(-excess / toleranceBand);
+  return Math.max(0.001, softUtility);
 }
 
 /**

@@ -765,6 +765,7 @@ export async function processConversationMessage(
               payment_terms_days: vendorOffer.payment_terms_days ?? null,
               delivery_date: vendorOffer.delivery_date ?? null,
               delivery_days: vendorOffer.delivery_days ?? null,
+              currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
             },
             reasons: [
               ...decision.reasons,
@@ -836,6 +837,7 @@ export async function processConversationMessage(
           counterOffer: {
             total_price: counterPrice,
             payment_terms: vendorOffer.payment_terms,
+            currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
           },
           reasons: [
             ...decision.reasons,
@@ -1107,6 +1109,7 @@ export async function processConversationMessage(
             payment_terms_days: vendorOffer.payment_terms_days ?? 30,
             delivery_date: null,
             delivery_days: null,
+            currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
           },
           reasons: [
             ...decision.reasons,
@@ -1705,6 +1708,7 @@ export async function processConversationMessage(
           counterOffer: {
             total_price: safetyMaxPrice,
             payment_terms: vendorOffer.payment_terms ?? null,
+            currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
           } as any,
           reasons: [
             ...decision.reasons,

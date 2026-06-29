@@ -50,15 +50,13 @@ export const createDealWithConfigSchema = Joi.object({
     .default('MEDIUM')
     .required(),
 
-  // Price & Quantity
   priceQuantity: Joi.object({
-    targetUnitPrice: Joi.number().positive().required().messages({
-      'any.required': 'Target unit price is required',
-      'number.positive': 'Target unit price must be positive',
-    }),
-    maxAcceptablePrice: Joi.number().positive().required().messages({
-      'any.required': 'Maximum acceptable price is required',
-    }),
+    minTotalPrice: Joi.number().positive().optional(),
+    minUnitPrice: Joi.number().positive().optional(),
+    targetUnitPrice: Joi.number().positive().optional(),
+    maxTotalPrice: Joi.number().positive().optional(),
+    maxUnitPrice: Joi.number().positive().optional(),
+    maxAcceptablePrice: Joi.number().positive().optional(),
     minOrderQuantity: Joi.number().integer().positive().required().messages({
       'any.required': 'Minimum order quantity is required',
     }),

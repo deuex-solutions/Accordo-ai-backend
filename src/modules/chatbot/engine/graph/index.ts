@@ -41,18 +41,26 @@ import { prepareTemplateVariables } from "../../convo/process-conversation-turn.
  * Routing logic for human-in-the-loop validation
  */
 const routeAfterOffers = (state: NegotiationState) => {
-  // Check if deal is high-value (> ₹10L / 1,000,000)
+  const currency = state.config?.currency || state.parsedOffer?.currency || "USD";
+  
+  // High-value threshold: Above 100 CR in INR (100 * 10,000,000) or Above 1 Billion in other currencies
+  const HIGH_VALUE_THRESHOLD = 1000000000; // 1,000,000,000 (1B / 100 Cr)
+
   const dealPrice = Math.max(
     state.counterOffer?.totalPrice || 0,
     state.parsedOffer?.totalPrice || 0,
     state.config?.priceQuantity?.maxAcceptablePrice || 0
   );
 
-  const isHighValue = dealPrice >= 1000000;
+  const isHighValue = dealPrice >= HIGH_VALUE_THRESHOLD;
   const isApproved = state.metadata?.approvedByHuman === true;
 
   if (isHighValue && !isApproved) {
-    console.log(`[Router] High-value deal (${dealPrice}) requires human approval. Pausing.`);
+    const unitDisplay = currency === "INR"
+      ? `${(dealPrice / 10000000).toFixed(2)} Cr`
+      : `${(dealPrice / 1000000000).toFixed(2)}B`;
+
+    console.log(`[Router] High-value deal (${currency} ${dealPrice.toLocaleString()} / ~${unitDisplay}) requires human approval. Pausing.`);
     return NodeName.HUMAN_INTERVENTION;
   }
 

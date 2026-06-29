@@ -1007,11 +1007,11 @@ export function decideNextMove(
 
     if (shouldEscalate) {
       return {
-        action: "ESCALATE",
+        action: "MESO",
         utilityScore: u,
-        counterOffer: counter,
+        counterOffer: null,
         reasons: [
-          `Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - needs human review.`,
+          `Autonomous deadlock resolution: round ${round} stalled. Pivoting to Multiple Equivalent Simultaneous Offers (MESO) package trade-offs to break standoff.`,
         ],
       };
     }
@@ -1528,11 +1528,11 @@ export function decideWithWeightedUtility(
 
     if (shouldEscalate) {
       return {
-        action: "ESCALATE",
+        action: "MESO",
         utilityScore: u,
-        counterOffer,
+        counterOffer: null,
         reasons: [
-          `Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms} - needs human review.`,
+          `Autonomous deadlock resolution: round ${round} stalled. Pivoting to Multiple Equivalent Simultaneous Offers (MESO) package trade-offs to break standoff.`,
         ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,

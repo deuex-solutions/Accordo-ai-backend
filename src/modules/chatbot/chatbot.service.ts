@@ -662,11 +662,11 @@ export const createDealWithConfigService = async (
       customParameters,
     } = input;
 
-    // Both targetUnitPrice and maxAcceptablePrice from the wizard are total contract values
+    // Both minTotalPrice and maxTotalPrice from the wizard are total contract values
     // (not per-unit prices). Do NOT multiply by quantity.
     const orderQty = priceQuantity.minOrderQuantity || 1;
-    const targetTotalPrice = priceQuantity.targetUnitPrice;
-    const maxTotalPrice = priceQuantity.maxAcceptablePrice;
+    const targetTotalPrice = (priceQuantity as any).minTotalPrice ?? (priceQuantity as any).minUnitPrice ?? priceQuantity.targetUnitPrice;
+    const maxTotalPrice = (priceQuantity as any).maxTotalPrice ?? (priceQuantity as any).maxUnitPrice ?? priceQuantity.maxAcceptablePrice;
 
     // Calculate concession step based on total price range
     const priceRange = maxTotalPrice - targetTotalPrice;
