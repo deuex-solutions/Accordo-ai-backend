@@ -1,7 +1,7 @@
 import env from "./config/env.js";
 import logger from "./config/logger.js";
 import { connectDatabase } from "./config/database.js";
-import createExpressApp from "./loaders/express.js";
+import createExpressApp from "./config/express.js";
 import "./models/index.js";
 import {
   startDeadlineScheduler,

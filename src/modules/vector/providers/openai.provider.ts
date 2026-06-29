@@ -5,8 +5,8 @@
 
 import OpenAI from 'openai';
 import logger from '../../../config/logger.js';
-import { EmbeddingProvider } from './embedding-provider.interface.js';
-import type { EmbeddingProviderConfig } from './embedding-provider.interface.js';
+import { EmbeddingProvider } from './provider.factory.js';
+import type { EmbeddingProviderConfig } from './provider.factory.js';
 import type { EmbeddingServiceHealth } from '../vector.types.js';
 
 export class OpenAIEmbeddingProvider extends EmbeddingProvider {

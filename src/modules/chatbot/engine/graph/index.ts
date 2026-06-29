@@ -23,8 +23,8 @@ import { stateManagementNode } from "./nodes/state-management.js";
 
 import { AIMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
-import { ChatbotDeal } from "../../../../models/chatbot-deal.js";
-import { ChatbotTemplate } from "../../../../models/chatbot-template.js";
+import { ChatbotDeal } from "../../../../models/chatbot/chatbot-deal.js";
+import { ChatbotTemplate } from "../../../../models/chatbot/chatbot-template.js";
 import { generateConversationMessage } from "../../convo/conversation-templates.js";
 import {
   classifyVendorIntent,

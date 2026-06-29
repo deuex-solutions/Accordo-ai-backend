@@ -16,7 +16,7 @@ import {
 import { DEFAULT_WEIGHTS } from '../../../src/modules/chatbot/engine/types.js';
 import {
   buildNegotiationIntent,
-} from '../../../src/negotiation/intent/build-negotiation-intent.js';
+} from '../../../src/modules/chatbot/engine/build-negotiation-intent.js';
 import type { WizardConfig, ExtendedOffer } from '../../../src/modules/chatbot/engine/types.js';
 
 // ─────────────────────────────────────────────

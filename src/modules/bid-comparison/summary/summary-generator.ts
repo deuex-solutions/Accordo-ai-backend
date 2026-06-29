@@ -1,4 +1,4 @@
-import { ChatSummaryMetrics } from '../../../models/vendor-bid.js';
+import { ChatSummaryMetrics } from '../../../models/vendor/vendor-bid.js';
 import llmService from '../../../services/llm.service.js';
 import logger from '../../../config/logger.js';
 

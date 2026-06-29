@@ -1,8 +1,8 @@
 import { literal, QueryTypes } from 'sequelize';
 import models, { sequelize } from '../../models/index.js';
-import type { Requisition } from '../../models/requisition.js';
-import type { RequisitionProduct } from '../../models/requisition-product.js';
-import type { RequisitionAttachment } from '../../models/requisition-attachment.js';
+import type { Requisition } from '../../models/procurement/requisition.js';
+import type { RequisitionProduct } from '../../models/procurement/requisition-product.js';
+import type { RequisitionAttachment } from '../../models/procurement/requisition-attachment.js';
 import type { Transaction, WhereOptions } from 'sequelize';
 
 export interface RequisitionData {

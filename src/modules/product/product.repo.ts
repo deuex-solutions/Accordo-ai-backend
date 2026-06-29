@@ -1,5 +1,5 @@
 import models from '../../models/index.js';
-import type { Product } from '../../models/product.js';
+import type { Product } from '../../models/procurement/product.js';
 
 export interface ProductQueryOptions {
   where?: Record<string, unknown>;

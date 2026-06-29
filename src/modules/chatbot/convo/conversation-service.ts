@@ -39,8 +39,8 @@ import type {
   Explainability,
   ExtendedOffer,
 } from "../engine/types.js";
-import type { ChatbotDeal } from "../../../models/chatbot-deal.js";
-import type { ChatbotMessage } from "../../../models/chatbot-message.js";
+import type { ChatbotDeal } from "../../../models/chatbot/chatbot-deal.js";
+import type { ChatbotMessage } from "../../../models/chatbot/chatbot-message.js";
 import type {
   ConversationState,
   ProcessConversationMessageInput,
@@ -73,7 +73,7 @@ import {
   buildNegotiationIntent,
   getCurrencySymbol,
   humanRoundPrice,
-} from "../../../negotiation/intent/build-negotiation-intent.js";
+} from "../engine/build-negotiation-intent.js";
 import { buildArcSummary } from "../../../llm/arc-summary.js";
 import { renderNegotiationMessage } from "../../../llm/persona-renderer.js";
 import {
@@ -81,8 +81,8 @@ import {
   ValidationError,
 } from "../../../llm/validate-llm-output.js";
 import { getFallbackResponse } from "../../../llm/fallback-templates.js";
-import { simulateTypingDelay } from "../../../delivery/simulate-typing-delay.js";
-import { logNegotiationStep } from "../../../metrics/log-negotiation-step.js";
+import { simulateTypingDelay } from "./simulate-typing-delay.js";
+import { logNegotiationStep } from "./log-negotiation-step.js";
 import {
   transition,
   actionToEvent,
@@ -104,7 +104,7 @@ import type {
   ExtendedOffer as EngineExtendedOffer,
 } from "../engine/types.js";
 import type { SupportedCurrency } from "../../../services/currency.service.js";
-import type { NegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
+import type { NegotiationIntent } from "../engine/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Validated fallback helper
@@ -766,7 +766,7 @@ export async function processConversationMessage(
               delivery_date: vendorOffer.delivery_date ?? null,
               delivery_days: vendorOffer.delivery_days ?? null,
               currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
-            },
+            } as any,
             reasons: [
               ...decision.reasons,
               `Vendor firm signal: "${firmnessSignal.matched}". Last attempt at max_acceptable ${maxAcc}.`,
@@ -838,7 +838,7 @@ export async function processConversationMessage(
             total_price: counterPrice,
             payment_terms: vendorOffer.payment_terms,
             currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
-          },
+          } as any,
           reasons: [
             ...decision.reasons,
             "Overridden: vendor expressed rejection — cannot accept",
@@ -1110,7 +1110,7 @@ export async function processConversationMessage(
             delivery_date: null,
             delivery_days: null,
             currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
-          },
+          } as any,
           reasons: [
             ...decision.reasons,
             "MESO generation failed — fallback COUNTER",

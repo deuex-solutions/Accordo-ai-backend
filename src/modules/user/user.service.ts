@@ -6,9 +6,9 @@ import repo from "./user.repo.js";
 import authRepo from "../auth/auth.repo.js";
 import companyRepo from "../company/company.repo.js";
 import CustomError from "../../utils/custom-error.js";
-import { verifyJWT, generateJWT } from "../../middlewares/jwt.service.js";
+import { verifyJWT, generateJWT } from "../../middlewares/auth.middleware.js";
 import util from "../common/util.js";
-import { validateCreateUser } from "./user.validator.js";
+import { validateCreateUser } from "./user.routes.js";
 import env from "../../config/env.js";
 
 /**

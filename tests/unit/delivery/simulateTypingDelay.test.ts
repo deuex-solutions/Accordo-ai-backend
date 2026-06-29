@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { simulateTypingDelay } from "../../../src/delivery/simulate-typing-delay.js";
+import { simulateTypingDelay } from "../../../src/modules/chatbot/convo/simulate-typing-delay.js";
 
 describe("simulateTypingDelay – complexity scaling", () => {
   beforeEach(() => {

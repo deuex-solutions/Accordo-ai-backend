@@ -7,8 +7,8 @@
 
 import logger from '../../../config/logger.js';
 import { CustomError, NotFoundError } from '../../../utils/custom-error.js';
-import { ChatbotDeal } from '../../../models/chatbot-deal.js';
-import { ChatbotTemplate } from '../../../models/chatbot-template.js';
+import { ChatbotDeal } from '../../../models/chatbot/chatbot-deal.js';
+import { ChatbotTemplate } from '../../../models/chatbot/chatbot-template.js';
 import {
   generateConversationMessage,
   substituteVariables,
@@ -32,7 +32,7 @@ import {
   type VendorIntent,
   type RefusalType,
 } from './enhanced-convo-router.js';
-import { ChatbotMessage } from '../../../models/chatbot-message.js';
+import { ChatbotMessage } from '../../../models/chatbot/chatbot-message.js';
 import { checkScopeGuard } from '../engine/scope-guard.js';
 import { classifyError, getErrorFallbackResponse } from '../engine/error-recovery.js';
 import { sanitizeNegotiationHistory } from '../engine/history-sanitizer.js';

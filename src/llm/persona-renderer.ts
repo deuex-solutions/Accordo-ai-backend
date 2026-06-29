@@ -16,7 +16,7 @@
 import { generateCompletion } from "../services/openai.service.js";
 import { getFallbackResponse } from "./fallback-templates.js";
 import logger from "../config/logger.js";
-import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
+import type { NegotiationIntent } from "../modules/chatbot/engine/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Non-commercial context (safe to pass to LLM)

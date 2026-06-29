@@ -16,7 +16,7 @@
  * On failure: throws ValidationError so the caller can use a fallback template.
  */
 
-import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
+import type { NegotiationIntent } from "../modules/chatbot/engine/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Validation error

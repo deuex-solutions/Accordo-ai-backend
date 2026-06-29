@@ -172,6 +172,10 @@ const repo = {
       where: { user_id: userId },
     });
   },
+
+  createOtp: async (otpData: { user_id: number; for: string; otp: string; createdAt?: Date }): Promise<unknown> => {
+    return models.Otp.create(otpData);
+  },
 };
 
 export default repo;

@@ -34,7 +34,7 @@ import {
 import logger from "../../../config/logger.js";
 import * as negotiationLogger from "./negotiation-logger.js";
 import models from "../../../models/index.js";
-import type { ChatbotDeal } from "../../../models/chatbot-deal.js";
+import type { ChatbotDeal } from "../../../models/chatbot/chatbot-deal.js";
 
 // ============================================================================
 // Types

@@ -1,5 +1,24 @@
+import { randomUUID } from "crypto";
 import { Request, Response, NextFunction } from "express";
 import logger from "../config/logger.js";
+
+declare module "express-serve-static-core" {
+  interface Request {
+    id?: string;
+  }
+}
+
+export const requestIdMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  const incoming = (req.headers["x-request-id"] as string | undefined)?.trim();
+  const id = incoming && incoming.length <= 128 ? incoming : randomUUID();
+  req.id = id;
+  res.setHeader("x-request-id", id);
+  next();
+};
 
 interface RequestBody {
   [key: string]: unknown;

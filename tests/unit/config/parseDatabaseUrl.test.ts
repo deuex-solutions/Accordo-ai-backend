@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseDatabaseUrl } from '../../../src/utils/parse-database-url.js';
+import { parseDatabaseUrl } from '../../../src/config/parse-database-url.js';
 
 // ─────────────────────────────────────────────
 // Standard PostgreSQL URLs

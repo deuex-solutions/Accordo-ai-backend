@@ -33,7 +33,8 @@ import {
   getCurrencySymbol,
   buildNegotiationIntent,
   type NegotiationIntent,
-} from "../../negotiation/intent/build-negotiation-intent.js";
+} from "./engine/build-negotiation-intent.js";
+import { processConversationTurn } from "./convo/process-conversation-turn.js";
 import {
   validateLlmOutput,
   ValidationError,
@@ -94,8 +95,8 @@ import {
   extractValueFromOffer,
 } from "./engine/weighted-utility.js";
 import { DEFAULT_THRESHOLDS } from "./engine/types.js";
-import type { ChatbotDeal } from "../../models/chatbot-deal.js";
-import type { ChatbotMessage } from "../../models/chatbot-message.js";
+import type { ChatbotDeal } from "../../models/chatbot/chatbot-deal.js";
+import type { ChatbotMessage } from "../../models/chatbot/chatbot-message.js";
 import { chatCompletion } from "../../services/llm.service.js";
 import {
   captureVendorBid,
@@ -154,7 +155,7 @@ import { sanitizeNegotiationHistory } from "./engine/history-sanitizer.js";
 // Contract-Deal Status Sync
 // ============================================================================
 
-import type { ContractStatus } from "../../models/contract.js";
+import type { ContractStatus } from "../../models/procurement/contract.js";
 
 type DealStatusForSync =
   | "NEGOTIATING"
@@ -2497,7 +2498,7 @@ export const generatePMResponseAsyncService = async (
         );
 
         const { buildPaymentTermsPromptMessage } =
-          await import("../vendor-chat/structured-prompts.js");
+          await import("../vendor-chat/vendor-chat.service.js");
         const { content: promptContent, pendingPrompt } =
           buildPaymentTermsPromptMessage();
 
@@ -4568,10 +4569,7 @@ export const runDemoService = async (
     // Reset deal to initial state
     const resetDeal = await resetDealService(dealId);
 
-    // Validate deal mode is INSIGHTS
-    if (resetDeal.mode !== "INSIGHTS") {
-      throw new CustomError("Run demo only works in INSIGHTS mode", 400);
-    }
+
 
     // Import vendor agent (dynamic to avoid circular deps)
     const { generateVendorReply } = await import("./vendor/vendor-agent.js");
@@ -6976,19 +6974,44 @@ export const vendorSendMessageService = async (
       explainabilityJson: null,
     });
 
-    // Extract PM stance from wizard config
-    const pmStance = extractPmStance(deal);
+    // Process turn via LangGraph Agentic Orchestrator
+    let graphResult;
+    try {
+      graphResult = await processConversationTurn({
+        dealId,
+        vendorMessage: content,
+        userId,
+      });
+    } catch (graphErr) {
+      logger.warn("[VendorSendMessage] LangGraph turn processing failed, falling back to heuristic PM response", {
+        dealId,
+        error: (graphErr as Error).message,
+      });
+    }
 
-    // Generate AI-PM response
-    const pmDecision = generateAiPmResponse(
-      {
-        price: vendorOffer.total_price,
-        paymentTerms: vendorOffer.payment_terms,
-        deliveryDate: null, // TODO: Parse delivery date from message
-      },
-      pmStance,
-      deal.round,
-    );
+    // Extract PM stance for decision structure
+    const pmStance = extractPmStance(deal);
+    const pmDecision: AiPmDecision = (graphResult
+      ? {
+          action: (graphResult.accordoIntent === 'ACCEPT' ? 'ACCEPT' : graphResult.accordoIntent === 'WALK_AWAY' ? 'WALK_AWAY' : graphResult.accordoIntent === 'ESCALATE' ? 'ESCALATE' : 'COUNTER'),
+          utility: (graphResult.updatedState as any)?.lastUtilityScore ?? 0.7,
+          message: graphResult.accordoMessage,
+          reasoning: "Evaluated by LangGraph agentic decision workflow.",
+          counterOffer: (graphResult.updatedState as any)?.currentProposal ? {
+            price: (graphResult.updatedState as any).currentProposal.price,
+            paymentTerms: (graphResult.updatedState as any).currentProposal.paymentTerms || "Net 30",
+            deliveryDate: (graphResult.updatedState as any).currentProposal.deliveryDate || "",
+          } : undefined,
+        }
+      : generateAiPmResponse(
+          {
+            price: vendorOffer.total_price,
+            paymentTerms: vendorOffer.payment_terms,
+            deliveryDate: null,
+          },
+          pmStance,
+          deal.round,
+        )) as any;
 
     // Save PM response message
     const pmMessageId = uuidv4();

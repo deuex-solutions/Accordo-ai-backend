@@ -14,7 +14,7 @@
 import type {
   NegotiationIntent,
   VendorTone,
-} from "../negotiation/intent/build-negotiation-intent.js";
+} from "../modules/chatbot/engine/build-negotiation-intent.js";
 import { buildFingerprint } from "./phrasing-history.js";
 import { sanitizeText } from "./validate-llm-output.js";
 

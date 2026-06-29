@@ -14,7 +14,7 @@ import type {
   Offer,
   Decision,
 } from "./types.js";
-import type { ChatbotMessage } from "../../../models/chatbot-message.js";
+import type { ChatbotMessage } from "../../../models/chatbot/chatbot-message.js";
 
 /**
  * Initialize conversation state for a new deal

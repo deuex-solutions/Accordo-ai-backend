@@ -10,8 +10,8 @@ import * as chatbotService from '../chatbot.service.js';
 import { CustomError } from '../../../utils/custom-error.js';
 import logger from '../../../config/logger.js';
 import type { VendorScenario } from './types.js';
-import type { ChatbotMessage } from '../../../models/chatbot-message.js';
-import type { ChatbotDeal } from '../../../models/chatbot-deal.js';
+import type { ChatbotMessage } from '../../../models/chatbot/chatbot-message.js';
+import type { ChatbotDeal } from '../../../models/chatbot/chatbot-deal.js';
 import type { Offer } from '../engine/types.js';
 
 /**
@@ -74,10 +74,7 @@ export async function generateNextVendorMessage(
       throw new CustomError('Deal has been escalated to human', 400);
     }
 
-    // Validate deal mode is INSIGHTS (demo mode)
-    if (deal.mode !== 'INSIGHTS') {
-      throw new CustomError('Vendor simulation only works in INSIGHTS mode', 400);
-    }
+
 
     // Get last Accordo message to extract counter-offer
     const lastAccordoMessage = messages

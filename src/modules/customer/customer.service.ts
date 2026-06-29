@@ -2,7 +2,7 @@ import { Op } from 'sequelize';
 import repo from './customer.repo.js';
 import userRepo from '../user/user.repo.js';
 import { CustomError } from '../../utils/custom-error.js';
-import type { User } from '../../models/user.js';
+import type { User } from '../../models/auth/user.js';
 
 export interface PaginatedCustomersResponse {
   data: User[];

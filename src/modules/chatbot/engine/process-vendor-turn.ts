@@ -16,8 +16,8 @@ import type { Offer, Decision, Explainability } from "./types.js";
 import { sequelize } from "../../../config/database.js";
 import logger from "../../../config/logger.js";
 import models from "../../../models/index.js";
-import type { ChatbotDeal } from "../../../models/chatbot-deal.js";
-import type { ChatbotMessage } from "../../../models/chatbot-message.js";
+import type { ChatbotDeal } from "../../../models/chatbot/chatbot-deal.js";
+import type { ChatbotMessage } from "../../../models/chatbot/chatbot-message.js";
 
 // ============================================================================
 // Types
@@ -103,12 +103,7 @@ export async function processVendorTurn(
       vendorMessage,
     });
 
-    // 2. Validate mode
-    if (core.deal.mode !== "INSIGHTS") {
-      throw new Error(
-        `Deal ${dealId} is in ${core.deal.mode} mode. processVendorTurn only works for INSIGHTS mode.`,
-      );
-    }
+
 
     // 3. Generate template-based response (INSIGHTS mode)
     const accordoContent = generateAccordoResponse(

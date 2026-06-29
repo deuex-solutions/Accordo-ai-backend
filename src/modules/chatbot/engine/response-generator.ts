@@ -40,7 +40,7 @@ import type {
   OfferComponent,
 } from "./types.js";
 import type { NegotiationConfig } from "./utility.js";
-import { getCurrencySymbol } from "../../../negotiation/intent/build-negotiation-intent.js";
+import { getCurrencySymbol } from "./build-negotiation-intent.js";
 import {
   getProvidedComponents,
   getMissingComponents,

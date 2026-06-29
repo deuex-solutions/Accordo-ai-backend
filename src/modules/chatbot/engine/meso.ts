@@ -25,7 +25,7 @@ import type {
   NegotiationPhase,
 } from "./types.js";
 import { calculateWeightedUtilityFromResolved } from "./weighted-utility.js";
-import { humanRoundPrice } from "../../../negotiation/intent/build-negotiation-intent.js";
+import { humanRoundPrice } from "./build-negotiation-intent.js";
 import {
   formatCurrency,
   type SupportedCurrency,
@@ -504,9 +504,9 @@ function calculateBasePrice(
   }
   basePrice = Math.min(basePrice, maxAcceptablePrice);
 
-  // Apply convergence floor in case we have one but vendor is outside band.
-  if (hasFloor) {
-    basePrice = Math.max(basePrice, lastAccordoCounterPrice as number);
+  // Apply strict convergence floor whenever lastAccordoCounterPrice is provided
+  if (lastAccordoCounterPrice != null && lastAccordoCounterPrice > 0 && lastAccordoCounterPrice <= maxAcceptablePrice * 1.1) {
+    basePrice = Math.max(basePrice, lastAccordoCounterPrice);
   }
 
   return humanRoundPrice(Math.round(basePrice * 100) / 100);

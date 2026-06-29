@@ -11,21 +11,131 @@ import {
   generatePMResponseAsyncService,
   syncContractStatus,
 } from "../chatbot/chatbot.service.js";
-import type { Contract } from "../../models/contract.js";
-import type { ChatbotDeal } from "../../models/chatbot-deal.js";
-import type { ChatbotMessage } from "../../models/chatbot-message.js";
+import type { Contract } from "../../models/procurement/contract.js";
+import type { ChatbotDeal } from "../../models/chatbot/chatbot-deal.js";
+import type { ChatbotMessage } from "../../models/chatbot/chatbot-message.js";
 import {
   formatCurrency,
   type SupportedCurrency,
 } from "../../services/currency.service.js";
-import {
-  buildInitialDiscountPromptMessage,
-  buildVendorDiscountBubble,
-  buildDiscountAcknowledgement,
-  buildPaymentTermsPromptMessage,
-  buildVendorPaymentTermsBubble,
-  formatPaymentTermsLabel,
-} from "./structured-prompts.js";
+import { sanitizeText } from "../../llm/validate-llm-output.js";
+
+// ============================================================================
+// Shared types for structured prompts
+// ============================================================================
+
+export type StructuredPromptType = "discount_percent" | "payment_terms";
+
+export interface DiscountPendingPrompt {
+  type: "discount_percent";
+  discount: {
+    originalTotal: number;
+    currency: SupportedCurrency;
+  };
+}
+
+export interface PaymentTermsPendingPrompt {
+  type: "payment_terms";
+  paymentTerms: {
+    presets: number[];
+  };
+}
+
+export type PendingPrompt = DiscountPendingPrompt | PaymentTermsPendingPrompt;
+
+function pickRandom<T>(variations: readonly T[]): T {
+  return variations[Math.floor(Math.random() * variations.length)];
+}
+
+export function buildInitialDiscountPromptMessage(
+  grandTotal: number,
+  currency: SupportedCurrency,
+): { content: string; pendingPrompt: DiscountPendingPrompt } {
+  const totalText = formatCurrency(grandTotal, currency);
+  const variations = [
+    `Thank you for your quotation of ${totalText}.\n` +
+      `Before we discuss further, would you be willing to offer an initial discount on this total? Even a small concession would help us move forward quickly.`,
+
+    `Thanks for sharing your quotation of ${totalText}.\n` +
+      `As a first step, could you offer us an initial discount on this total? Any goodwill gesture on your side would go a long way in finalizing this deal.`,
+
+    `We've received your quotation of ${totalText} — thank you.\n` +
+      `Before we dive into the details, would you consider offering an initial discount as a gesture of partnership? It would really help us align quickly.`,
+  ];
+  return {
+    content: sanitizeText(pickRandom(variations)),
+    pendingPrompt: {
+      type: "discount_percent",
+      discount: { originalTotal: grandTotal, currency },
+    },
+  };
+}
+
+export function buildVendorDiscountBubble(percent: number): string {
+  if (percent === 0) {
+    const zero = [
+      `I would like to keep the current offer as it is.`,
+      `I am unable to offer an initial discount at this time.`,
+    ];
+    return pickRandom(zero);
+  }
+  const positive = [
+    `I am willing to offer ${percent}% discount.`,
+    `I can offer a ${percent}% discount on the total.`,
+    `How about a ${percent}% discount on my quotation?`,
+  ];
+  return pickRandom(positive);
+}
+
+export function buildDiscountAcknowledgement(
+  percent: number,
+  originalTotal: number,
+  discountedTotal: number,
+  currency: SupportedCurrency,
+): string {
+  if (percent === 0) {
+    return (
+      sanitizeText(
+        `Thank you, we'll work with the current offer of ${formatCurrency(originalTotal, currency)}.`,
+      ) + " "
+    );
+  }
+  return (
+    sanitizeText(
+      `Thank you for offering a ${percent}% discount, that brings your offer to ${formatCurrency(discountedTotal, currency)}.`,
+    ) + " "
+  );
+}
+
+export function buildPaymentTermsPromptMessage(): {
+  content: string;
+  pendingPrompt: PaymentTermsPendingPrompt;
+} {
+  const variations = [
+    `Thanks for the price. Could you share your preferred payment terms?`,
+    `Great, one more thing. What payment terms work best for you?`,
+    `Noted on the price. Please select the payment terms you can offer.`,
+  ];
+  return {
+    content: sanitizeText(pickRandom(variations)),
+    pendingPrompt: {
+      type: "payment_terms",
+      paymentTerms: { presets: [0, 30, 60, 90] },
+    },
+  };
+}
+
+export function buildVendorPaymentTermsBubble(days: number): string {
+  if (days === 0) {
+    return `I can offer immediate payment.`;
+  }
+  return `My payment terms are Net ${days}.`;
+}
+
+export function formatPaymentTermsLabel(days: number): string {
+  if (days === 0) return "Immediate";
+  return `Net ${days}`;
+}
 
 /**
  * Vendor Chat Service
@@ -1467,7 +1577,7 @@ export const submitInitialDiscountService = async (
   // Compute the effective (discounted) total — use humanRoundPrice so the
   // vendor sees a natural number (₹348,000 not ₹347,608.80).
   const { humanRoundPrice } = await import(
-    "../../negotiation/intent/build-negotiation-intent.js"
+    "../chatbot/engine/build-negotiation-intent.js"
   );
   const discountedTotal = humanRoundPrice(
     Math.round(originalTotal * (1 - percent / 100) * 100) / 100,

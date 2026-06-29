@@ -1,78 +1,85 @@
-import { Router } from "express";
-import type { Request, Response, NextFunction } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
+import { getUserService } from "../user/user.service.js";
 import {
-  createRole,
-  getAllRoles,
-  getRole,
-  updateRole,
-  deleteRole,
-} from "./role.controller.js";
+  createRoleService,
+  getRolesService,
+  deleteRoleService,
+  updateRoleService,
+  getRoleService,
+} from "./role.service.js";
 import {
   authMiddleware,
   checkPermission,
 } from "../../middlewares/auth.middleware.js";
+import { getParam } from "../../utils/types.js";
 
 const roleRouter = Router();
 const moduleId = 6;
 
-/**
- * Create a new role
- * Requires: Authentication + Create permission (level 3)
- */
+// ============================================================================
+// Endpoint Handlers & Routes
+// ============================================================================
+
 roleRouter.post(
   "/",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 3),
-  createRole,
+  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userData = await getUserService(req.context.userId);
+      const data = await createRoleService(req.body, userData);
+      res.status(201).json({ message: "Role created successfully", data });
+    } catch (error) { next(error); }
+  }
 );
 
-/**
- * Get all roles for the user's company
- * Requires: Authentication + Read permission (level 1)
- */
 roleRouter.get(
   "/",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getAllRoles,
+  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userData = await getUserService(req.context.userId);
+      const data = await getRolesService(userData.companyId);
+      res.status(201).json({ message: "Roles", data });
+    } catch (error) { next(error); }
+  }
 );
 
-/**
- * Get a specific role by ID
- * Requires: Authentication + Read permission (level 1)
- */
 roleRouter.get(
   "/:roleId",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 1),
-  getRole,
+  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 1),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await getRoleService(getParam(req.params.roleId));
+      res.status(201).json({ message: "Role", data });
+    } catch (error) { next(error); }
+  }
 );
 
-/**
- * Update a role
- * Requires: Authentication + Update permission (level 2)
- */
 roleRouter.put(
   "/:roleId",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 2),
-  updateRole,
+  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 2),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await updateRoleService(getParam(req.params.roleId), req.body, req.context.userId);
+      res.status(201).json({ message: "Role updated successfully", data });
+    } catch (error) { next(error); }
+  }
 );
 
-/**
- * Delete (archive) a role
- * Requires: Authentication + Delete permission (level 3)
- */
 roleRouter.delete(
   "/:roleId",
   authMiddleware,
-  (req: Request, res: Response, next: NextFunction) =>
-    checkPermission(req, res, next, moduleId, 3),
-  deleteRole,
+  (req: Request, res: Response, next: NextFunction) => checkPermission(req, res, next, moduleId, 3),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await deleteRoleService(getParam(req.params.roleId));
+      res.status(201).json({ message: "Role deleted successfully", data });
+    } catch (error) { next(error); }
+  }
 );
 
 export default roleRouter;

@@ -1,23 +1,38 @@
 /**
- * Embedding Provider Factory
- * Creates and initializes the appropriate embedding provider based on configuration.
+ * Embedding Provider Factory & Base Interfaces
  */
 
 import env from '../../../config/env.js';
 import logger from '../../../config/logger.js';
-import type { EmbeddingProvider, EmbeddingProviderConfig } from './embedding-provider.interface.js';
+import type { EmbeddingServiceHealth } from '../vector.types.js';
 
-/** Default models per provider when EMBEDDING_MODEL is not set */
+export interface EmbeddingProviderConfig {
+  model: string;
+  dimension: number;
+  timeout: number;
+  maxBatchSize: number;
+}
+
+export abstract class EmbeddingProvider {
+  abstract readonly providerName: string;
+  protected config: EmbeddingProviderConfig;
+
+  constructor(config: EmbeddingProviderConfig) {
+    this.config = config;
+  }
+
+  abstract initialize(): Promise<void>;
+  abstract embed(text: string, instruction?: string): Promise<number[]>;
+  abstract embedBatch(texts: string[], instruction?: string): Promise<number[][]>;
+  abstract checkHealth(): Promise<EmbeddingServiceHealth>;
+}
+
 const DEFAULT_MODELS: Record<string, string> = {
   openai: 'text-embedding-3-small',
   bedrock: 'amazon.titan-embed-text-v2:0',
   local: 'Xenova/bge-large-en-v1.5',
 };
 
-/**
- * Create and initialize an embedding provider based on environment config.
- * Uses dynamic imports so unused providers are never loaded.
- */
 export async function createEmbeddingProvider(): Promise<EmbeddingProvider> {
   const providerType = env.vector.embeddingProvider;
   const model = env.vector.embeddingModel || DEFAULT_MODELS[providerType] || DEFAULT_MODELS.local;

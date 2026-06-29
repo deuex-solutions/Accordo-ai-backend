@@ -5,7 +5,7 @@
 
 import logger from '../../config/logger.js';
 import type { EmbeddingServiceHealth } from './vector.types.js';
-import type { EmbeddingProvider } from './providers/embedding-provider.interface.js';
+import type { EmbeddingProvider } from './providers/provider.factory.js';
 import { createEmbeddingProvider } from './providers/provider.factory.js';
 
 const MAX_RETRIES = 3;

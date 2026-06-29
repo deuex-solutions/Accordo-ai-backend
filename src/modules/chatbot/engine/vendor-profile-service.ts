@@ -13,7 +13,7 @@ import type {
   ConcessionPatternsJson,
   MesoPreferencesJson,
   VendorNegotiationStyle,
-} from '../../../models/vendor-negotiation-profile.js';
+} from '../../../models/chatbot/vendor-negotiation-profile.js';
 
 /**
  * Deal outcome data for profile updates
@@ -66,7 +66,7 @@ export async function getOrCreateProfile(
   vendorId: number
 ): Promise<VendorNegotiationProfile> {
   // Dynamic import to avoid circular dependencies
-  const { VendorNegotiationProfile } = await import('../../../models/vendor-negotiation-profile.js');
+  const { VendorNegotiationProfile } = await import('../../../models/chatbot/vendor-negotiation-profile.js');
 
   let profile = await VendorNegotiationProfile.findOne({
     where: { vendorId },
@@ -92,7 +92,7 @@ export async function getOrCreateProfile(
 export async function getVendorProfileSummary(
   vendorId: number
 ): Promise<VendorProfileSummary | null> {
-  const { VendorNegotiationProfile } = await import('../../../models/vendor-negotiation-profile.js');
+  const { VendorNegotiationProfile } = await import('../../../models/chatbot/vendor-negotiation-profile.js');
 
   const profile = await VendorNegotiationProfile.findOne({
     where: { vendorId },
@@ -146,7 +146,7 @@ export async function updateProfileAfterDeal(
   outcome: DealOutcome,
   transaction?: Transaction
 ): Promise<VendorNegotiationProfile> {
-  const { VendorNegotiationProfile } = await import('../../../models/vendor-negotiation-profile.js');
+  const { VendorNegotiationProfile } = await import('../../../models/chatbot/vendor-negotiation-profile.js');
 
   const profile = await getOrCreateProfile(outcome.vendorId);
 
@@ -546,7 +546,7 @@ function updateResponseTimeStats(
 export async function getAllVendorProfiles(
   minDeals = 1
 ): Promise<VendorNegotiationProfile[]> {
-  const { VendorNegotiationProfile } = await import('../../../models/vendor-negotiation-profile.js');
+  const { VendorNegotiationProfile } = await import('../../../models/chatbot/vendor-negotiation-profile.js');
   const { Op } = await import('sequelize');
 
   return VendorNegotiationProfile.findAll({
@@ -566,7 +566,7 @@ export async function findSimilarVendors(
   vendorId: number,
   limit = 5
 ): Promise<VendorNegotiationProfile[]> {
-  const { VendorNegotiationProfile } = await import('../../../models/vendor-negotiation-profile.js');
+  const { VendorNegotiationProfile } = await import('../../../models/chatbot/vendor-negotiation-profile.js');
   const { Op } = await import('sequelize');
 
   const profile = await VendorNegotiationProfile.findOne({

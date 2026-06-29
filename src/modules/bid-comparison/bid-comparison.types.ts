@@ -1,7 +1,7 @@
-import type { BidStatus, DealStatus, ChatSummaryMetrics } from '../../models/vendor-bid.js';
-import type { TriggerType, TopBidInfo } from '../../models/bid-comparison.js';
-import type { SelectionMethod } from '../../models/vendor-selection.js';
-import type { NotificationType } from '../../models/vendor-notification.js';
+import type { BidStatus, DealStatus, ChatSummaryMetrics } from '../../models/vendor/vendor-bid.js';
+import type { TriggerType, TopBidInfo } from '../../models/vendor/bid-comparison.js';
+import type { SelectionMethod } from '../../models/vendor/vendor-selection.js';
+import type { NotificationType } from '../../models/vendor/vendor-notification.js';
 
 // Re-export types from models
 export type { BidStatus, DealStatus, ChatSummaryMetrics, TriggerType, TopBidInfo, SelectionMethod, NotificationType };

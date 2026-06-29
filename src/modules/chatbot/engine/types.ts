@@ -657,7 +657,7 @@ export const ACCORDO_DEFAULTS = {
   maxRounds: 50,                  // Feb 2026: Increased from 10 to 50 for extended negotiations
   walkawayThreshold: 20,          // 20%
   priority: 'MEDIUM' as 'HIGH' | 'MEDIUM' | 'LOW',
-  mode: 'CONVERSATION' as 'INSIGHTS' | 'CONVERSATION',
+  mode: 'CONVERSATION' as 'CONVERSATION',
 } as const;
 
 /**

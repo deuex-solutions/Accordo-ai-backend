@@ -1,5 +1,5 @@
 import models from '../../models/index.js';
-import type { User } from '../../models/user.js';
+import type { User } from '../../models/auth/user.js';
 import type { WhereOptions, FindOptions } from 'sequelize';
 
 export interface CustomerQueryOptions {
