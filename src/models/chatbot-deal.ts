@@ -19,7 +19,7 @@ export type DealStatus =
   | "ACCEPTED"
   | "WALKED_AWAY"
   | "ESCALATED";
-export type DealMode = "INSIGHTS" | "CONVERSATION";
+export type DealMode = "CONVERSATION";
 
 export class ChatbotDeal extends Model<
   InferAttributes<ChatbotDeal>,
@@ -122,7 +122,7 @@ export function initChatbotDealModel(sequelize: Sequelize): typeof ChatbotDeal {
         defaultValue: 0,
       },
       mode: {
-        type: DataTypes.ENUM("INSIGHTS", "CONVERSATION"),
+        type: DataTypes.ENUM("CONVERSATION"),
         allowNull: false,
         defaultValue: "CONVERSATION",
       },

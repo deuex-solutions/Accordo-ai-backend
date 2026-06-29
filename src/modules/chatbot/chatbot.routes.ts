@@ -300,15 +300,11 @@ chatbotRouter.get(
   controller.getBehavioralData
 );
 
-// ==================== Messaging (Merged INSIGHTS + CONVERSATION) ====================
+// ==================== Messaging (Conversational Negotiation) ====================
 
 /**
- * Send a message (unified endpoint for both modes)
+ * Send a message (Conversational Negotiation)
  * POST /api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/messages
- * Query: ?mode=INSIGHTS or ?mode=CONVERSATION
- *
- * - mode=INSIGHTS: Deterministic decision engine (processVendorMessage)
- * - mode=CONVERSATION: LLM-driven conversational (sendConversationMessage)
  */
 chatbotRouter.post(
   '/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/messages',

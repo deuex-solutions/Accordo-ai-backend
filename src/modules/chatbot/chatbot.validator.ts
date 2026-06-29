@@ -14,7 +14,7 @@ export const createDealSchema = Joi.object({
   }),
   counterparty: Joi.string().allow('', null).optional(),
   mode: Joi.string()
-    .valid('INSIGHTS', 'CONVERSATION')
+    .valid('CONVERSATION')
     .default('CONVERSATION')
     .optional(),
   templateId: Joi.string().uuid().allow(null).optional(),
@@ -34,9 +34,9 @@ export const createDealWithConfigSchema = Joi.object({
   }),
   counterparty: Joi.string().allow('', null).optional(),
   mode: Joi.string()
-    .valid('INSIGHTS', 'CONVERSATION')
-    .default('INSIGHTS')
-    .required(),
+    .valid('CONVERSATION')
+    .default('CONVERSATION')
+    .optional(),
   requisitionId: Joi.number().integer().positive().required().messages({
     'any.required': 'Requisition ID is required',
     'number.positive': 'Requisition ID must be positive',
@@ -242,15 +242,15 @@ export const nestedDealSchema = Joi.object({
 });
 
 /**
- * Schema for mode query parameter (merged INSIGHTS/CONVERSATION)
+ * Schema for mode query parameter
  */
 export const modeQuerySchema = Joi.object({
   mode: Joi.string()
-    .valid('INSIGHTS', 'CONVERSATION')
-    .default('INSIGHTS')
+    .valid('CONVERSATION')
+    .default('CONVERSATION')
     .optional()
     .messages({
-      'any.only': 'Mode must be either INSIGHTS or CONVERSATION',
+      'any.only': 'Mode must be CONVERSATION',
     }),
 });
 
@@ -261,7 +261,7 @@ export const listDealsQuerySchema = Joi.object({
   status: Joi.string()
     .valid('NEGOTIATING', 'ACCEPTED', 'WALKED_AWAY', 'ESCALATED')
     .optional(),
-  mode: Joi.string().valid('INSIGHTS', 'CONVERSATION').optional(),
+  mode: Joi.string().valid('CONVERSATION').optional(),
   archived: Joi.string().valid('true', 'false').optional(),
   deleted: Joi.string().valid('true', 'false').optional(),
   userId: Joi.number().integer().positive().optional(),

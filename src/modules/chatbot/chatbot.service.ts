@@ -324,7 +324,7 @@ async function updateVendorProfileOnDealCompletion(
 export interface CreateDealInput {
   title: string;
   counterparty?: string;
-  mode?: "INSIGHTS" | "CONVERSATION";
+  mode?: "CONVERSATION";
   templateId?: string;
   requisitionId?: number;
   contractId?: number;
@@ -339,7 +339,7 @@ export interface CreateDealWithConfigInput {
   // Basic info
   title: string;
   counterparty?: string;
-  mode: "INSIGHTS" | "CONVERSATION";
+  mode: "CONVERSATION";
   requisitionId: number;
   vendorId: number;
   priority: "HIGH" | "MEDIUM" | "LOW";
@@ -433,7 +433,7 @@ export interface DealWithMessages {
 
 export interface ListDealsFilters {
   status?: "NEGOTIATING" | "ACCEPTED" | "WALKED_AWAY" | "ESCALATED";
-  mode?: "INSIGHTS" | "CONVERSATION";
+  mode?: "CONVERSATION";
   archived?: boolean;
   deleted?: boolean;
   userId?: number;
@@ -1956,7 +1956,7 @@ export interface ProcessingState {
   /** Whether the extracted offer is complete (has both price and terms) */
   offerComplete: boolean;
   /** Deal mode that will be used for response generation */
-  mode: "INSIGHTS" | "CONVERSATION";
+  mode: "CONVERSATION";
 }
 
 /**
@@ -2102,11 +2102,11 @@ export const saveVendorMessageOnlyService = async (
     );
 
     // Build processing state for frontend loading indicators
-    const dealMode = (deal.mode as "INSIGHTS" | "CONVERSATION") || "INSIGHTS";
+    const dealMode = (deal.mode as "CONVERSATION") || "CONVERSATION";
     const offerIsComplete = accumulatedOffer.accumulation?.isComplete ?? false;
     const processingState: ProcessingState = {
       step: "analyzing_offer",
-      estimatedMs: dealMode === "CONVERSATION" ? 4000 : 1500,
+      estimatedMs: 4000,
       offerComplete: offerIsComplete,
       mode: dealMode,
     };

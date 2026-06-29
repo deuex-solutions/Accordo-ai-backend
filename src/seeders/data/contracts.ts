@@ -29,7 +29,7 @@ export interface ChatbotDealData {
   requisitionId: number;
   vendorId: number; // Vendor user ID
   contractId: number;
-  mode: 'CONVERSATION' | 'INSIGHTS';
+  mode: 'CONVERSATION';
   status: 'NEGOTIATING' | 'ACCEPTED' | 'WALKED_AWAY' | 'ESCALATED';
   round: number;
   createdById: number;

@@ -90,7 +90,7 @@ Use the \`/api/health/services\` endpoint to check the status of all backend ser
             id: { type: 'string', format: 'uuid' },
             title: { type: 'string', example: 'Office Supplies Negotiation' },
             status: { type: 'string', enum: ['NEGOTIATING', 'ACCEPTED', 'WALKED_AWAY', 'ESCALATED'] },
-            mode: { type: 'string', enum: ['INSIGHTS', 'CONVERSATION'] },
+            mode: { type: 'string', enum: ['CONVERSATION'] },
             currentRound: { type: 'integer', example: 3 },
             createdAt: { type: 'string', format: 'date-time' },
           },
