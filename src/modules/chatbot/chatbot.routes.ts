@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import * as controller from './chatbot.controller.js';
 import * as templateController from './template.controller.js';
-import * as vendorSimulatorController from './vendor/vendor-simulator.controller.js';
 import { authMiddleware, checkPermission } from '../../middlewares/auth.middleware.js';
 import {
   validateBody,
@@ -17,7 +16,6 @@ import {
   rfqIdSchema,
   rfqVendorSchema,
   nestedDealSchema,
-  modeQuerySchema,
   mesoSelectSchema,
   mesoOthersSchema,
   finalOfferConfirmSchema,
@@ -300,21 +298,16 @@ chatbotRouter.get(
   controller.getBehavioralData
 );
 
-// ==================== Messaging (Merged INSIGHTS + CONVERSATION) ====================
+// ==================== Messaging (CONVERSATION mode) ====================
 
 /**
- * Send a message (unified endpoint for both modes)
+ * Send a message in conversation mode
  * POST /api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/messages
- * Query: ?mode=INSIGHTS or ?mode=CONVERSATION
- *
- * - mode=INSIGHTS: Deterministic decision engine (processVendorMessage)
- * - mode=CONVERSATION: LLM-driven conversational (sendConversationMessage)
  */
 chatbotRouter.post(
   '/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/messages',
   authMiddleware,
   validateParams(nestedDealSchema),
-  validateQuery(modeQuerySchema),
   validateBody(processMessageSchema),
   controller.sendMessage
 );
@@ -427,30 +420,6 @@ chatbotRouter.post(
   authMiddleware,
   validateParams(nestedDealSchema),
   controller.retryDealEmail
-);
-
-// ==================== Vendor Simulation & Demo ====================
-
-/**
- * Generate simulated vendor message (autopilot)
- * POST /api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/simulate
- */
-chatbotRouter.post(
-  '/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/simulate',
-  authMiddleware,
-  validateParams(nestedDealSchema),
-  vendorSimulatorController.generateNextVendorMessage
-);
-
-/**
- * Run full demo negotiation
- * POST /api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/demo
- */
-chatbotRouter.post(
-  '/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/demo',
-  authMiddleware,
-  validateParams(nestedDealSchema),
-  controller.runDemo
 );
 
 /**

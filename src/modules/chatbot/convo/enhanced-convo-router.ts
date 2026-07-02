@@ -1,6 +1,9 @@
 /**
  * Enhanced Conversation Router
  *
+ * @deprecated Orphan — only referenced by process-conversation-turn.ts.
+ * Classifier logic moves to `pipeline/message-classifier.ts` (P0.1). Remove in P4 cleanup.
+ *
  * Sophisticated state machine for managing conversation flow with vendors.
  * Handles intent classification, refusal detection, small talk management,
  * and multi-turn context awareness.

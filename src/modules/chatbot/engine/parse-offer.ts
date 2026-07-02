@@ -536,6 +536,35 @@ function parsePaymentTermsFromText(text: string): {
  * no terms reference. The caller (chatbot.service.ts) then knows whether
  * to honor the requested terms in its counter.
  */
+/**
+ * Vendor proposes a meeting point / convergence price (not a question).
+ * e.g. "lets meet at 57500 at net 60", "happy to settle at ₹48,000"
+ */
+export function detectMeetingProposal(text: string): boolean {
+  if (!text?.trim()) return false;
+  const t = text.trim();
+  if (/\?/.test(t)) return false;
+
+  const patterns: RegExp[] = [
+    /\blet'?s\s+meet\s+at\b/i,
+    /\bwe\s+can\s+meet\s+at\b/i,
+    /\bcan\s+meet\s+at\b/i,
+    /\bmeet\s+(?:me\s+)?at\b/i,
+    /\bsettle\s+at\b/i,
+    /\bhappy\s+to\s+(?:meet|settle|do)\s+at\b/i,
+    /\bready\s+to\s+(?:meet|settle|close)\s+at\b/i,
+    /\blet'?s\s+(?:close|finalize|do)\s+at\b/i,
+    // Convergence statements (P0): "lets do 61000", "willing to do 59500"
+    /\blet'?s\s+do\b/i,
+    /\b(?:i\s*'?m\s+)?willing\s+to\s+do\b/i,
+    /\bmax\s+i\s+can\s+do\s+is\b/i,
+    /\b(?:my\s+)?(?:best|final)\s+(?:offer|price)\s+is\b/i,
+    /\bcan\s+do\s+[\d₹$]/i,
+  ];
+
+  return patterns.some((p) => p.test(t));
+}
+
 export function detectTermsRequest(text: string): {
   requestedDays: number;
   matchedText: string;

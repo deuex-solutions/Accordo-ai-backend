@@ -97,7 +97,7 @@ export const createMockProductNonGst = (overrides: any = {}) => ({
 
 export const createMockChatbotDeal = (overrides: any = {}) => ({
   title: 'Test Deal',
-  mode: 'INSIGHTS' as const,
+  mode: 'CONVERSATION' as const,
   status: 'NEGOTIATING' as const,
   round: 0,
   requisitionId: 1,

@@ -173,8 +173,8 @@ function generateInlineMessage(
  *
  * @param pmLastOffer - PM's last counter-offer (if any)
  * @param productCategory - Product category for context
- * @param pmTargetPrice - PM's target unit price (what PM wants to pay)
- * @param pmMaxPrice - PM's maximum acceptable price (PM's ceiling)
+ * @param pmTargetPrice - PM's minimum unit price (what PM wants to pay)
+ * @param pmMaxPrice - PM's maximum unit price (PM's ceiling)
  * @param quantity - Order quantity
  * @param locale - Locale for formatting
  * @param currency - Currency for formatting
@@ -263,7 +263,7 @@ export function generateVendorScenarios(
  * Generate messages for HARD scenario (maximize vendor profit)
  * @param vendorPrice - The vendor's asking price (above PM's max)
  * @param quantity - Order quantity
- * @param pmMaxPrice - PM's maximum acceptable price (for reference in message)
+ * @param pmMaxPrice - PM's maximum unit price (for reference in message)
  */
 function generateHardScenarioMessages(vendorPrice: number, quantity: number, pmMaxPrice: number): string[] {
   return [
@@ -278,7 +278,7 @@ function generateHardScenarioMessages(vendorPrice: number, quantity: number, pmM
  * UPDATED January 2026: Changed from Net 30 to Net 45 for better middle ground
  * @param vendorPrice - The vendor's asking price (slightly above PM's max)
  * @param quantity - Order quantity
- * @param pmMaxPrice - PM's maximum acceptable price (for reference in message)
+ * @param pmMaxPrice - PM's maximum unit price (for reference in message)
  */
 function generateMediumScenarioMessages(vendorPrice: number, quantity: number, pmMaxPrice: number): string[] {
   return [
@@ -292,7 +292,7 @@ function generateMediumScenarioMessages(vendorPrice: number, quantity: number, p
  * Generate messages for SOFT scenario (close to PM's max - quick close)
  * @param vendorPrice - The vendor's asking price (near PM's max)
  * @param quantity - Order quantity
- * @param pmMaxPrice - PM's maximum acceptable price (for reference)
+ * @param pmMaxPrice - PM's maximum unit price (for reference)
  * @param pmTerms - PM's preferred payment terms
  */
 function generateSoftScenarioMessages(vendorPrice: number, quantity: number, pmMaxPrice: number, pmTerms: string): string[] {
@@ -335,8 +335,8 @@ export interface AiPmDecision {
  * PM's negotiation stance from wizard config
  */
 export interface PmStance {
-  targetUnitPrice: number;
-  maxAcceptablePrice: number;
+  minTotalPrice: number;
+  maxTotalPrice: number;
   idealPaymentDays: number;
   maxPaymentDays: number;
   requiredDeliveryDate: string;
@@ -452,15 +452,15 @@ export function generateAiPmResponse(
  * Calculate utility for price component (0-1)
  */
 function calculatePriceUtility(vendorPrice: number, pmStance: PmStance): number {
-  if (vendorPrice <= pmStance.targetUnitPrice) {
+  if (vendorPrice <= pmStance.minTotalPrice) {
     return 1.0; // At or below target = perfect
   }
-  if (vendorPrice >= pmStance.maxAcceptablePrice) {
+  if (vendorPrice >= pmStance.maxTotalPrice) {
     return 0.0; // At or above max = zero utility
   }
   // Linear interpolation between target and max
-  const range = pmStance.maxAcceptablePrice - pmStance.targetUnitPrice;
-  const distance = vendorPrice - pmStance.targetUnitPrice;
+  const range = pmStance.maxTotalPrice - pmStance.minTotalPrice;
+  const distance = vendorPrice - pmStance.minTotalPrice;
   return 1.0 - (distance / range);
 }
 
@@ -516,8 +516,8 @@ function calculateDeliveryUtility(deliveryDate: string | null, pmStance: PmStanc
 function calculateCounterPrice(vendorPrice: number, pmStance: PmStance, round: number): number {
   // Start closer to target, move toward max over rounds
   const progressFactor = Math.min(round / pmStance.maxRounds, 0.8);
-  const range = pmStance.maxAcceptablePrice - pmStance.targetUnitPrice;
-  const counterPrice = pmStance.targetUnitPrice + (range * progressFactor * 0.6);
+  const range = pmStance.maxTotalPrice - pmStance.minTotalPrice;
+  const counterPrice = pmStance.minTotalPrice + (range * progressFactor * 0.6);
 
   // Don't offer more than vendor is asking
   return Math.round(Math.min(counterPrice, vendorPrice * 0.95) * 100) / 100;
@@ -535,7 +535,7 @@ export function generatePmOpeningOffer(
                        pmStance.idealPaymentDays <= 60 ? 'Net 60' : 'Net 90';
 
   return `Good day! I'm reaching out regarding our purchase of ${quantity} units of ${productName}. ` +
-         `Based on our budget and market analysis, I'd like to propose $${pmStance.targetUnitPrice.toFixed(2)} per unit ` +
+         `Based on our budget and market analysis, I'd like to propose $${pmStance.minTotalPrice.toFixed(2)} per unit ` +
          `with ${paymentTerms} payment terms. We need delivery by ${pmStance.requiredDeliveryDate}. ` +
          `What can you offer us?`;
 }

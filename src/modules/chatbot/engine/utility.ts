@@ -1,4 +1,9 @@
 import { Offer, Explainability, Decision, extractPaymentDays } from './types.js';
+import {
+  readEngineMaxTotalPrice,
+  readEngineMinTotalPrice,
+  resolveEngineTotalPriceBlock,
+} from './pricing-field-keys.js';
 
 /**
  * NegotiationConfig defines the parameters and thresholds for utility-based negotiations.
@@ -21,8 +26,14 @@ export interface NegotiationConfig {
       weight: number;
       direction: string;
       anchor: number;
-      target: number;
-      max_acceptable: number;
+      /** Minimum total contract price (canonical). Legacy key: `target`. */
+      min_total_price?: number;
+      /** Maximum total contract price (canonical). Legacy key: `max_acceptable`. */
+      max_total_price?: number;
+      /** @deprecated read-only legacy alias — use min_total_price */
+      target?: number;
+      /** @deprecated read-only legacy alias — use max_total_price */
+      max_acceptable?: number;
       concession_step: number;
     };
     payment_terms: {
@@ -55,13 +66,14 @@ export function priceUtility(config: NegotiationConfig, price: number) {
   // The anchor is our opening position (aggressive), target is what we actually want
   // This ensures we only ACCEPT when vendor meets or beats our target, not just our anchor
   // UPDATED Feb 2026: Now uses total_price instead of unit_price
-  const priceConfig = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
+  const priceConfig = resolveEngineTotalPriceBlock(config.parameters);
   if (!priceConfig) return 0;
-  const { target, max_acceptable } = priceConfig;
-  if (price <= target) return 1;  // At or below target = 100% utility
-  if (price >= max_acceptable) return 0;  // At or above max = 0% utility
-  // Linear interpolation between target and max_acceptable
-  return clamp01(1 - (price - target) / (max_acceptable - target));
+  const minTotalPrice = readEngineMinTotalPrice(priceConfig);
+  const maxTotalPrice = readEngineMaxTotalPrice(priceConfig);
+  if (price <= minTotalPrice) return 1;  // At or below minimum = 100% utility
+  if (price >= maxTotalPrice) return 0;  // At or above maximum = 0% utility
+  // Linear interpolation between min and max total price
+  return clamp01(1 - (price - minTotalPrice) / (maxTotalPrice - minTotalPrice));
 }
 
 /**
@@ -144,7 +156,7 @@ export function termsUtility(
 }
 
 export function totalUtility(config: NegotiationConfig, offer: Offer) {
-  const priceCfg = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
+  const priceCfg = resolveEngineTotalPriceBlock(config.parameters);
   const termsCfg = config.parameters?.payment_terms;
   const wP = priceCfg?.weight ?? 0.6;
   const wT = termsCfg?.weight ?? 0.4;
@@ -168,7 +180,7 @@ export function computeExplainability(
   vendorOffer: Offer,
   decision: Decision
 ): Explainability {
-  const priceCfg = config.parameters?.total_price ?? (config.parameters as any)?.unit_price;
+  const priceCfg = resolveEngineTotalPriceBlock(config.parameters);
   const termsCfg = config.parameters?.payment_terms;
   const wP = priceCfg?.weight ?? 0.6;
   const wT = termsCfg?.weight ?? 0.4;
@@ -216,8 +228,8 @@ export function computeExplainability(
       },
       totalPrice: {
         anchor: priceCfg?.anchor ?? 0,
-        target: priceCfg?.target ?? 0,
-        max: priceCfg?.max_acceptable ?? 0,
+        target: readEngineMinTotalPrice(priceCfg),
+        max: readEngineMaxTotalPrice(priceCfg),
         step: priceCfg?.concession_step ?? 0,
       },
       termOptions: [...(termsCfg?.options ?? ['Net 30', 'Net 60', 'Net 90'])],

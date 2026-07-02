@@ -239,52 +239,6 @@ export const listDeals = async (
 };
 
 /**
- * Process a vendor message (INSIGHTS mode)
- * POST /api/chatbot/deals/:dealId/messages
- */
-export const processVendorMessage = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
-  try {
-    const dealId = getParam(req.params.dealId);
-    const { content, role = "VENDOR" } = req.body;
-
-    if (!content) {
-      throw new CustomError("Message content is required", 400);
-    }
-
-    const result = await chatbotService.processVendorMessageService({
-      dealId,
-      content,
-      role,
-      userId: req.context.userId,
-    });
-
-    logger.info(
-      `Vendor message processed for deal ${dealId}: ${result.decision.action}`,
-    );
-
-    // Fetch updated deal and all messages to return to frontend
-    const dealWithMessages = await chatbotService.getDealService(dealId);
-
-    res.status(200).json({
-      message: "Message processed successfully",
-      data: {
-        deal: dealWithMessages.deal,
-        messages: dealWithMessages.messages,
-        latestMessage: result.message,
-        decision: result.decision,
-        explainability: result.explainability,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
  * Reset a deal (clear messages and state)
  * POST /api/chatbot/deals/:dealId/reset
  */
@@ -508,12 +462,12 @@ export const sendConversationMessage = async (
       throw new CustomError("Message content is required", 400);
     }
 
-    const { processConversationMessage } =
-      await import("./convo/conversation-service.js");
-    const result = await processConversationMessage({
+    const { runVendorTurnFromInternalApp } =
+      await import("./pipeline/vendor-turn-from-internal-app.js");
+    const result = await runVendorTurnFromInternalApp({
       dealId,
       vendorMessage: content,
-      userId,
+      dealOwnerUserId: userId,
     });
 
     res.status(200).json(result);
@@ -552,76 +506,6 @@ export const getConversationExplainability = async (
         message: "Explainability retrieved successfully",
         data: explainability,
       });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * ==================== DEMO MODE CONTROLLERS ====================
- */
-
-/**
- * Run full demo negotiation with autopilot vendor
- * POST /api/chatbot/deals/:dealId/run-demo
- *
- * Request body:
- * {
- *   "scenario": "HARD" | "SOFT" | "WALK_AWAY",
- *   "maxRounds"?: number  // Default: 10
- * }
- *
- * Response:
- * {
- *   "message": "Demo completed successfully",
- *   "data": {
- *     "deal": Deal,
- *     "messages": Message[],
- *     "steps": Array<{ vendorMessage, accordoMessage, round }>,
- *     "finalStatus": string,
- *     "totalRounds": number,
- *     "finalUtility": number | null
- *   }
- * }
- */
-export const runDemo = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
-  try {
-    const dealId = getParam(req.params.dealId);
-    const { scenario, maxRounds = 10 } = req.body;
-
-    if (!scenario) {
-      throw new CustomError("Scenario is required", 400);
-    }
-
-    const validScenarios = ["HARD", "MEDIUM", "SOFT", "WALK_AWAY"];
-    if (!validScenarios.includes(scenario)) {
-      throw new CustomError(
-        `Invalid scenario: ${scenario}. Must be one of: ${validScenarios.join(", ")}`,
-        400,
-      );
-    }
-
-    const result = await chatbotService.runDemoService(
-      dealId,
-      scenario,
-      maxRounds,
-    );
-
-    logger.info(`[RunDemo] Demo completed for deal ${dealId}`, {
-      scenario,
-      totalRounds: result.totalRounds,
-      finalStatus: result.finalStatus,
-      userId: req.context.userId,
-    });
-
-    res.status(200).json({
-      message: "Demo completed successfully",
-      data: result,
-    });
   } catch (error) {
     next(error);
   }
@@ -971,9 +855,8 @@ export const getRequisitionVendors = async (
 };
 
 /**
- * Unified message endpoint (merged INSIGHTS + CONVERSATION)
+ * Send a message in conversation mode
  * POST /api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/messages
- * Query: ?mode=INSIGHTS or ?mode=CONVERSATION
  */
 export const sendMessage = async (
   req: Request,
@@ -982,65 +865,33 @@ export const sendMessage = async (
 ): Promise<void> => {
   try {
     const dealId = getParam(req.params.dealId);
-    const { content, role = "VENDOR" } = req.body;
-    const { mode = "CONVERSATION" } = req.query;
+    const { content } = req.body;
 
     if (!content) {
       throw new CustomError("Message content is required", 400);
     }
 
-    if (mode === "CONVERSATION") {
-      // Use CONVERSATION mode (LLM-driven)
-      const { processConversationMessage } =
-        await import("./convo/conversation-service.js");
-      const result = await processConversationMessage({
-        dealId,
-        vendorMessage: content,
-        userId: req.context.userId,
-      });
+    const { runVendorTurnFromInternalApp } =
+      await import("./pipeline/vendor-turn-from-internal-app.js");
+    const result = await runVendorTurnFromInternalApp({
+      dealId,
+      vendorMessage: content,
+      dealOwnerUserId: req.context.userId,
+    });
 
-      // Fetch updated deal and all messages to return to frontend
-      // This matches the INSIGHTS mode response structure for consistent frontend handling
-      const dealWithMessages = await chatbotService.getDealService(dealId);
+    const dealWithMessages = await chatbotService.getDealService(dealId);
 
-      res.status(200).json({
-        message: "Message processed successfully",
-        data: {
-          deal: dealWithMessages.deal,
-          messages: dealWithMessages.messages,
-          latestMessage: result.data?.accordoMessage,
-          conversationState: result.data?.conversationState,
-          dealStatus: result.data?.dealStatus,
-          meso: result.data?.meso ?? null,
-        },
-      });
-    } else {
-      // Use INSIGHTS mode (deterministic engine)
-      const result = await chatbotService.processVendorMessageService({
-        dealId,
-        content,
-        role,
-        userId: req.context.userId,
-      });
-
-      logger.info(
-        `Vendor message processed for deal ${dealId}: ${result.decision.action}`,
-      );
-
-      // Fetch updated deal and all messages to return to frontend
-      const dealWithMessages = await chatbotService.getDealService(dealId);
-
-      res.status(200).json({
-        message: "Message processed successfully",
-        data: {
-          deal: dealWithMessages.deal,
-          messages: dealWithMessages.messages,
-          latestMessage: result.message,
-          decision: result.decision,
-          explainability: result.explainability,
-        },
-      });
-    }
+    res.status(200).json({
+      message: "Message processed successfully",
+      data: {
+        deal: dealWithMessages.deal,
+        messages: dealWithMessages.messages,
+        latestMessage: result.data?.accordoMessage,
+        conversationState: result.data?.conversationState,
+        dealStatus: result.data?.dealStatus,
+        meso: result.data?.meso ?? null,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -1154,29 +1005,23 @@ export const deleteDraft = async (
 // ============================================================================
 
 /**
- * Start negotiation - generates AI-PM's opening offer
+ * @deprecated Use vendor-chat bootstrap (enter → vendor-opening → pm-response).
  * POST /api/chatbot/requisitions/:rfqId/vendors/:vendorId/deals/:dealId/start-negotiation
  */
 export const startNegotiation = async (
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> => {
-  try {
-    const dealId = getParam(req.params.dealId);
-
-    const result = await chatbotService.startNegotiationService(dealId);
-
-    logger.info(
-      `Negotiation started for deal ${dealId} with AI-PM opening offer`,
-    );
-    res.status(200).json({
-      message: "Negotiation started successfully",
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
+  const dealId = getParam(req.params.dealId);
+  logger.warn(
+    `[Deprecated] start-negotiation called for deal ${dealId} — use vendor-chat enter/vendor-opening flow`,
+  );
+  res.status(410).json({
+    message:
+      "start-negotiation is deprecated. Negotiation opens via vendor-chat (PM welcome → vendor quote → PM counter).",
+    deprecated: true,
+  });
 };
 
 /**

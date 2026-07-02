@@ -191,6 +191,54 @@ const OPENER_POOL = [
 
 /**
  * Rewrite the opener of a message to avoid repeating the same first few words.
+ * Returns the original message when rewrite would drop required commercial content.
+ */
+export function safeRewriteOpener(
+  dealId: string,
+  action: string,
+  message: string,
+  guard?: { requiredPrice?: number; currencySymbol?: string },
+): string {
+  if (!hasRecentOpener(dealId, action, message)) {
+    return message;
+  }
+
+  const rewritten = rewriteOpener(dealId, action, message);
+
+  if (
+    guard?.requiredPrice != null &&
+    guard.currencySymbol &&
+    !messageIncludesPrice(rewritten, guard.requiredPrice, guard.currencySymbol)
+  ) {
+    return message;
+  }
+
+  if (hasRecentOpener(dealId, action, rewritten)) {
+    return message;
+  }
+
+  return rewritten;
+}
+
+function messageIncludesPrice(
+  text: string,
+  price: number,
+  symbol: string,
+): boolean {
+  const locale = symbol === "₹" ? "en-IN" : "en-US";
+  const formatted = price.toLocaleString(locale);
+  const noComma = formatted.replace(/,/g, "");
+  const plain = String(Math.round(price * 100) / 100);
+  return (
+    text.includes(formatted) ||
+    text.includes(noComma) ||
+    text.includes(plain) ||
+    text.includes(`${symbol}${plain}`)
+  );
+}
+
+/**
+ * Rewrite the opener of a message to avoid repeating the same first few words.
  * Strips the first sentence (up to the first period/comma/dash boundary) and
  * prepends a random opener from the pool that doesn't match recent history.
  *

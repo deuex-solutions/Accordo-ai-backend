@@ -32,16 +32,16 @@ const FIELD_LABELS: Record<string, string> = {
   subject: "Title",
   deliveryDate: "Delivery Date",
   negotiationClosureDate: "Negotiation Closure Date",
-  totalPrice: "Target Price",
-  totalMaxPrice: "Maximum Price",
+  minTotalPrice: "Minimum Price (Total)",
+  maxTotalPrice: "Maximum Price (Total)",
   maxDeliveryDate: "Maximum Delivery Date",
   payment_terms: "Payment Terms",
   net_payment_day: "Net Payment Days",
   pre_payment_percentage: "Pre-Payment Percentage",
   post_payment_percentage: "Post-Payment Percentage",
   qty: "Quantity",
-  targetPrice: "Target Price",
-  maximum_price: "Maximum Price",
+  minUnitPrice: "Minimum Unit Price",
+  maxUnitPrice: "Maximum Unit Price",
 };
 
 /**
@@ -145,8 +145,8 @@ export const calculateRequisitionDiff = (
     "subject",
     "deliveryDate",
     "negotiationClosureDate",
-    "totalPrice",
-    "totalMaxPrice",
+    "minTotalPrice",
+    "maxTotalPrice",
     "maxDeliveryDate",
     "payment_terms",
     "net_payment_day",
@@ -223,7 +223,7 @@ export const calculateRequisitionDiff = (
       });
     } else {
       // Compare product fields
-      const productFields = ["qty", "targetPrice", "maximum_price"];
+      const productFields = ["qty", "minUnitPrice", "maxUnitPrice"];
       const changes: FieldChange[] = [];
 
       for (const field of productFields) {
@@ -267,8 +267,8 @@ export const calculateRequisitionDiff = (
 /**
  * Generate a human-readable summary of changes for system messages.
  *
- * Internal/buyer view — includes strategy-sensitive fields (target price,
- * maximum price). Use generateVendorSafeChangeSummary() for vendor-facing
+ * Internal/buyer view — includes strategy-sensitive fields (minimum/maximum prices).
+ * Use generateVendorSafeChangeSummary() for vendor-facing
  * notifications.
  */
 export const generateChangeSummary = (diff: RequisitionDiff): string => {
@@ -305,18 +305,20 @@ export const generateChangeSummary = (diff: RequisitionDiff): string => {
 
 /**
  * Strategy-sensitive field labels that must NEVER appear in vendor-facing
- * notifications. Buyer's target price and max acceptable price are internal
+ * notifications. Buyer's minimum and maximum prices are internal
  * negotiation parameters — exposing them gives the vendor an anchor.
  */
 const STRATEGY_SENSITIVE_LABELS = new Set<string>([
-  "Target Price",
-  "Maximum Price",
+  "Minimum Unit Price",
+  "Maximum Unit Price",
+  "Minimum Price (Total)",
+  "Maximum Price (Total)",
 ]);
 
 /**
  * Vendor-safe summary of requisition changes.
  *
- * Strips out strategy-sensitive fields entirely (Target Price, Maximum Price).
+ * Strips out strategy-sensitive fields entirely (minimum/maximum price fields).
  * Returns null when nothing remains worth telling the vendor about — the
  * caller should skip the SYSTEM message in that case rather than send an
  * empty banner.

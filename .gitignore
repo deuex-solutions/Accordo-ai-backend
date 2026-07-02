@@ -39,3 +39,5 @@ yarn.lock
 # OpenMemory - IDE/Assistant specific rules
 .cursor/rules/openmemory.mdc
 openmemory.md
+
+/uploads/

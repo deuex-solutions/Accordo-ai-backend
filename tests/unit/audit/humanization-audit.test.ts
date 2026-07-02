@@ -39,6 +39,7 @@ describe("Humanization Audit — Sprint 1", () => {
         tone: "formal",
         targetPrice: 45000,
         maxAcceptablePrice: 55000,
+        currencyCode: "INR",
       });
       expect(intent.allowedDelivery).toBe("March 2026");
       expect(intent.allowedDelivery).not.toMatch(/^by /i);
@@ -56,6 +57,7 @@ describe("Humanization Audit — Sprint 1", () => {
         tone: "formal",
         targetPrice: 45000,
         maxAcceptablePrice: 55000,
+        currencyCode: "INR",
       });
       expect(intent.allowedDelivery).toBe(`March 15, ${nextYear}`);
     });
@@ -95,7 +97,7 @@ describe("Humanization Audit — Sprint 1", () => {
         currencyCode: "GBP",
       });
       const response =
-        "Thanks for the proposal. After review our counter is £50,000 total with Net 30 terms. We think this reflects fair pricing given our overall procurement guidelines and current market conditions across comparable engagements.";
+        "Thanks for the proposal. After review our counter is £50,000 total with Net 30 terms. We think this reflects fair pricing given our overall procurement guidelines and current market conditions across comparable engagements. We are keen to keep momentum on this order and hope the terms work on your side as well.";
       const sanitized = validateLlmOutput(response, intent);
       expect(sanitized).toContain("50,000");
     });
@@ -266,6 +268,7 @@ describe("Humanization Audit — Sprint 3", () => {
         tone: "formal",
         targetPrice: 45000,
         maxAcceptablePrice: 55000,
+        currencyCode: "INR",
         vendorMovement: "significant",
       });
       expect(intent.vendorMovement).toBe("significant");
@@ -282,6 +285,7 @@ describe("Humanization Audit — Sprint 3", () => {
         tone: "formal",
         targetPrice: 45000,
         maxAcceptablePrice: 55000,
+        currencyCode: "INR",
       });
       expect(intent.vendorMovement).toBeUndefined();
     });
@@ -299,6 +303,7 @@ describe("Humanization Audit — Sprint 3", () => {
         tone: "formal" as const,
         targetPrice: 45000,
         maxAcceptablePrice: 55000,
+        currencyCode: "INR",
       };
       const intent1 = buildNegotiationIntent({ ...base, roundNumber: 1 });
       const intent2 = buildNegotiationIntent({ ...base, roundNumber: 2 });

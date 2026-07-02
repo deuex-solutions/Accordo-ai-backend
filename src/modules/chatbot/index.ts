@@ -15,3 +15,6 @@ export * from './engine/config.js';
 export * from './engine/parse-offer.js';
 export * from './engine/utility.js';
 export * from './engine/decide.js';
+
+// Unified message pipeline (P0+)
+export * from './pipeline/index.js';

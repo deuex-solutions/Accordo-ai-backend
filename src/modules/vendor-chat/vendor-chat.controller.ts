@@ -5,12 +5,12 @@ import {
   editVendorQuote,
   getDealForVendor,
   vendorEnterChat,
+  ensureVendorOpeningMessage,
   vendorSendMessageInstant,
   generatePMResponse,
   selectMesoOptionService,
   submitOthersService,
   confirmFinalOfferService,
-  submitInitialDiscountService,
   submitPaymentTermsService,
 } from './vendor-chat.service.js';
 import {
@@ -23,7 +23,6 @@ import {
   mesoSelectSchema,
   mesoOthersSchema,
   finalOfferConfirmSchema,
-  submitDiscountSchema,
   submitPaymentTermsSchema,
 } from './vendor-chat.validator.js';
 import { CustomError } from '../../utils/custom-error.js';
@@ -174,12 +173,47 @@ export const enterChat = async (
     const result = await vendorEnterChat(value.uniqueToken);
 
     res.status(200).json({
-      message: result.openingMessage
-        ? 'Chat entered, opening message created'
+      message: result.pmWelcomeMessage
+        ? 'PM welcome message ready'
         : 'Chat entered',
       data: {
         deal: result.deal,
+        pmWelcomeMessage: result.pmWelcomeMessage,
         openingMessage: result.openingMessage,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Post vendor auto-quotation (step 2 — after PM welcome).
+ * POST /api/vendor-chat/vendor-opening
+ */
+export const postVendorOpening = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const uniqueToken = req.query.uniqueToken || req.body.uniqueToken;
+    const { error, value } = enterChatSchema.validate({ uniqueToken });
+    if (error) {
+      res.status(400).json({ message: error.details[0].message });
+      return;
+    }
+
+    const result = await ensureVendorOpeningMessage(value.uniqueToken);
+
+    res.status(200).json({
+      message: result.created
+        ? 'Vendor opening quotation posted'
+        : 'Vendor opening quotation already exists',
+      data: {
+        deal: result.deal,
+        vendorOpeningMessage: result.vendorOpeningMessage,
+        created: result.created,
       },
     });
   } catch (error) {
@@ -356,40 +390,6 @@ export const confirmFinalOffer = async (
 };
 
 /**
- * Submit initial discount (Feature 1)
- * POST /api/vendor-chat/discount
- */
-export const submitDiscount = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { error, value } = submitDiscountSchema.validate(req.body);
-    if (error) {
-      res.status(400).json({ message: error.details[0].message });
-      return;
-    }
-
-    const { uniqueToken, percent } = value;
-    const result = await submitInitialDiscountService(uniqueToken, percent);
-
-    res.status(200).json({
-      message: 'Discount submitted successfully',
-      data: {
-        vendorMessage: result.vendorMessage,
-        pmMessage: result.pmMessage,
-        decision: result.decision,
-        deal: result.deal,
-        meso: result.meso,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
  * Submit payment terms (Feature 2)
  * POST /api/vendor-chat/payment-terms
  */
@@ -429,11 +429,11 @@ export default {
   editQuote,
   getDeal,
   enterChat,
+  postVendorOpening,
   sendMessage,
   getPMResponse,
   selectMesoOption,
   submitOthers,
   confirmFinalOffer,
-  submitDiscount,
   submitPaymentTerms,
 };

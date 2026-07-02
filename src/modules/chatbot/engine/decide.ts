@@ -21,6 +21,13 @@ import {
   termsUtility,
   NegotiationConfig,
 } from "./utility.js";
+import {
+  readEngineMaxTotalPrice,
+  readEngineMinTotalPrice,
+  readPriceWeight,
+  resolveEngineTotalPriceBlock,
+  writeEngineTotalPriceFields,
+} from "./pricing-field-keys.js";
 import { getCurrencySymbol } from "../../../negotiation/intent/build-negotiation-intent.js";
 import {
   calculateWeightedUtility,
@@ -247,16 +254,16 @@ function calculateCounterPrice(
   round: number,
 ): number {
   // Defensive: handle missing total_price config
-  const priceParams = config.parameters?.total_price ??
-    ((config.parameters as Record<string, unknown>)
-      ?.unit_price as typeof config.parameters.total_price) ?? {
-      target: 1000,
-      max_acceptable: 1500,
+  const priceParams = resolveEngineTotalPriceBlock(config.parameters) ?? {
+      min_total_price: 1000,
+      max_total_price: 1500,
       anchor: 1000,
       concession_step: 50,
     };
-  const { target, max_acceptable, anchor, concession_step } = priceParams;
-  const priceRange = max_acceptable - target;
+  const { anchor, concession_step } = priceParams;
+  const minTotalPrice = readEngineMinTotalPrice(priceParams);
+  const maxTotalPrice = readEngineMaxTotalPrice(priceParams);
+  const priceRange = maxTotalPrice - minTotalPrice;
   const priority = config.priority || "MEDIUM";
 
   let counterPrice: number;
@@ -266,27 +273,27 @@ function calculateCounterPrice(
       // Maximize Savings: Counter at 15% of range above target (very aggressive)
       // Small concessions as rounds progress: starts at 10%, max 15%
       const aggressiveOffset = Math.min(0.15, 0.1 + round * 0.01); // 10% + 1% per round, max 15%
-      counterPrice = target + priceRange * aggressiveOffset;
+      counterPrice = minTotalPrice + priceRange * aggressiveOffset;
       break;
     }
     case "LOW": {
       // Quick Close: Counter at 55% of range above target
       // More willing to meet vendor halfway for faster closure
       const quickCloseOffset = Math.min(0.55, 0.5 + round * 0.01); // 50% + 1% per round, max 55%
-      counterPrice = target + priceRange * quickCloseOffset;
+      counterPrice = minTotalPrice + priceRange * quickCloseOffset;
       break;
     }
     case "MEDIUM":
     default: {
       // Fair Deal: Counter at 40% of range above target
       const balancedOffset = Math.min(0.4, 0.35 + round * 0.01); // 35% + 1% per round, max 40%
-      counterPrice = target + priceRange * balancedOffset;
+      counterPrice = minTotalPrice + priceRange * balancedOffset;
       break;
     }
   }
 
   // Never exceed max acceptable
-  counterPrice = Math.min(counterPrice, max_acceptable);
+  counterPrice = Math.min(counterPrice, maxTotalPrice);
 
   // Convergence adjustment (May 2026): the base formula uses a near-static
   // offset from target, so it barely moves after round 5. When the vendor
@@ -303,7 +310,7 @@ function calculateCounterPrice(
     const blendFactor = Math.min(0.5, 0.05 + round * 0.05);
     const blendedPrice = counterPrice + (midpoint - counterPrice) * blendFactor;
     // Only apply if blended price is still within our acceptable range
-    if (blendedPrice <= max_acceptable && blendedPrice > counterPrice) {
+    if (blendedPrice <= maxTotalPrice && blendedPrice > counterPrice) {
       counterPrice = blendedPrice;
     }
   }
@@ -313,10 +320,10 @@ function calculateCounterPrice(
     vendorOffer.total_price !== null &&
     counterPrice >= vendorOffer.total_price
   ) {
-    const effectiveMax = Math.min(vendorOffer.total_price, max_acceptable);
-    counterPrice = Math.round(((target + effectiveMax) / 2) * 100) / 100;
+    const effectiveMax = Math.min(vendorOffer.total_price, maxTotalPrice);
+    counterPrice = Math.round(((minTotalPrice + effectiveMax) / 2) * 100) / 100;
     if (counterPrice >= vendorOffer.total_price) {
-      counterPrice = target;
+      counterPrice = minTotalPrice;
     }
   }
 
@@ -329,14 +336,14 @@ function calculateCounterPrice(
     const minCounterPrice = vendorOffer.total_price * 0.88; // floor: 12% below vendor
     // Only apply the regression cap if the floor is within our max acceptable budget.
     // Otherwise, do not apply this floor so we can start countering below max_acceptable.
-    if (minCounterPrice <= max_acceptable) {
+    if (minCounterPrice <= maxTotalPrice) {
       counterPrice = Math.max(counterPrice, minCounterPrice);
     }
   }
 
   // Guard: counter price must never be 0 or negative — fall back to target
-  if (counterPrice <= 0 && target > 0) {
-    counterPrice = target;
+  if (counterPrice <= 0 && minTotalPrice > 0) {
+    counterPrice = minTotalPrice;
   }
 
   // Round to 2 decimal places
@@ -394,14 +401,13 @@ export function calculateDynamicCounter(
   adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): { price: number; terms: string; strategy: string } {
   // Defensive: handle missing total_price config
-  const priceParams = config.parameters?.total_price ??
-    ((config.parameters as Record<string, unknown>)
-      ?.unit_price as typeof config.parameters.total_price) ?? {
-      target: 1000,
-      max_acceptable: 1500,
+  const priceParams = resolveEngineTotalPriceBlock(config.parameters) ?? {
+      min_total_price: 1000,
+      max_total_price: 1500,
     };
-  const { target, max_acceptable } = priceParams;
-  const priceRange = max_acceptable - target;
+  const minTotalPrice = readEngineMinTotalPrice(priceParams);
+  const maxTotalPrice = readEngineMaxTotalPrice(priceParams);
+  const priceRange = maxTotalPrice - minTotalPrice;
   const priority = config.priority || "MEDIUM";
 
   // Use adaptive aggressiveness when available, otherwise fall back to static base
@@ -496,11 +502,11 @@ export function calculateDynamicCounter(
     concessionBonus +
     emphasisAdjustment +
     rejectionConcession;
-  let counterPrice = target + priceRange * totalOffset;
+  let counterPrice = minTotalPrice + priceRange * totalOffset;
   let priceCapped = false;
 
   // Never exceed max acceptable
-  counterPrice = Math.min(counterPrice, max_acceptable);
+  counterPrice = Math.min(counterPrice, maxTotalPrice);
 
   // ── Convergence blend: from round 3+, blend counter toward midpoint with vendor ──
   // This prevents the counter from staying flat at max_acceptable for many rounds.
@@ -513,7 +519,7 @@ export function calculateDynamicCounter(
     const midpoint = (counterPrice + vendorOffer.total_price) / 2;
     const blended = counterPrice + (midpoint - counterPrice) * blendFactor;
     // Blended price must still respect max_acceptable ceiling
-    counterPrice = Math.min(blended, max_acceptable);
+    counterPrice = Math.min(blended, maxTotalPrice);
   }
 
   // ── Minimum step guard: if counter equals our last counter, force at least 1% movement ──
@@ -527,7 +533,7 @@ export function calculateDynamicCounter(
       Math.abs(counterPrice - prevPmPriceForStep) < 0.01
     ) {
       const step = (vendorOffer.total_price - counterPrice) * 0.01;
-      counterPrice = Math.min(counterPrice + Math.max(step, 1), max_acceptable);
+      counterPrice = Math.min(counterPrice + Math.max(step, 1), maxTotalPrice);
     }
   }
 
@@ -538,11 +544,11 @@ export function calculateDynamicCounter(
     counterPrice >= vendorOffer.total_price
   ) {
     // Counter at midpoint between target and vendor's offer (or max_acceptable, whichever is lower)
-    const effectiveMax = Math.min(vendorOffer.total_price, max_acceptable);
-    counterPrice = Math.round(((target + effectiveMax) / 2) * 100) / 100;
-    // If midpoint is still above vendor's price, use target
+    const effectiveMax = Math.min(vendorOffer.total_price, maxTotalPrice);
+    counterPrice = Math.round(((minTotalPrice + effectiveMax) / 2) * 100) / 100;
+    // If midpoint is still above vendor's price, use minimum total price
     if (counterPrice >= vendorOffer.total_price) {
-      counterPrice = target;
+      counterPrice = minTotalPrice;
     }
     priceCapped = true;
   }
@@ -554,14 +560,14 @@ export function calculateDynamicCounter(
     const minCounterPrice = vendorOffer.total_price * 0.88;
     // Only apply the regression cap if the floor is within our max acceptable budget.
     // Otherwise, do not apply this floor so we can start countering below max_acceptable.
-    if (minCounterPrice <= max_acceptable) {
+    if (minCounterPrice <= maxTotalPrice) {
       counterPrice = Math.max(counterPrice, minCounterPrice);
     }
   }
 
   // Guard: counter price must never be 0 or negative — fall back to target
-  if (counterPrice <= 0 && target > 0) {
-    counterPrice = target;
+  if (counterPrice <= 0 && minTotalPrice > 0) {
+    counterPrice = minTotalPrice;
   }
 
   // Round to 2 decimal places
@@ -729,13 +735,11 @@ export function decideNextMove(
   }
 
   // Defensive: handle missing total_price config
-  const priceConfig = config.parameters?.total_price ??
-    ((config.parameters as Record<string, unknown>)
-      ?.unit_price as typeof config.parameters.total_price) ?? {
-      target: 1000,
-      max_acceptable: 1500,
+  const priceConfig = resolveEngineTotalPriceBlock(config.parameters) ?? {
+      min_total_price: 1000,
+      max_total_price: 1500,
     };
-  const max = priceConfig.max_acceptable;
+  const max = readEngineMaxTotalPrice(priceConfig);
   // Feb 2026: Minimum 10 rounds before walking away
   // Walk-away only happens after vendor shows rigidity (no concessions) for 10+ rounds
   const minRoundsBeforeWalkaway = 10;
@@ -807,7 +811,7 @@ export function decideNextMove(
   // the engine locking in an accidental give-away through either the
   // auto-accept-vs-last-counter path OR the utility-based accept path.
   {
-    const targetPrice = priceConfig.target;
+    const targetPrice = readEngineMinTotalPrice(priceConfig);
     const belowTarget =
       typeof targetPrice === "number" &&
       vendorOffer.total_price !== null &&
@@ -1148,9 +1152,7 @@ export function decideWithWeightedUtility(
     wizardConfig,
     legacyConfig
       ? {
-          total_price:
-            legacyConfig.parameters?.total_price ??
-            (legacyConfig.parameters as any)?.unit_price,
+          total_price: resolveEngineTotalPriceBlock(legacyConfig.parameters),
           accept_threshold: legacyConfig.accept_threshold,
           escalate_threshold: legacyConfig.escalate_threshold,
           walkaway_threshold: legacyConfig.walkaway_threshold,
@@ -1170,14 +1172,16 @@ export function decideWithWeightedUtility(
       walkaway_threshold: resolvedConfig.walkAwayThreshold,
       max_rounds: resolvedConfig.maxRounds,
       parameters: {
-        total_price: {
-          weight: resolvedConfig.weights.targetUnitPrice / 100,
-          direction: "minimize",
-          anchor: resolvedConfig.anchorPrice,
-          target: resolvedConfig.targetPrice,
-          max_acceptable: resolvedConfig.maxAcceptablePrice,
-          concession_step: resolvedConfig.concessionStep,
-        },
+        total_price: writeEngineTotalPriceFields(
+          resolvedConfig.minTotalPrice,
+          resolvedConfig.maxTotalPrice,
+          {
+            weight: readPriceWeight(resolvedConfig.weights) / 100,
+            direction: "minimize",
+            anchor: resolvedConfig.anchorPrice,
+            concession_step: resolvedConfig.concessionStep,
+          },
+        ),
         payment_terms: {
           weight: resolvedConfig.weights.paymentTermsRange / 100,
           options: ["Net 30", "Net 60", "Net 90"] as const,
@@ -1291,19 +1295,21 @@ export function decideWithWeightedUtility(
 
   // Log utility calculation
   negotiationLogger.logUtilityCalculation(
-    utilityResult.parameterUtilities["targetUnitPrice"]?.utility ?? 0,
+    utilityResult.parameterUtilities["minTotalPrice"]?.utility ?? 0,
     utilityResult.parameterUtilities["paymentTermsRange"]?.utility ?? 0,
     u,
     {
       parameters: {
-        total_price: {
-          weight: resolvedConfig.weights.targetUnitPrice / 100,
-          direction: "minimize",
-          anchor: resolvedConfig.anchorPrice,
-          target: resolvedConfig.targetPrice,
-          max_acceptable: resolvedConfig.maxAcceptablePrice,
-          concession_step: resolvedConfig.concessionStep,
-        },
+        total_price: writeEngineTotalPriceFields(
+          resolvedConfig.minTotalPrice,
+          resolvedConfig.maxTotalPrice,
+          {
+            weight: readPriceWeight(resolvedConfig.weights) / 100,
+            direction: "minimize",
+            anchor: resolvedConfig.anchorPrice,
+            concession_step: resolvedConfig.concessionStep,
+          },
+        ),
         payment_terms: {
           weight: resolvedConfig.weights.paymentTermsRange / 100,
           options: ["Net 30", "Net 60", "Net 90"] as const,
@@ -1338,7 +1344,7 @@ export function decideWithWeightedUtility(
   // Check if price exceeds max acceptable
   if (
     vendorOffer.total_price != null &&
-    vendorOffer.total_price > resolvedConfig.maxAcceptablePrice
+    vendorOffer.total_price > resolvedConfig.maxTotalPrice
   ) {
     // Only walk away if vendor is rigid after 10+ rounds
     if (round < minRoundsBeforeWalkaway || !vendorIsRigidWeighted) {
@@ -1354,7 +1360,7 @@ export function decideWithWeightedUtility(
         utilityScore: 0,
         counterOffer,
         reasons: [
-          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxTotalPrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
         ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
@@ -1372,7 +1378,7 @@ export function decideWithWeightedUtility(
       utilityScore: 0,
       counterOffer: null,
       reasons: [
-        `Price ${vendorOffer.total_price} > max acceptable ${resolvedConfig.maxAcceptablePrice} after ${round} rounds`,
+        `Price ${vendorOffer.total_price} > max total price ${resolvedConfig.maxTotalPrice} after ${round} rounds`,
       ],
       resolvedConfig,
     };
@@ -1611,7 +1617,7 @@ function generateCounterOffer(
   negotiationState?: NegotiationState | null,
   adaptiveStrategy?: AdaptiveStrategyResult | null,
 ): Offer {
-  const { priority, targetPrice, maxAcceptablePrice, priceRange } =
+  const { priority, minTotalPrice, maxTotalPrice, priceRange } =
     resolvedConfig;
 
   // Use adaptive aggressiveness when available
@@ -1638,7 +1644,7 @@ function generateCounterOffer(
 
   // Calculate counter price
   const totalOffset = baseAggressiveness + roundAdjustment + concessionBonus;
-  let counterPrice = targetPrice + priceRange * totalOffset;
+  let counterPrice = minTotalPrice + priceRange * totalOffset;
 
   // Never counter above vendor's offer
   if (vendorOffer.total_price != null) {
@@ -1646,7 +1652,7 @@ function generateCounterOffer(
   }
 
   // Never exceed max acceptable
-  counterPrice = Math.min(counterPrice, maxAcceptablePrice);
+  counterPrice = Math.min(counterPrice, maxTotalPrice);
 
   // Convergence blend (May 2026): the base formula uses a near-static offset
   // from target, so it barely moves after round 5. When the vendor has come
@@ -1663,7 +1669,7 @@ function generateCounterOffer(
     const blendFactor = Math.min(0.5, 0.10 + round * 0.07);
     const blendedPrice = counterPrice + (midpoint - counterPrice) * blendFactor;
     // Only apply if blended price is still within our acceptable range
-    if (blendedPrice <= maxAcceptablePrice && blendedPrice > counterPrice) {
+    if (blendedPrice <= maxTotalPrice && blendedPrice > counterPrice) {
       counterPrice = blendedPrice;
     }
   }
@@ -1691,7 +1697,7 @@ function generateCounterOffer(
         const stepped = lastPmCounter + onePercent;
         // Only apply if stepped price is still within bounds
         if (
-          stepped <= maxAcceptablePrice &&
+          stepped <= maxTotalPrice &&
           stepped < vendorOffer.total_price
         ) {
           counterPrice = stepped;

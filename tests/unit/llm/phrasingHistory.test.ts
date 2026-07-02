@@ -9,6 +9,7 @@ import {
   recordPhrasing,
   getPhrasings,
   hasRecentPhrasing,
+  safeRewriteOpener,
   _resetPhrasingHistoryForTests,
 } from "../../../src/llm/phrasing-history.js";
 
@@ -113,5 +114,51 @@ describe("recordPhrasing / getPhrasings", () => {
     recordPhrasing("", "COUNTER", "anything");
     recordPhrasing("deal-1", "COUNTER", "");
     expect(getPhrasings("deal-1")).toEqual([]);
+  });
+});
+
+describe("safeRewriteOpener", () => {
+  beforeEach(() => {
+    _resetPhrasingHistoryForTests();
+  });
+
+  it("returns original when rewrite would drop required price", () => {
+    const dealId = "deal-price-guard";
+    const original =
+      "From our side, we can work with ₹56,500 with Net 60. Thanks for sharing.";
+
+    recordPhrasing(
+      dealId,
+      "COUNTER",
+      "From our side, we can work with ₹55,000 with Net 45. Appreciate the update.",
+    );
+
+    const result = safeRewriteOpener(dealId, "COUNTER", original, {
+      requiredPrice: 56_500,
+      currencySymbol: "₹",
+    });
+
+    expect(result).toBe(original);
+    expect(result).toContain("₹56,500");
+  });
+
+  it("allows rewrite when price remains in the body", () => {
+    const dealId = "deal-price-ok";
+    const original =
+      "Thanks for the update. From our side, we can work with ₹57,500 at Net 60.";
+
+    recordPhrasing(
+      dealId,
+      "COUNTER",
+      "Thanks for the update. From our side, we can work with ₹56,000 at Net 45.",
+    );
+
+    const result = safeRewriteOpener(dealId, "COUNTER", original, {
+      requiredPrice: 57_500,
+      currencySymbol: "₹",
+    });
+
+    expect(result).not.toBe(original);
+    expect(result).toContain("₹57,500");
   });
 });

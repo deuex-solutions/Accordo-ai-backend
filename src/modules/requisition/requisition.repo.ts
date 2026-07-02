@@ -25,8 +25,8 @@ export interface RequisitionProductData {
   quantity?: number | null;
   qty?: number | null;
   unitPrice?: number | null;
-  targetPrice?: number | null;
-  maximum_price?: number | null;
+  minUnitPrice?: number | null;
+  maxUnitPrice?: number | null;
   gstType?: string;
   gstPercentage?: number | null;
   tds?: number | null;
@@ -349,7 +349,7 @@ const repo = {
         r."rfqId" as "rfqNumber",
         r.subject as title,
         p."projectName" as "projectName",
-        COALESCE(r."totalPrice", 0) as "estimatedValue",
+        COALESCE(r."minTotalPrice", 0) as "estimatedValue",
         COALESCE(product_counts.product_count, 0)::int as "productCount",
         COALESCE(vendor_counts.vendor_count, 0)::int as "vendorCount",
         r."negotiationClosureDate" as "negotiationClosureDate"

@@ -17,6 +17,8 @@
  */
 
 import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
+import { extractPaymentDays } from "../modules/chatbot/engine/types.js";
+import { hasNegotiatorGreeting, isFirstPmNegotiationRound } from "./first-pm-greeting.js";
 
 // ─────────────────────────────────────────────
 // Validation error
@@ -86,17 +88,29 @@ const STRATEGY_PROXIMITY =
 // the validator enforces them.
 // ─────────────────────────────────────────────
 
+const STANDARD_PM_BOUNDS = { min: 40, max: 150 };
+const COMPACT_ACCEPT_BOUNDS = { min: 15, max: 80 };
+
 const LENGTH_BOUNDS: Record<
   "ACCEPT" | "COUNTER" | "MESO" | "WALK_AWAY" | "ESCALATE" | "ASK_CLARIFY",
   { min: number; max: number }
 > = {
-  COUNTER: { min: 25, max: 110 },
-  MESO: { min: 25, max: 140 },
-  ACCEPT: { min: 8, max: 60 },
-  WALK_AWAY: { min: 20, max: 90 },
-  ESCALATE: { min: 20, max: 90 },
-  ASK_CLARIFY: { min: 10, max: 60 },
+  COUNTER: STANDARD_PM_BOUNDS,
+  MESO: STANDARD_PM_BOUNDS,
+  ACCEPT: STANDARD_PM_BOUNDS,
+  WALK_AWAY: STANDARD_PM_BOUNDS,
+  ESCALATE: STANDARD_PM_BOUNDS,
+  ASK_CLARIFY: STANDARD_PM_BOUNDS,
 };
+
+function resolveLengthBounds(
+  intent: NegotiationIntent,
+): { min: number; max: number } | null {
+  if (intent.action === "ACCEPT" && intent.compactAccept) {
+    return COMPACT_ACCEPT_BOUNDS;
+  }
+  return LENGTH_BOUNDS[intent.action as keyof typeof LENGTH_BOUNDS] ?? null;
+}
 
 // ─────────────────────────────────────────────
 // Soft filler phrases to strip
@@ -412,9 +426,9 @@ export function validateLlmOutput(
     }
   }
 
-  // Step 3: Adaptive per-action length bounds (replaces blanket 160-word cap).
+  // Step 3: Adaptive per-action length bounds (40–150 standard; compact ACCEPT 15–80).
   const action = intent.action;
-  const bounds = LENGTH_BOUNDS[action as keyof typeof LENGTH_BOUNDS];
+  const bounds = resolveLengthBounds(intent);
   const wordCount = countWords(sanitized);
   if (bounds) {
     if (wordCount > bounds.max) {
@@ -422,6 +436,16 @@ export function validateLlmOutput(
     }
     if (wordCount < bounds.min) {
       throw new ValidationError("too_short", "too_short");
+    }
+  }
+
+  if (
+    isFirstPmNegotiationRound(intent.roundNumber) &&
+    !intent.priorPmWelcomeSent &&
+    (action === "COUNTER" || action === "ACCEPT" || action === "ASK_CLARIFY")
+  ) {
+    if (!hasNegotiatorGreeting(sanitized)) {
+      throw new ValidationError("missing_greeting", "missing_greeting");
     }
   }
 
@@ -451,6 +475,35 @@ export function validateLlmOutput(
     });
     if (rogue.length > 0) {
       throw new ValidationError("unauthorized_price", "unauthorized_price");
+    }
+  }
+
+  // Step 4b: Payment terms must match intent (engine is source of truth).
+  if (action === "COUNTER" && intent.allowedPaymentTerms) {
+    const requiredDays = extractPaymentDays(intent.allowedPaymentTerms);
+    if (requiredDays != null) {
+      const netMentions = [
+        ...sanitized.matchAll(/\bnet\s*(\d+)\b/gi),
+      ].map((m) => parseInt(m[1], 10));
+      const hasRequired = netMentions.some((d) => d === requiredDays);
+      const hasWorseTerms = netMentions.some((d) => d > requiredDays);
+      if (!hasRequired || hasWorseTerms) {
+        throw new ValidationError("wrong_terms", "wrong_terms");
+      }
+    }
+  }
+
+  // Step 4c: Reject wrong currency symbol (e.g. $ when deal is INR).
+  if (
+    action === "COUNTER" &&
+    intent.currencySymbol &&
+    intent.allowedPrice != null
+  ) {
+    if (intent.currencySymbol === "₹" && /\$[\d,]/.test(sanitized)) {
+      throw new ValidationError("wrong_currency_symbol", "wrong_currency_symbol");
+    }
+    if (intent.currencySymbol === "$" && /₹[\d,]/.test(sanitized)) {
+      throw new ValidationError("wrong_currency_symbol", "wrong_currency_symbol");
     }
   }
 

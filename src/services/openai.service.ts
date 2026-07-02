@@ -244,6 +244,14 @@ export async function generateCompletion(
           message: lastError.message,
         });
 
+        // Don't retry quota exhaustion — fall through to Ollama / intent compose quickly.
+        if (
+          openaiError.code === "insufficient_quota" ||
+          lastError.message.includes("insufficient_quota")
+        ) {
+          break;
+        }
+
         // Don't retry on client errors (4xx) except rate limits (429)
         if (openaiError.status && openaiError.status >= 400 && openaiError.status < 500 && openaiError.status !== 429) {
           break;

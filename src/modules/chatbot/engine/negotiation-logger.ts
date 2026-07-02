@@ -9,6 +9,11 @@
 
 import type { Offer, Decision, BehavioralSignals, AdaptiveStrategyResult } from './types.js';
 import type { NegotiationConfig } from './utility.js';
+import {
+  readEngineMaxTotalPrice,
+  readEngineMinTotalPrice,
+  resolveEngineTotalPriceBlock,
+} from './pricing-field-keys.js';
 
 // ============================================================================
 // ANSI Color Codes for Terminal Output
@@ -164,12 +169,12 @@ export function logConfigThresholds(config: NegotiationConfig, priority: string)
     `  ${colorize('WALK_AWAY:', colors.brightRed)}  < ${formatPercent(walkawayThreshold)}`,
     '',
     `${colorize('Price Parameters:', colors.bold)}`,
-    `  Target:         ${formatCurrency((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.target ?? 0)}`,
-    `  Max Acceptable: ${formatCurrency((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.max_acceptable ?? 0)}`,
-    `  Anchor:         ${formatCurrency((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.anchor ?? 0)}`,
+    `  Min Total Price:  ${formatCurrency(readEngineMinTotalPrice(resolveEngineTotalPriceBlock(config.parameters)))}`,
+    `  Max Total Price:  ${formatCurrency(readEngineMaxTotalPrice(resolveEngineTotalPriceBlock(config.parameters)))}`,
+    `  Anchor:         ${formatCurrency(resolveEngineTotalPriceBlock(config.parameters)?.anchor ?? 0)}`,
     '',
     `${colorize('Weights:', colors.bold)}`,
-    `  Price:  ${formatPercent((config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.weight ?? 0.6)}`,
+    `  Price:  ${formatPercent(resolveEngineTotalPriceBlock(config.parameters)?.weight ?? 0.6)}`,
     `  Terms:  ${formatPercent(config.parameters?.payment_terms?.weight ?? 0.4)}`,
   ];
 
@@ -185,7 +190,8 @@ export function logUtilityCalculation(
   totalUtility: number,
   config: NegotiationConfig
 ): void {
-  const priceWeight = (config.parameters?.total_price ?? (config.parameters as any)?.unit_price)?.weight ?? 0.6;
+  const priceBlock = resolveEngineTotalPriceBlock(config.parameters);
+  const priceWeight = priceBlock?.weight ?? 0.6;
   const termsWeight = config.parameters?.payment_terms?.weight ?? 0.4;
 
   const weightedPrice = priceUtility * priceWeight;

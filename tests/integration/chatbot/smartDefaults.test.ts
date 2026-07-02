@@ -323,4 +323,81 @@ describe('Smart Defaults Service - Date Extraction', () => {
       expect(result.delivery.negotiationClosureDate).toBe('2030-12-31');
     });
   });
+
+  describe("RFQ total price bounds", () => {
+    it("returns requisition minTotalPrice and maxTotalPrice for wizard prefill", async () => {
+      requisition = await models.Requisition.create(
+        createMockRequisition({
+          projectId: project.id,
+          minTotalPrice: 39_900,
+          maxTotalPrice: 59_900,
+        }),
+      );
+
+      await models.RequisitionProduct.create(
+        createMockRequisitionProduct({
+          requisitionId: requisition.id,
+          productId: product.id,
+          targetPrice: 400,
+          maximum_price: 480,
+          qty: 100,
+        }),
+      );
+
+      const result = await getSmartDefaultsService(requisition.id, user.id);
+
+      expect(result.priceQuantity.minTotalPrice).toBe(39_900);
+      expect(result.priceQuantity.maxTotalPrice).toBe(59_900);
+    });
+
+    it("uses summed product totals when RFQ header totals are absent", async () => {
+      requisition = await models.Requisition.create(
+        createMockRequisition({
+          projectId: project.id,
+          minTotalPrice: null,
+          maxTotalPrice: null,
+        }),
+      );
+
+      await models.RequisitionProduct.create(
+        createMockRequisitionProduct({
+          requisitionId: requisition.id,
+          productId: product.id,
+          targetPrice: 500,
+          maximum_price: 600,
+          qty: 100,
+        }),
+      );
+
+      const result = await getSmartDefaultsService(requisition.id, user.id);
+
+      expect(result.priceQuantity.minTotalPrice).toBe(50_000);
+      expect(result.priceQuantity.maxTotalPrice).toBe(60_000);
+    });
+
+    it("uses product sums when RFQ header stores unit price by mistake", async () => {
+      requisition = await models.Requisition.create(
+        createMockRequisition({
+          projectId: project.id,
+          minTotalPrice: 399,
+          maxTotalPrice: null,
+        }),
+      );
+
+      await models.RequisitionProduct.create(
+        createMockRequisitionProduct({
+          requisitionId: requisition.id,
+          productId: product.id,
+          minUnitPrice: 399,
+          maxUnitPrice: 599,
+          qty: 100,
+        }),
+      );
+
+      const result = await getSmartDefaultsService(requisition.id, user.id);
+
+      expect(result.priceQuantity.minTotalPrice).toBe(39_900);
+      expect(result.priceQuantity.maxTotalPrice).toBe(59_900);
+    });
+  });
 });

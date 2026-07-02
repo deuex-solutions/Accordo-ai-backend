@@ -440,17 +440,17 @@ export async function downloadPdfHandler(
 
     currentY += statBoxHeight + 20;
 
-    if (detail.priceRange.targetPrice || detail.priceRange.maxAcceptablePrice) {
+    if (detail.priceRange.minTotalPrice || detail.priceRange.maxTotalPrice) {
       doc.rect(margin, currentY, contentWidth, 35).fill('#eff6ff');
       doc.rect(margin, currentY, contentWidth, 35).stroke('#bfdbfe');
       doc.fontSize(10).fillColor(colors.primary);
       let priceText = '';
-      if (detail.priceRange.targetPrice) {
-        priceText += `Target Price: $${detail.priceRange.targetPrice.toLocaleString()}`;
+      if (detail.priceRange.minTotalPrice) {
+        priceText += `Minimum Price (Total): $${detail.priceRange.minTotalPrice.toLocaleString()}`;
       }
-      if (detail.priceRange.maxAcceptablePrice) {
+      if (detail.priceRange.maxTotalPrice) {
         priceText += priceText ? '   |   ' : '';
-        priceText += `Max Acceptable: $${detail.priceRange.maxAcceptablePrice.toLocaleString()}`;
+        priceText += `Maximum Price (Total): $${detail.priceRange.maxTotalPrice.toLocaleString()}`;
       }
       doc.text(priceText, margin + 15, currentY + 12, { lineBreak: false });
       currentY += 45;
@@ -633,7 +633,7 @@ export async function downloadPdfHandler(
           const savings = detail.priceRange.highest - selectedBid.finalPrice;
           const savingsPercent = ((savings / detail.priceRange.highest) * 100).toFixed(1);
           const vsAverage = detail.priceRange.average ? (detail.priceRange.average - selectedBid.finalPrice) : null;
-          const vsTarget = detail.priceRange.targetPrice ? (detail.priceRange.targetPrice - selectedBid.finalPrice) : null;
+          const vsTarget = detail.priceRange.minTotalPrice ? (detail.priceRange.minTotalPrice - selectedBid.finalPrice) : null;
 
           const analysisBoxWidth = (contentWidth - 30) / 4;
           const analysisBoxHeight = 70;
@@ -971,8 +971,8 @@ export async function downloadPdfHandler(
       const lowestPrice = detail.priceRange.lowest ?? 0;
       const highestPrice = detail.priceRange.highest ?? 0;
       const spread = highestPrice - lowestPrice;
-      const targetDiff = detail.priceRange.targetPrice && lowestPrice > 0
-        ? detail.priceRange.targetPrice - lowestPrice : null;
+      const targetDiff = detail.priceRange.minTotalPrice && lowestPrice > 0
+        ? detail.priceRange.minTotalPrice - lowestPrice : null;
       drawRecBox(
         margin + (recBoxWidth + 10) * 3, currentY,
         'Savings Potential',
@@ -1012,7 +1012,7 @@ export async function downloadPdfHandler(
                 vendors: vendorDataForLlm,
                 lowestPrice: detail.priceRange.lowest,
                 highestPrice: detail.priceRange.highest,
-                targetPrice: detail.priceRange.targetPrice,
+                minTotalPrice: detail.priceRange.minTotalPrice,
               }),
             },
           ],

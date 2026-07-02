@@ -210,7 +210,7 @@ export const testDatabaseConnection = async (
         rfqId: r.rfqId,
         subject: r.subject,
         status: r.status,
-        totalPrice: r.totalPrice,
+        totalPrice: r.minTotalPrice,
       }));
     }
 

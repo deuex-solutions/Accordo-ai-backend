@@ -29,8 +29,20 @@ const CURRENCY_SYMBOL_MAP: Record<string, string> = {
   AUD: "A$",
 };
 
-export function getCurrencySymbol(code?: string): string {
-  return CURRENCY_SYMBOL_MAP[(code || "USD").toUpperCase()] || "$";
+export function getCurrencySymbol(code: string): string {
+  const normalized = code.trim().toUpperCase();
+  const symbol = CURRENCY_SYMBOL_MAP[normalized];
+  if (!symbol) {
+    throw new Error(`Unsupported currency code: ${code}`);
+  }
+  return symbol;
+}
+
+function requireCurrencyCode(code?: string | null): string {
+  if (!code?.trim()) {
+    throw new Error("currencyCode is required");
+  }
+  return code.trim().toUpperCase();
 }
 
 /**
@@ -38,9 +50,9 @@ export function getCurrencySymbol(code?: string): string {
  * Uses en-IN for INR (₹3,55,000) and en-US for others ($355,000).
  * Strips .00 decimals for whole numbers.
  */
-function formatPriceForDisplay(amount: number, currencyCode?: string): string {
-  const code = (currencyCode || "USD").toUpperCase();
-  const symbol = CURRENCY_SYMBOL_MAP[code] || "$";
+function formatPriceForDisplay(amount: number, currencyCode: string): string {
+  const code = requireCurrencyCode(currencyCode);
+  const symbol = getCurrencySymbol(code);
   const locale = code === "INR" ? "en-IN" : "en-US";
   const isWhole = amount === Math.floor(amount);
   const formatted = amount.toLocaleString(locale, {
@@ -241,6 +253,9 @@ export interface NegotiationIntent {
   /** 1-indexed round number. Persona-renderer suppresses greetings when > 1. */
   roundNumber?: number;
 
+  /** Standalone PM WELCOME already sent — first COUNTER skips salutation/charter. */
+  priorPmWelcomeSent?: boolean;
+
   /**
    * Recent phrasing fingerprints already used in this deal — the renderer
    * passes these to the LLM and the fallback selector uses them to avoid
@@ -269,6 +284,25 @@ export interface NegotiationIntent {
    * Only set when the vendor has stated a price.
    */
   vendorPriceFormatted?: string;
+
+  /**
+   * Deterministic persuasion seed for COUNTER — LLM synthesizes rhetoric around this angle.
+   * Never contains utility scores, targets, or internal numbers.
+   */
+  persuasionBrief?: PersuasionBrief;
+
+  /**
+   * When true (ACCEPT and vendor at/below max total), validator uses shorter bounds.
+   */
+  compactAccept?: boolean;
+}
+
+export type PersuasionAngle = "partnership" | "philosophy" | "economics";
+
+export interface PersuasionBrief {
+  angle: PersuasionAngle;
+  vendorMovedTowardUs: boolean;
+  gapNarrative?: "small" | "moderate" | "significant";
 }
 
 /**
@@ -476,9 +510,13 @@ export interface BuildIntentInput {
   tone: VendorTone;
   /** MESO offer variants from the engine (only used for MESO action) */
   mesoOffers?: MesoOfferVariant[];
-  /** PM's target price — used to validate allowedPrice boundary */
+  /** PM minimum total price — canonical boundary for allowedPrice validation */
+  minTotalPrice?: number;
+  /** PM maximum total price — canonical boundary for allowedPrice validation */
+  maxTotalPrice?: number;
+  /** @deprecated use minTotalPrice */
   targetPrice?: number;
-  /** PM's maximum acceptable price — used to validate allowedPrice boundary */
+  /** @deprecated use maxTotalPrice */
   maxAcceptablePrice?: number;
   /**
    * The primary negotiation parameter with the lowest utility, for COUNTER responses only.
@@ -486,20 +524,26 @@ export interface BuildIntentInput {
    * Computed in conversationService from parameterUtilities before calling buildNegotiationIntent.
    */
   weakestPrimaryParameter?: "price" | "terms" | "delivery";
-  /** Currency code from the negotiation config (e.g. "USD", "INR"). Defaults to "USD". */
-  currencyCode?: string;
+  /** Currency code from RFQ / deal commercial context (required). */
+  currencyCode: string;
 
   // ── Humanization signals (Apr 2026) — all optional, additive ─────────────
   /** Deterministic vendor-style signals from tone-detector.detectVendorStyle(). */
   vendorStyle?: VendorStyleSignals;
   /** 1-indexed round number; round 1 allows greetings, > 1 suppresses them. */
   roundNumber?: number;
+  /** PM WELCOME message already in thread before first COUNTER. */
+  priorPmWelcomeSent?: boolean;
   /** Recent phrasing fingerprints for this deal — see src/llm/phrasing-history.ts. */
   phrasingHistory?: string[];
   /** Vendor questions previously asked but not yet answered. */
   openQuestions?: Array<{ question: string; askedAtRound: number }>;
   /** Vendor price-movement signal: 'significant', 'moderate', 'minor', or undefined. */
   vendorMovement?: "significant" | "moderate" | "minor";
+  /** Rotating persuasion angle for COUNTER — LLM expands rhetorically. */
+  persuasionBrief?: PersuasionBrief;
+  /** Shorter ACCEPT when vendor is at or below max total price. */
+  compactAccept?: boolean;
 }
 
 /**
@@ -520,6 +564,8 @@ export function buildNegotiationIntent(
     concerns,
     tone,
     mesoOffers,
+    minTotalPrice: inputMinTotalPrice,
+    maxTotalPrice: inputMaxTotalPrice,
     targetPrice,
     maxAcceptablePrice,
     weakestPrimaryParameter,
@@ -529,6 +575,9 @@ export function buildNegotiationIntent(
     phrasingHistory,
     openQuestions,
   } = input;
+
+  const minTotalPrice = inputMinTotalPrice ?? targetPrice;
+  const maxTotalPrice = inputMaxTotalPrice ?? maxAcceptablePrice;
 
   // Determine if this is a MESO action (overrides base action when variants present)
   const finalAction: NegotiationAction =
@@ -542,31 +591,36 @@ export function buildNegotiationIntent(
     input.roundNumber,
   );
 
+  const resolvedCurrency = requireCurrencyCode(currencyCode);
+
   const intent: NegotiationIntent = {
     action: finalAction,
     firmness,
     commercialPosition,
     acknowledgeConcerns: concerns,
     vendorTone: tone,
-    currencySymbol: getCurrencySymbol(currencyCode),
+    currencySymbol: getCurrencySymbol(resolvedCurrency),
   };
 
   // Forward humanization signals when supplied. Hard boundary still holds:
   // none of these contain utility scores, weights, thresholds, or config.
   if (vendorStyle) intent.vendorStyle = vendorStyle;
   if (roundNumber != null) intent.roundNumber = roundNumber;
+  if (input.priorPmWelcomeSent) intent.priorPmWelcomeSent = true;
   if (phrasingHistory && phrasingHistory.length > 0)
     intent.phrasingHistory = phrasingHistory;
   if (openQuestions && openQuestions.length > 0)
     intent.openQuestions = openQuestions;
   if (input.vendorMovement) intent.vendorMovement = input.vendorMovement;
+  if (input.persuasionBrief) intent.persuasionBrief = input.persuasionBrief;
+  if (input.compactAccept) intent.compactAccept = true;
 
   // Format the vendor's last stated price for display (May 2026).
   // The LLM echoes this exact string instead of inventing its own formatting.
   if (vendorStyle?.lastVendorPrice != null && vendorStyle.lastVendorPrice > 0) {
     intent.vendorPriceFormatted = formatPriceForDisplay(
       vendorStyle.lastVendorPrice,
-      input.currencyCode,
+      resolvedCurrency,
     );
   }
 
@@ -574,21 +628,21 @@ export function buildNegotiationIntent(
   if (finalAction === "COUNTER" && counterPrice != null) {
     let resolved = resolveAllowedPrice(
       counterPrice,
-      targetPrice,
-      maxAcceptablePrice,
+      minTotalPrice,
+      maxTotalPrice,
     );
-    // Guard: never allow $0 counter-offer — fall back to target price
-    if (resolved != null && resolved <= 0 && targetPrice && targetPrice > 0) {
-      resolved = targetPrice;
+    // Guard: never allow $0 counter-offer — fall back to minimum total price
+    if (resolved != null && resolved <= 0 && minTotalPrice && minTotalPrice > 0) {
+      resolved = minTotalPrice;
     }
     if (resolved != null) {
       let humanPrice = humanRoundPrice(resolved);
-      if (maxAcceptablePrice != null && humanPrice > maxAcceptablePrice) {
-        humanPrice = maxAcceptablePrice;
+      if (maxTotalPrice != null && humanPrice > maxTotalPrice) {
+        humanPrice = maxTotalPrice;
       }
       intent.allowedPrice = humanPrice;
-      // Flag when we're at the ceiling (counter equals max_acceptable)
-      if (maxAcceptablePrice != null && Math.abs(humanPrice - maxAcceptablePrice) < 0.01) {
+      // Flag when we're at the ceiling (counter equals max total price)
+      if (maxTotalPrice != null && Math.abs(humanPrice - maxTotalPrice) < 0.01) {
         intent.atCeiling = true;
       }
     }

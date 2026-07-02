@@ -92,6 +92,13 @@ export const createMessage = async (
   return models.ChatbotMessage.create(messageData as any, { transaction });
 };
 
+export const findMessageById = async (
+  messageId: string,
+  transaction?: Transaction
+): Promise<ChatbotMessage | null> => {
+  return models.ChatbotMessage.findByPk(messageId, { transaction });
+};
+
 export const deleteMessagesByDealId = async (
   dealId: string,
   transaction?: Transaction
@@ -134,6 +141,7 @@ export default {
   deleteDeal,
   findMessagesByDealId,
   createMessage,
+  findMessageById,
   deleteMessagesByDealId,
   findLastMessageWithExplainability,
   countMessagesByDealId,

@@ -33,6 +33,12 @@ import {
 } from "../engine/weighted-utility.js";
 import { buildConfigFromRequisition } from "../chatbot.service.js";
 import type { NegotiationConfig } from "../engine/utility.js";
+import {
+  readEngineMaxTotalPrice,
+  readEngineMinTotalPrice,
+  resolveEngineTotalPriceBlock,
+} from "../engine/pricing-field-keys.js";
+import { getPriceBoundariesFromDeal } from "../pipeline/load-negotiation-config-from-deal.js";
 import type {
   Offer,
   Decision,
@@ -106,6 +112,38 @@ import type {
 import type { SupportedCurrency } from "../../../services/currency.service.js";
 import type { NegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
 
+function maxTotalPriceFromConfig(config: NegotiationConfig): number | undefined {
+  const block = resolveEngineTotalPriceBlock(config.parameters);
+  if (!block) return undefined;
+  const max = readEngineMaxTotalPrice(block, Number.NaN);
+  return Number.isNaN(max) ? undefined : max;
+}
+
+function resolveDealPriceBoundaries(deal: ChatbotDeal): {
+  minTotalPrice?: number;
+  maxTotalPrice?: number;
+} {
+  const boundaries = getPriceBoundariesFromDeal(deal);
+  return {
+    minTotalPrice: boundaries.minTotalPrice,
+    maxTotalPrice: boundaries.maxTotalPrice,
+  };
+}
+
+async function ensureConversationMode(deal: ChatbotDeal): Promise<void> {
+  if (deal.mode === "CONVERSATION") {
+    return;
+  }
+
+  const previousMode = deal.mode;
+  await deal.update({
+    mode: "CONVERSATION",
+    convoStateJson: deal.convoStateJson ?? { phase: "GREETING", history: [] },
+  });
+
+  logger.info(`Migrated deal ${deal.id} from ${previousMode} to CONVERSATION`);
+}
+
 // ─────────────────────────────────────────────
 // Validated fallback helper
 // ─────────────────────────────────────────────
@@ -177,13 +215,8 @@ export async function startConversation(
       );
     }
 
-    // Conversation mode only
-    if (deal.mode !== "CONVERSATION") {
-      throw new CustomError(
-        "This operation is only available in CONVERSATION mode",
-        400,
-      );
-    }
+    // Conversation mode only (legacy INSIGHTS deals are migrated on read)
+    await ensureConversationMode(deal);
 
     // Check if already started
     const messageCount = deal.Messages?.length || 0;
@@ -308,13 +341,8 @@ export async function processConversationMessage(
       );
     }
 
-    // Conversation mode only
-    if (deal.mode !== "CONVERSATION") {
-      throw new CustomError(
-        "This operation is only available in CONVERSATION mode",
-        400,
-      );
-    }
+    // Conversation mode only (legacy INSIGHTS deals are migrated on read)
+    await ensureConversationMode(deal);
 
     // Cannot modify terminal deals
     if (deal.status !== "NEGOTIATING") {
@@ -602,11 +630,7 @@ export async function processConversationMessage(
       // max_acceptable after round 5+, close the deal. A human PM wouldn't
       // keep countering over a trivial gap after that many rounds. Strategy
       // lives here (conversation-service), never in the engine or LLM.
-      const maxAcceptableForProximity =
-        config.parameters?.total_price?.max_acceptable ??
-        ((config.parameters as any)?.unit_price?.max_acceptable as
-          | number
-          | undefined);
+      const maxAcceptableForProximity = maxTotalPriceFromConfig(config);
       if (
         decision.action === "COUNTER" &&
         !isVendorAffirmative &&
@@ -706,17 +730,13 @@ export async function processConversationMessage(
       const firmnessSignal = isVendorAffirmative
         ? { isFirm: false, matched: null }
         : detectStrictFirmness(vendorMessage);
-      const priceParamsForFirm =
-        config.parameters?.total_price ??
-        ((config.parameters as any)?.unit_price as
-          | { target: number; max_acceptable: number }
-          | undefined);
+      const priceParamsForFirm = resolveEngineTotalPriceBlock(config.parameters);
       if (
         firmnessSignal.isFirm &&
         vendorOffer.total_price != null &&
         priceParamsForFirm
       ) {
-        const maxAcc = priceParamsForFirm.max_acceptable;
+        const maxAcc = readEngineMaxTotalPrice(priceParamsForFirm);
         if (vendorOffer.total_price <= maxAcc) {
           // Within budget — accept the firm price
           logger.info(
@@ -814,13 +834,13 @@ export async function processConversationMessage(
           },
         );
         // Generate a counter-offer instead of accepting
-        const priceConfig =
-          config.parameters?.total_price ??
-          (config.parameters as any)?.unit_price;
+        const priceConfig = resolveEngineTotalPriceBlock(config.parameters);
         let counterPrice = priceConfig
           ? humanRoundPrice(
-              priceConfig.target +
-                (priceConfig.max_acceptable - priceConfig.target) * 0.5,
+              readEngineMinTotalPrice(priceConfig) +
+                (readEngineMaxTotalPrice(priceConfig) -
+                  readEngineMinTotalPrice(priceConfig)) *
+                  0.5,
             )
           : humanRoundPrice(vendorOffer.total_price * 0.9);
         // Never counter above vendor's offer
@@ -880,7 +900,7 @@ export async function processConversationMessage(
             key: string;
             label: "price" | "terms" | "delivery";
           }> = [
-            { key: "targetUnitPrice", label: "price" },
+            { key: "minTotalPrice", label: "price" },
             { key: "paymentTerms", label: "terms" },
             { key: "deliveryDate", label: "delivery" },
           ];
@@ -917,11 +937,7 @@ export async function processConversationMessage(
     // 7a-endgame. Early endgame check: resolve maxAcceptable + endgame state
     //            so the MESO section below can act on endgame flags.
     const earlyConvoState = (deal.convoStateJson as any) || {};
-    const earlyStoredConfig = deal.negotiationConfigJson as any;
-    const earlyMaxAcceptable: number | undefined =
-      earlyStoredConfig?.parameters?.total_price?.max_acceptable ??
-      earlyStoredConfig?.wizardConfig?.priceQuantity?.maxAcceptablePrice ??
-      undefined;
+    const { maxTotalPrice: earlyMaxAcceptable } = resolveDealPriceBoundaries(deal);
     const earlyVendorPrice = vendorOffer.total_price;
     const earlyRound = deal.round + 1;
     const earlyEndgamePhase: string = earlyConvoState.endgamePhase ?? "NORMAL";
@@ -1088,11 +1104,9 @@ export async function processConversationMessage(
         !mesoResult &&
         (decision.action === "MESO" || (decision.action as string) === "MESO")
       ) {
-        const priceParams =
-          config.parameters?.total_price ??
-          (config.parameters as any)?.unit_price;
-        const target = priceParams?.target ?? 0;
-        const maxAcceptable = priceParams?.max_acceptable ?? 0;
+        const priceParams = resolveEngineTotalPriceBlock(config.parameters);
+        const target = readEngineMinTotalPrice(priceParams);
+        const maxAcceptable = readEngineMaxTotalPrice(priceParams);
         const counterPrice =
           target > 0
             ? Math.round((target + (maxAcceptable - target) * 0.4) * 100) / 100
@@ -1233,15 +1247,11 @@ export async function processConversationMessage(
     const vendorConcerns = extractVendorConcerns(vendorMessage);
 
     // 11. Resolve price boundaries for intent builder (used to clamp allowedPrice)
-    const storedConfig = deal.negotiationConfigJson as any;
-    const targetPrice: number | undefined =
-      storedConfig?.parameters?.total_price?.target ??
-      storedConfig?.wizardConfig?.priceQuantity?.targetUnitPrice ??
-      undefined;
-    const maxAcceptablePrice: number | undefined =
-      storedConfig?.parameters?.total_price?.max_acceptable ??
-      storedConfig?.wizardConfig?.priceQuantity?.maxAcceptablePrice ??
-      undefined;
+    const storedConfig = deal.negotiationConfigJson as Record<string, unknown> | null;
+    const {
+      minTotalPrice: boundaryMin,
+      maxTotalPrice: boundaryMax,
+    } = resolveDealPriceBoundaries(deal);
 
     // 11a. Endgame flow state machine (May 2026).
     //      When vendor price is above max but within 10%, orchestrate a structured
@@ -1265,15 +1275,15 @@ export async function processConversationMessage(
     const endgameCounterRounds: number = convoState.endgameCounterRounds ?? 0;
 
     if (
-      maxAcceptablePrice != null &&
+      maxTotalPrice != null &&
       vendorPrice != null &&
       vendorPrice > 0
     ) {
       const overMaxPercent =
-        (vendorPrice - maxAcceptablePrice) / maxAcceptablePrice;
+        (vendorPrice - maxTotalPrice) / maxTotalPrice;
 
       // ── Vendor at or below max → ACCEPT ──
-      if (vendorPrice <= maxAcceptablePrice) {
+      if (vendorPrice <= maxTotalPrice) {
         decision.action = "ACCEPT";
         decision.counterOffer = {
           ...(decision.counterOffer || {}),
@@ -1304,7 +1314,7 @@ export async function processConversationMessage(
           decision.action = "COUNTER";
           decision.counterOffer = {
             ...(decision.counterOffer || {}),
-            total_price: maxAcceptablePrice,
+            total_price: maxTotalPrice,
           } as any;
           escapeHatchApplied = "endgame-counter-at-max";
         }
@@ -1334,7 +1344,7 @@ export async function processConversationMessage(
           dealId,
           mode: escapeHatchApplied,
           vendorPrice,
-          maxAcceptablePrice,
+          maxTotalPrice,
           overMaxPercent: (overMaxPercent * 100).toFixed(1) + "%",
           endgamePhase,
           endgameCounterRounds,
@@ -1358,8 +1368,8 @@ export async function processConversationMessage(
         decision.counterOffer = null;
         escapeHatchApplied = "post-meso-walk";
       } else if (
-        maxAcceptablePrice != null &&
-        vendorStyle.lastVendorPrice <= maxAcceptablePrice
+        maxTotalPrice != null &&
+        vendorStyle.lastVendorPrice <= maxTotalPrice
       ) {
         decision.action = "ACCEPT";
         decision.counterOffer = {
@@ -1367,11 +1377,11 @@ export async function processConversationMessage(
           total_price: vendorStyle.lastVendorPrice,
         } as any;
         escapeHatchApplied = "accept";
-      } else if (maxAcceptablePrice != null) {
+      } else if (maxTotalPrice != null) {
         decision.action = "COUNTER";
         decision.counterOffer = {
           ...(decision.counterOffer || {}),
-          total_price: maxAcceptablePrice,
+          total_price: maxTotalPrice,
         } as any;
         escapeHatchApplied = "ceiling-meso";
       }
@@ -1420,10 +1430,10 @@ export async function processConversationMessage(
           : null,
       concerns: vendorConcerns,
       tone: toneResult.primaryTone,
-      targetPrice,
-      maxAcceptablePrice,
+      minTotalPrice: boundaryMin,
+      maxTotalPrice: boundaryMax,
       weakestPrimaryParameter,
-      currencyCode: storedConfig?.currency || "USD",
+      currencyCode: (storedConfig?.currency as string) || "USD",
       vendorStyle,
       roundNumber: deal.round + 1,
       phrasingHistory,
@@ -1440,7 +1450,7 @@ export async function processConversationMessage(
         counterOffer: msg.counterOffer,
         decisionAction: msg.decisionAction,
       })),
-      getCurrencySymbol(storedConfig?.currency || "USD"),
+      getCurrencySymbol((storedConfig?.currency as string) || "USD"),
     );
 
     // 14. Get non-commercial context for persona (safe to pass to LLM)
@@ -1685,10 +1695,7 @@ export async function processConversationMessage(
 
     // Safety net: NEVER accept above max_acceptable (CONVERSATION mode).
     if (decision.action === "ACCEPT") {
-      const safetyMaxPrice =
-        config.parameters?.total_price?.max_acceptable ??
-        (config.parameters as any)?.unit_price?.max_acceptable ??
-        null;
+      const safetyMaxPrice = maxTotalPriceFromConfig(config) ?? null;
       const acceptedPrice = vendorOffer.total_price ?? null;
       if (
         safetyMaxPrice != null &&
