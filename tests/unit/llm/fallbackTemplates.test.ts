@@ -12,7 +12,7 @@ import { getFallbackResponse } from "../../../src/llm/fallback-templates.js";
 import type {
   NegotiationIntent,
   VendorTone,
-} from "../../../src/negotiation/intent/build-negotiation-intent.js";
+} from "../../../src/modules/chatbot/engine/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Helpers

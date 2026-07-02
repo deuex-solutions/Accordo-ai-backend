@@ -2,7 +2,7 @@ import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-import { parseDatabaseUrl } from "../utils/parse-database-url.js";
+import { parseDatabaseUrl } from "./parse-database-url.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

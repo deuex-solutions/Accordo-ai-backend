@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDealSchema, modeQuerySchema, listDealsQuerySchema } from '../../../src/modules/chatbot/chatbot.validator.js';
+import { createDealSchema, modeQuerySchema, listDealsQuerySchema } from '../../../src/modules/chatbot/chatbot.routes.js';
 
 describe('CONVERSATION Mode Standardization & INSIGHTS Purge Validation', () => {
   describe('createDealSchema', () => {

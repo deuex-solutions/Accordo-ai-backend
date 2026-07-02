@@ -657,7 +657,7 @@ export const ACCORDO_DEFAULTS = {
   maxRounds: 50,                  // Feb 2026: Increased from 10 to 50 for extended negotiations
   walkawayThreshold: 20,          // 20%
   priority: 'MEDIUM' as 'HIGH' | 'MEDIUM' | 'LOW',
-  mode: 'CONVERSATION' as 'INSIGHTS' | 'CONVERSATION',
+  mode: 'CONVERSATION' as 'CONVERSATION',
 } as const;
 
 /**
@@ -724,6 +724,7 @@ export interface ExtendedOffer {
  */
 export interface WizardConfig {
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  costOfCapital?: number | null;
   priceQuantity: {
     targetUnitPrice: number | null;
     maxAcceptablePrice: number | null;
@@ -784,6 +785,7 @@ export interface ResolvedNegotiationConfig {
   // Resolved VALUES (user if provided, else default)
   targetPrice: number;
   maxAcceptablePrice: number;
+  costOfCapital: number;
   paymentTermsMinDays: number;
   paymentTermsMaxDays: number;
   deliveryDate: Date | null;

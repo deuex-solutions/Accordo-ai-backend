@@ -1,5 +1,5 @@
 import models from '../../models/index.js';
-import type { Po } from '../../models/po.js';
+import type { Po } from '../../models/procurement/po.js';
 import type { WhereOptions, FindOptions } from 'sequelize';
 
 export interface PoData {

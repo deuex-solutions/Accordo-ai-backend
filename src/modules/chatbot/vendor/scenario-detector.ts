@@ -6,7 +6,7 @@
  */
 
 import type { VendorScenario, ScenarioDetectionResult } from './types.js';
-import type { ChatbotMessage } from '../../../models/chatbot-message.js';
+import type { ChatbotMessage } from '../../../models/chatbot/chatbot-message.js';
 import logger from '../../../config/logger.js';
 
 /**

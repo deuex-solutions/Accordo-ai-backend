@@ -1,4 +1,4 @@
-import type { PermissionLevel } from "../../types/index.js";
+import type { PermissionLevel } from "../../utils/types.js";
 import repo from "./role.repo.js";
 import userRepo from "../user/user.repo.js";
 import CustomError from "../../utils/custom-error.js";

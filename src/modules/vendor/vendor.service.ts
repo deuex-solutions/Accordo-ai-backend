@@ -12,11 +12,11 @@ import {
   validateStep2,
   validateStep3,
   validateStep4,
-} from './vendor.validator.js';
-import type { User } from '../../models/user.js';
-import type { VendorCompany } from '../../models/vendor-company.js';
-import type { Company } from '../../models/company.js';
-import type { Address } from '../../models/address.js';
+} from './vendor.routes.js';
+import type { User } from '../../models/auth/user.js';
+import type { VendorCompany } from '../../models/vendor/vendor-company.js';
+import type { Company } from '../../models/auth/company.js';
+import type { Address } from '../../models/system/address.js';
 import models, { sequelize } from '../../models/index.js';
 import logger from "../../config/logger.js";
 

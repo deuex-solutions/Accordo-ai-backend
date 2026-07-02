@@ -7,8 +7,8 @@
 
 import logger from '../../../config/logger.js';
 import { CustomError, NotFoundError } from '../../../utils/custom-error.js';
-import { ChatbotDeal } from '../../../models/chatbot-deal.js';
-import { ChatbotTemplate } from '../../../models/chatbot-template.js';
+import { ChatbotDeal } from '../../../models/chatbot/chatbot-deal.js';
+import { ChatbotTemplate } from '../../../models/chatbot/chatbot-template.js';
 import {
   generateConversationMessage,
   substituteVariables,
@@ -32,7 +32,7 @@ import {
   type VendorIntent,
   type RefusalType,
 } from './enhanced-convo-router.js';
-import { ChatbotMessage } from '../../../models/chatbot-message.js';
+import { ChatbotMessage } from '../../../models/chatbot/chatbot-message.js';
 import { checkScopeGuard } from '../engine/scope-guard.js';
 import { classifyError, getErrorFallbackResponse } from '../engine/error-recovery.js';
 import { sanitizeNegotiationHistory } from '../engine/history-sanitizer.js';
@@ -58,6 +58,7 @@ export interface ProcessConversationTurnResult {
   updatedState: ConvoState;
   vendorIntent: VendorIntent;
   refusalType?: RefusalType;
+  analysis?: any;
 }
 
 /**
@@ -113,12 +114,56 @@ export async function processConversationTurn(
 
     const latestMessage = new HumanMessage({ content: vendorMessage, id: uuidv4() });
 
+    // Resolve negotiation config from deal or template
+    let dealConfig = null;
+    if (deal.negotiationConfigJson) {
+      dealConfig = deal.negotiationConfigJson;
+    } else if (template?.configJson) {
+      const tc = template.configJson as any;
+      dealConfig = {
+        priceQuantity: {
+          targetUnitPrice: tc.targetPrice,
+          maxAcceptablePrice: tc.maxAcceptablePrice || (tc.targetPrice * 1.25),
+        },
+        paymentTerms: {
+          minDays: tc.paymentTermsMinDays || 15,
+          maxDays: tc.paymentTerms === "Net 30" ? 30 : tc.paymentTermsMaxDays || 45,
+        },
+        currency: tc.currency || "USD",
+        parameterWeights: tc.weights || { targetUnitPrice: 60, paymentTermsDays: 25, warrantyPeriodMonths: 15 },
+      };
+    }
+
     // Step 4: Compile graph and prepare input state
     const graph = await createNegotiationGraph();
+    
+    // Map database JSON to Offer format
+    const dbCounter = deal.latestOfferJson as any;
+    const dbVendor = deal.latestVendorOffer as any;
+    
+    const counterOffer = dbCounter ? {
+      totalPrice: dbCounter.totalPrice ?? dbCounter.total_price ?? null,
+      paymentTerms: dbCounter.paymentTerms ?? dbCounter.payment_terms ?? null,
+      paymentTermsDays: dbCounter.paymentTermsDays ?? dbCounter.payment_terms_days ?? null,
+      deliveryDays: dbCounter.deliveryDays ?? dbCounter.delivery_days ?? null,
+      warrantyMonths: dbCounter.warrantyMonths ?? dbCounter.warranty_months ?? null,
+    } : null;
+
+    const parsedOffer = dbVendor ? {
+      totalPrice: dbVendor.totalPrice ?? dbVendor.total_price ?? null,
+      paymentTerms: dbVendor.paymentTerms ?? dbVendor.payment_terms ?? null,
+      paymentTermsDays: dbVendor.paymentTermsDays ?? dbVendor.payment_terms_days ?? null,
+      deliveryDays: dbVendor.deliveryDays ?? dbVendor.delivery_days ?? null,
+      warrantyMonths: dbVendor.warrantyMonths ?? dbVendor.warranty_months ?? null,
+    } : null;
+
     const initialState = {
       messages: [...historyMessages, latestMessage],
       dealId,
       round: deal.round,
+      config: dealConfig,
+      counterOffer,
+      parsedOffer,
       metadata: {
         convoState,
         userId,
@@ -137,9 +182,10 @@ export async function processConversationTurn(
     const updatedState = finalState.metadata?.convoState as ConvoState;
     const vendorIntent = finalState.metadata?.vendorIntent as VendorIntent;
     const refusalType = finalState.metadata?.refusalType as RefusalType;
+    const analysis = finalState.analysis;
 
     // Step 7: Save updated state to database
-    await saveDealState(deal, updatedState);
+    await saveDealState(deal, updatedState, analysis, finalState);
 
     logger.info('[ProcessConversationTurn] Turn processing complete via LangGraph', {
       dealId,
@@ -152,6 +198,7 @@ export async function processConversationTurn(
       updatedState,
       vendorIntent,
       refusalType,
+      analysis,
     };
   } catch (error) {
     // Error Recovery: return human-readable fallback instead of crashing
@@ -160,6 +207,7 @@ export async function processConversationTurn(
       dealId,
       errorCategory,
       errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
     });
 
     // For not-found errors, still throw (controller needs to return 404)
@@ -253,227 +301,69 @@ async function loadConversationHistory(
 /**
  * Prepare template variables based on deal context and intent
  */
-export async function prepareTemplateVariables(
-  deal: ChatbotDeal,
-  template: ChatbotTemplate | null,
-  convoState: ConvoState,
-  intent: ConvoIntent,
-  vendorMessage: string
-): Promise<TemplateVariables> {
-  const variables: TemplateVariables = {};
-
-  // Always include counterparty name
-  variables.counterparty = deal.counterparty || 'there';
-
-  // Get template parameters if available
-  const templateParams = template?.configJson as any;
-
-  // Intent-specific variables
-  switch (intent) {
-    case 'GREET':
-      // Just counterparty needed
-      break;
-
-    case 'ASK_FOR_OFFER':
-      variables.productName = templateParams?.productName || 'this product';
-      variables.quantity = templateParams?.quantity || 100;
-      break;
-
-    case 'ASK_CLARIFY':
-      variables.reason = determineClairificationReason(
-        convoState,
-        vendorMessage
-      );
-      break;
-
-    case 'COUNTER':
-      // Extract pricing info from template/deal
-      variables.targetPrice = templateParams?.targetPrice || 100;
-      variables.currentPrice = extractCurrentPrice(vendorMessage, deal);
-      variables.paymentTerms = templateParams?.paymentTerms || 'Net 30';
-      variables.reason = generateCounterReason(
-        templateParams,
-        variables.targetPrice,
-        variables.currentPrice
-      );
-      break;
-
-    case 'ACCEPT':
-      variables.currentPrice = extractCurrentPrice(vendorMessage, deal);
-      variables.paymentTerms =
-        extractPaymentTerms(vendorMessage) || 'the agreed terms';
-      break;
-
-    case 'ESCALATE':
-      variables.reason = generateEscalationReason(convoState);
-      break;
-
-    case 'WALK_AWAY':
-      variables.reason = generateWalkAwayReason(convoState, templateParams);
-      break;
-
-    case 'SMALL_TALK':
-      // Just counterparty needed
-      break;
-  }
-
-  logger.info('[ProcessConversationTurn] Template variables prepared', {
-    dealId: deal.id,
-    intent,
-    variableKeys: Object.keys(variables),
-  });
-
-  return variables;
-}
-
-/**
- * Extract current price from vendor message
- */
-function extractCurrentPrice(
-  vendorMessage: string,
-  deal: ChatbotDeal
-): number | undefined {
-  // Try to extract from message
-  const priceMatch = vendorMessage.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-  if (priceMatch) {
-    const price = parseFloat(priceMatch[1].replace(/,/g, ''));
-    return price;
-  }
-
-  // Try to get from deal's latest vendor offer
-  const latestOffer = deal.latestVendorOffer as any;
-  if (latestOffer?.total_price) {
-    return latestOffer.total_price;
-  }
-
-  return undefined;
-}
-
-/**
- * Extract payment terms from vendor message
- */
-function extractPaymentTerms(vendorMessage: string): string | null {
-  // Look for payment terms patterns
-  const termsMatch = vendorMessage.match(
-    /(?:net\s*)?(\d+)\s*days?|upon\s+delivery/i
-  );
-  if (termsMatch) {
-    if (termsMatch[0].toLowerCase().includes('upon')) {
-      return 'upon delivery';
-    }
-    return `Net ${termsMatch[1]}`;
-  }
-
-  return null;
-}
-
-/**
- * Determine reason for clarification request
- */
-function determineClairificationReason(
-  convoState: ConvoState,
-  vendorMessage: string
-): string {
-  if (convoState.lastRefusalType === 'CONFUSED') {
-    return 'what specific information you need from me';
-  }
-
-  if (convoState.lastRefusalType === 'ALREADY_SHARED') {
-    return 'the pricing details, as I may have missed them';
-  }
-
-  if (!convoState.context.mentionedPrice) {
-    return 'your unit price';
-  }
-
-  if (!convoState.context.mentionedTerms) {
-    return 'your payment terms';
-  }
-
-  return 'a few details in your last message';
-}
-
-/**
- * Generate reason for counter-offer
- */
-function generateCounterReason(
-  templateParams: any,
-  targetPrice?: number,
-  currentPrice?: number
-): string {
-  const reasons: string[] = [];
-
-  if (currentPrice && targetPrice && currentPrice > targetPrice) {
-    const diff = currentPrice - targetPrice;
-    const percentDiff = ((diff / currentPrice) * 100).toFixed(1);
-    reasons.push(
-      `This represents a ${percentDiff}% adjustment that aligns better with our budget constraints`
-    );
-  }
-
-  if (templateParams?.marketPrice) {
-    reasons.push(
-      `Our analysis shows the market rate is around $${templateParams.marketPrice}`
-    );
-  }
-
-  if (templateParams?.volume) {
-    reasons.push(
-      `Given the volume of ${templateParams.volume} units, we believe this pricing is fair`
-    );
-  }
-
-  if (reasons.length === 0) {
-    reasons.push(
-      'This pricing aligns with our budget and market analysis'
-    );
-  }
-
-  return reasons.join('. ') + '.';
-}
-
-/**
- * Generate reason for escalation
- */
-function generateEscalationReason(convoState: ConvoState): string {
-  if (convoState.refusalCount >= 5) {
-    return "we've had difficulty getting the information needed to proceed";
-  }
-
-  if (convoState.turnCount > 15) {
-    return 'this negotiation has become complex and needs additional oversight';
-  }
-
-  return 'this requires expertise beyond my current scope';
-}
-
-/**
- * Generate reason for walking away
- */
-function generateWalkAwayReason(
-  convoState: ConvoState,
-  templateParams: any
-): string {
-  if (convoState.refusalCount > 3) {
-    return "we haven't been able to establish clear terms for collaboration";
-  }
-
-  if (templateParams?.maxAcceptablePrice) {
-    return `the pricing exceeds our maximum acceptable threshold of $${templateParams.maxAcceptablePrice}`;
-  }
-
-  return 'the terms do not align with our business requirements';
-}
+export { prepareTemplateVariables } from "./template-variables.js";
 
 /**
  * Save updated conversation state to deal
  */
 async function saveDealState(
   deal: ChatbotDeal,
-  convoState: ConvoState
+  convoState: ConvoState,
+  analysis: any,
+  finalState: any
 ): Promise<void> {
+  console.log("DEBUG: finalState.counterOffer =", JSON.stringify(finalState.counterOffer, null, 2));
+  console.log("DEBUG: finalState.mesoOptions =", JSON.stringify(finalState.mesoOptions, null, 2));
+
+  const updatedConvoState = {
+    ...convoState,
+    latestAnalysis: analysis || convoState.latestAnalysis,
+  };
+
+  const costOfCapital = deal.costOfCapital || 0.10;
+  
+  // Calculate NPV for current counter-offer if available
+  let latestNpv = null;
+  const counter = finalState.counterOffer;
+  if (counter && counter.totalPrice != null) {
+    const paymentDays = counter.paymentTermsDays ?? 30;
+    latestNpv = counter.totalPrice * (1 - (costOfCapital / 365) * paymentDays);
+  }
+
+  // Append to effectiveCostTrajectory trajectory
+  let trajectory = Array.isArray(deal.effectiveCostTrajectory) ? [...deal.effectiveCostTrajectory] : [];
+  if (latestNpv != null) {
+    trajectory.push({
+      round: finalState.round || deal.round || 1,
+      totalPrice: counter.totalPrice,
+      paymentTermsDays: counter.paymentTermsDays || 30,
+      npv: Math.round(latestNpv * 100) / 100,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Learn vendor term preference
+  let termPref = deal.vendorTermPref;
+  const vendor = finalState.parsedOffer;
+  if (vendor && vendor.paymentTermsDays != null) {
+    if (vendor.paymentTermsDays <= 15) {
+      termPref = "NEEDS_FAST_CASH";
+    } else if (vendor.paymentTermsDays >= 45) {
+      termPref = "COMFORTABLE_WAITING";
+    }
+  }
+
   await deal.update({
-    convoStateJson: convoState as any,
+    convoStateJson: updatedConvoState as any,
+    round: finalState.round || deal.round,
+    latestOfferJson: finalState.counterOffer || deal.latestOfferJson,
+    latestVendorOffer: finalState.parsedOffer || deal.latestVendorOffer,
+    latestDecisionAction: finalState.decision?.action || deal.latestDecisionAction,
+    latestUtility: finalState.decision?.utilityScore || deal.latestUtility,
+    mesoOptionsSent: finalState.mesoOptions || deal.mesoOptionsSent,
+    vendorTermPref: termPref,
+    effectiveCostTrajectory: trajectory as any,
+    status: finalState.metadata?.dealStatus || deal.status,
     lastMessageAt: new Date(),
   });
 
@@ -481,6 +371,8 @@ async function saveDealState(
     dealId: deal.id,
     phase: convoState.phase,
     turnCount: convoState.turnCount,
+    round: finalState.round,
+    dealStatus: finalState.metadata?.dealStatus,
   });
 }
 

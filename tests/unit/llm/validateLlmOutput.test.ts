@@ -12,7 +12,7 @@ import {
   validateLlmOutput,
   ValidationError,
 } from "../../../src/llm/validate-llm-output.js";
-import type { NegotiationIntent } from "../../../src/negotiation/intent/build-negotiation-intent.js";
+import type { NegotiationIntent } from "../../../src/modules/chatbot/engine/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Helpers

@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import repo from "./requisition.repo.js";
 import userRepo from "../user/user.repo.js";
 import { CustomError } from "../../utils/custom-error.js";
-import type { Requisition } from "../../models/requisition.js";
+import type { Requisition } from "../../models/procurement/requisition.js";
 import type {
   RequisitionData,
   RequisitionProductData,

@@ -35,7 +35,7 @@ describe("AI Eval: Decide Strategy Node (decideStrategyNode)", () => {
       config,
       round: 1,
       parsedOffer: {
-        totalPrice: 950, // Between target (800) and max (1000)
+        totalPrice: 880, // Between target (800) and max (1000)
         paymentTermsDays: 30,
         deliveryDays: 30,
         warrantyMonths: 6

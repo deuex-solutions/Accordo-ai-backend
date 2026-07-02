@@ -39,8 +39,8 @@ import type {
   Explainability,
   ExtendedOffer,
 } from "../engine/types.js";
-import type { ChatbotDeal } from "../../../models/chatbot-deal.js";
-import type { ChatbotMessage } from "../../../models/chatbot-message.js";
+import type { ChatbotDeal } from "../../../models/chatbot/chatbot-deal.js";
+import type { ChatbotMessage } from "../../../models/chatbot/chatbot-message.js";
 import type {
   ConversationState,
   ProcessConversationMessageInput,
@@ -73,7 +73,7 @@ import {
   buildNegotiationIntent,
   getCurrencySymbol,
   humanRoundPrice,
-} from "../../../negotiation/intent/build-negotiation-intent.js";
+} from "../engine/build-negotiation-intent.js";
 import { buildArcSummary } from "../../../llm/arc-summary.js";
 import { renderNegotiationMessage } from "../../../llm/persona-renderer.js";
 import {
@@ -81,8 +81,8 @@ import {
   ValidationError,
 } from "../../../llm/validate-llm-output.js";
 import { getFallbackResponse } from "../../../llm/fallback-templates.js";
-import { simulateTypingDelay } from "../../../delivery/simulate-typing-delay.js";
-import { logNegotiationStep } from "../../../metrics/log-negotiation-step.js";
+import { simulateTypingDelay } from "./simulate-typing-delay.js";
+import { logNegotiationStep } from "./log-negotiation-step.js";
 import {
   transition,
   actionToEvent,
@@ -104,7 +104,7 @@ import type {
   ExtendedOffer as EngineExtendedOffer,
 } from "../engine/types.js";
 import type { SupportedCurrency } from "../../../services/currency.service.js";
-import type { NegotiationIntent } from "../../../negotiation/intent/build-negotiation-intent.js";
+import type { NegotiationIntent } from "../engine/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Validated fallback helper
@@ -656,6 +656,35 @@ export async function processConversationMessage(
         }
       }
 
+      // 7-pre-B2. Near-max counter: vendor within 2% ABOVE max_acceptable after round 5+.
+      // Counter at ceiling instead of a low stale price — e.g. vendor ₹60,000 vs max ₹59,900.
+      if (
+        decision.action === "COUNTER" &&
+        !isVendorAffirmative &&
+        deal.round >= 5 &&
+        vendorOffer.total_price != null &&
+        maxAcceptableForProximity != null &&
+        maxAcceptableForProximity > 0 &&
+        vendorOffer.total_price > maxAcceptableForProximity
+      ) {
+        const overPct =
+          (vendorOffer.total_price - maxAcceptableForProximity) /
+          maxAcceptableForProximity;
+        if (overPct <= 0.02 && decision.counterOffer?.total_price != null) {
+          logger.info(
+            "[ConversationService] Near-max counter: vendor within 2% above max_acceptable — countering at ceiling",
+            {
+              dealId,
+              vendorPrice: vendorOffer.total_price,
+              maxAcceptable: maxAcceptableForProximity,
+              engineCounter: decision.counterOffer.total_price,
+              overPct: (overPct * 100).toFixed(2) + "%",
+            },
+          );
+          decision.counterOffer.total_price = maxAcceptableForProximity;
+        }
+      }
+
       // 7-pre-C. Graduated response for offers ABOVE max_acceptable (late rounds).
       //   Strict rule: NEVER accept above max_acceptable.
       //   Within 10% above max → COUNTER at max (handled by endgame flow in section 11a)
@@ -765,7 +794,8 @@ export async function processConversationMessage(
               payment_terms_days: vendorOffer.payment_terms_days ?? null,
               delivery_date: vendorOffer.delivery_date ?? null,
               delivery_days: vendorOffer.delivery_days ?? null,
-            },
+              currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
+            } as any,
             reasons: [
               ...decision.reasons,
               `Vendor firm signal: "${firmnessSignal.matched}". Last attempt at max_acceptable ${maxAcc}.`,
@@ -836,7 +866,8 @@ export async function processConversationMessage(
           counterOffer: {
             total_price: counterPrice,
             payment_terms: vendorOffer.payment_terms,
-          },
+            currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
+          } as any,
           reasons: [
             ...decision.reasons,
             "Overridden: vendor expressed rejection — cannot accept",
@@ -1107,7 +1138,8 @@ export async function processConversationMessage(
             payment_terms_days: vendorOffer.payment_terms_days ?? 30,
             delivery_date: null,
             delivery_days: null,
-          },
+            currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
+          } as any,
           reasons: [
             ...decision.reasons,
             "MESO generation failed — fallback COUNTER",
@@ -1354,9 +1386,31 @@ export async function processConversationMessage(
         convoState?.lastCeilingMesoRound === deal.round;
 
       if (lastWasCeilingMeso) {
-        decision.action = "WALK_AWAY";
-        decision.counterOffer = null;
-        escapeHatchApplied = "post-meso-walk";
+        const overMaxPct =
+          maxAcceptablePrice != null &&
+          vendorStyle.lastVendorPrice != null &&
+          vendorStyle.lastVendorPrice > maxAcceptablePrice
+            ? (vendorStyle.lastVendorPrice - maxAcceptablePrice) /
+              maxAcceptablePrice
+            : null;
+
+        // Tiny gap above max (≤2%): counter at ceiling again — do not walk away.
+        if (overMaxPct != null && overMaxPct <= 0.02) {
+          decision.action = "COUNTER";
+          decision.counterOffer = {
+            ...(decision.counterOffer || {}),
+            total_price: maxAcceptablePrice,
+            payment_terms:
+              vendorOffer.payment_terms ??
+              decision.counterOffer?.payment_terms ??
+              "Net 60",
+          } as any;
+          escapeHatchApplied = "ceiling-meso";
+        } else {
+          decision.action = "WALK_AWAY";
+          decision.counterOffer = null;
+          escapeHatchApplied = "post-meso-walk";
+        }
       } else if (
         maxAcceptablePrice != null &&
         vendorStyle.lastVendorPrice <= maxAcceptablePrice
@@ -1383,6 +1437,37 @@ export async function processConversationMessage(
           repeatedOfferCount: vendorStyle.repeatedOfferCount,
           vendorPrice: vendorStyle.lastVendorPrice,
         });
+      }
+    }
+
+    // 11c. Post-escape guard: never walk away when vendor is ≤2% above max (trivial gap)
+    if (
+      decision.action === "WALK_AWAY" &&
+      maxAcceptablePrice != null &&
+      vendorOffer.total_price != null &&
+      vendorOffer.total_price > maxAcceptablePrice
+    ) {
+      const overPct =
+        (vendorOffer.total_price - maxAcceptablePrice) / maxAcceptablePrice;
+      if (overPct <= 0.02) {
+        logger.info(
+          "[ConversationService] Overriding WALK_AWAY → COUNTER at max (near-max gap)",
+          {
+            dealId,
+            vendorPrice: vendorOffer.total_price,
+            maxAcceptablePrice,
+            overPct: (overPct * 100).toFixed(2) + "%",
+          },
+        );
+        decision.action = "COUNTER";
+        decision.counterOffer = {
+          ...(decision.counterOffer || {}),
+          total_price: maxAcceptablePrice,
+          payment_terms:
+            vendorOffer.payment_terms ??
+            decision.counterOffer?.payment_terms ??
+            "Net 60",
+        } as any;
       }
     }
 
@@ -1705,6 +1790,7 @@ export async function processConversationMessage(
           counterOffer: {
             total_price: safetyMaxPrice,
             payment_terms: vendorOffer.payment_terms ?? null,
+            currency: (config.currency || requisition?.typeOfCurrency || "USD") as string,
           } as any,
           reasons: [
             ...decision.reasons,

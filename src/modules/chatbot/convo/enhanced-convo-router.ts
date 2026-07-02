@@ -73,6 +73,9 @@ export interface ConvoState {
 
   /** Timestamp of last update */
   lastUpdatedAt?: string;
+
+  /** Latest computed agentic analysis (tone, behavior, concerns) */
+  latestAnalysis?: any;
 }
 
 /**

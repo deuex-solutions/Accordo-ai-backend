@@ -1,4 +1,4 @@
-import type { BidActionType, ActionDetails } from '../../models/bid-action-history.js';
+import type { BidActionType, ActionDetails } from '../../models/vendor/bid-action-history.js';
 
 // Bid status - maps to what we use in bid analysis (derived from deal status)
 export type BidStatus = 'PENDING' | 'COMPLETED' | 'EXCLUDED' | 'SELECTED' | 'REJECTED';

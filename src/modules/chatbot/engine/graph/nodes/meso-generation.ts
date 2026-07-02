@@ -16,6 +16,10 @@ export const mesoGenerationNode = async (state: NegotiationState) => {
     return {};
   }
 
+  if (state.parsedOffer.totalPrice === null || state.parsedOffer.totalPrice === undefined) {
+    return { mesoOptions: [] };
+  }
+
   const resolvedConfig = state.config as ResolvedNegotiationConfig;
   
   // Map our generic state.parsedOffer back to the legacy ExtendedOffer shape

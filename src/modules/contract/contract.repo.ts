@@ -1,5 +1,5 @@
 import models, { sequelize } from '../../models/index.js';
-import type { Contract } from '../../models/contract.js';
+import type { Contract } from '../../models/procurement/contract.js';
 import type { WhereOptions, FindOptions } from 'sequelize';
 import { QueryTypes } from 'sequelize';
 import logger from '../../config/logger.js';

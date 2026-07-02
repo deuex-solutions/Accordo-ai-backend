@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { logNegotiationStep, type NegotiationStepRecord } from '../../../src/metrics/log-negotiation-step.js';
+import { logNegotiationStep, type NegotiationStepRecord } from '../../../src/modules/chatbot/convo/log-negotiation-step.js';
 
 // ─────────────────────────────────────────────
 // Mock the logger before importing the module

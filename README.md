@@ -9,8 +9,8 @@ For deeper docs, see:
 
 ## What this service does
 
-- **Procurement domain**: companies, projects, products, requisitions, vendors, contracts, POs.
-- **Negotiation engine**: utility-based decision making with two modes — INSIGHTS (deterministic) and CONVERSATION (LLM-rendered with a hard boundary). Owns counter-offer generation, MESO options, an endgame state machine, and a strict `max_acceptable` ceiling.
+- **Procurement domain**: companies, projects, products, requisitions, vendors, contracts, POs with consolidated `*.routes.ts` controllers registered in a unified API gateway (`src/routes.ts`).
+- **Agentic Negotiation engine**: 100% LangGraph state machine orchestrating 4 autonomous agent teams (Intake, Intelligence, Strategy, Output) following the "Engine as Pure Tools" paradigm. Features dynamic gap-closure concessions, Pareto MESO options, human-in-the-loop validation, and a strict `max_acceptable` ceiling.
 - **Vendor portal**: token-authenticated MESO flow for vendors (no JWT).
 - **Bid analysis & comparison**: cross-vendor bid comparison, winner selection, PDF reports.
 - **Vector / RAG**: deal/message embeddings via local ONNX, OpenAI, or Bedrock.

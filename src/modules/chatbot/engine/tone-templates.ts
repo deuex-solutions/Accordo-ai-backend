@@ -74,8 +74,8 @@ const ACCEPT_TEMPLATES: Record<VendorTone, (ctx: TemplateContext) => string> = {
 
 const COUNTER_TEMPLATES: Record<VendorTone, (ctx: TemplateContext) => string> = {
   formal: (ctx) => pick([
-    `${ctx.concernAck}Thank you for your proposal. We would like to respectfully counter with ${ctx.counterPrice} total, ${ctx.counterTerms} payment terms, and delivery ${ctx.counterDelivery}. We believe this arrangement would be mutually beneficial.`,
-    `${ctx.concernAck}We appreciate your offer of ${ctx.vendorPrice}. After careful consideration, we propose ${ctx.counterPrice} total with ${ctx.counterTerms} and delivery ${ctx.counterDelivery}. We trust this better reflects the scope of the engagement.`,
+    `${ctx.concernAck}We'd like to counter at ${ctx.counterPrice} total, ${ctx.counterTerms} payment terms, and delivery ${ctx.counterDelivery}. This better balances both sides.`,
+    `${ctx.concernAck}After reviewing your ${ctx.vendorPrice} offer, we're at ${ctx.counterPrice} total with ${ctx.counterTerms} and delivery ${ctx.counterDelivery}.`,
   ]),
 
   casual: (ctx) => pick([

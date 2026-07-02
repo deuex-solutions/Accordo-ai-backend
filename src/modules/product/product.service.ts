@@ -2,7 +2,7 @@ import { Op } from 'sequelize';
 import repo from './product.repo.js';
 import userRepo from '../user/user.repo.js';
 import { CustomError } from '../../utils/custom-error.js';
-import type { Product, GSTType } from '../../models/product.js';
+import type { Product, GSTType } from '../../models/procurement/product.js';
 
 export interface ProductData {
   productName: string;

@@ -6,10 +6,10 @@ import vendorRepo from '../vendor/vendor.repo.js';
 import productRepo from '../product/product.repo.js';
 import userRepo from '../user/user.repo.js';
 import util from '../common/util.js';
-import type { Po } from '../../models/po.js';
+import type { Po } from '../../models/procurement/po.js';
 import type { PoData } from './po.repo.js';
-import type { Company } from '../../models/company.js';
-import type { User } from '../../models/user.js';
+import type { Company } from '../../models/auth/company.js';
+import type { User } from '../../models/auth/user.js';
 
 export interface LineItem {
   productId: number;

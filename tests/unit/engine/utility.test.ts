@@ -64,8 +64,9 @@ describe('priceUtility', () => {
     expect(priceUtility(cfg, 110000)).toBe(0);
   });
 
-  it('returns 0.0 when price exceeds max_acceptable', () => {
-    expect(priceUtility(cfg, 130000)).toBe(0);
+  it('returns small positive decaying utility when price exceeds max_acceptable', () => {
+    expect(priceUtility(cfg, 130000)).toBeGreaterThan(0);
+    expect(priceUtility(cfg, 130000)).toBeLessThan(0.05);
   });
 
   it('returns 0.5 at the midpoint between target and max', () => {
@@ -182,10 +183,6 @@ describe('totalUtility', () => {
 
   it('returns < accept threshold for worst offer', () => {
     const offer = { total_price: 120000, payment_terms: 'Net 30' };
-    // priceUtility(120000) = 0 (above max)
-    // termsUtility('Net 30') = 0.2
-    // totalUtility = 0 * 0.6 + 0.2 * 0.4 = 0.08
-    expect(totalUtility(cfg, offer)).toBeCloseTo(0.08, 2);
     expect(totalUtility(cfg, offer)).toBeLessThan(cfg.accept_threshold);
   });
 

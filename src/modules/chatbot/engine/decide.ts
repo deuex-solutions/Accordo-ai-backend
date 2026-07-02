@@ -21,7 +21,7 @@ import {
   termsUtility,
   NegotiationConfig,
 } from "./utility.js";
-import { getCurrencySymbol } from "../../../negotiation/intent/build-negotiation-intent.js";
+import { getCurrencySymbol, enforcePmCounterMonotonicity } from "./build-negotiation-intent.js";
 import {
   calculateWeightedUtility,
   resolveNegotiationConfig,
@@ -568,23 +568,35 @@ export function calculateDynamicCounter(
   counterPrice = Math.round(counterPrice * 100) / 100;
 
   // GUARD: PM counter price must never go BELOW the previous PM counter.
-  // Negotiations should be monotonic on price — once we've offered X, we don't
-  // walk it back to <X in a later round (that would weaken our position and
-  // confuse the vendor). Clamp upward to the previous PM counter if needed,
-  // but stay below the vendor's current price (the no-cross guard above).
+  // Negotiations should be monotonic on price. Furthermore, if vendor is within budget
+  // and PM counter is stalled, dynamically advance the counter toward vendor's offer.
   if (previousPmOffer && vendorOffer.total_price !== null) {
     const prevPmPrice =
       typeof previousPmOffer === "object" && "price" in previousPmOffer
         ? (previousPmOffer as PmCounterRecord).price
         : (previousPmOffer as Offer).total_price;
-    if (prevPmPrice != null && counterPrice < prevPmPrice) {
-      const flooredPrice = Math.min(
-        prevPmPrice,
-        vendorOffer.total_price - 0.01,
-      );
-      if (flooredPrice > counterPrice) {
-        counterPrice = Math.round(flooredPrice * 100) / 100;
-        strategy += ` (floored to previous PM counter ${prevPmPrice} — monotonic)`;
+    if (prevPmPrice != null) {
+      if (counterPrice <= prevPmPrice && vendorOffer.total_price > prevPmPrice) {
+        // Active gap closure: concede 15-25% of the remaining gap toward vendor offer
+        const gap = vendorOffer.total_price - prevPmPrice;
+        const gapStep = Math.max(gap * Math.min(0.35, 0.15 + round * 0.02), 50);
+        const nextPrice = Math.min(prevPmPrice + gapStep, vendorOffer.total_price - 1);
+        if (nextPrice > counterPrice && nextPrice <= max_acceptable) {
+          counterPrice = Math.round(nextPrice * 100) / 100;
+          strategy += ` (dynamic gap-closure concession toward vendor offer)`;
+        } else if (prevPmPrice > counterPrice) {
+          counterPrice = Math.round(prevPmPrice * 100) / 100;
+          strategy += ` (floored to previous PM counter ${prevPmPrice} — monotonic)`;
+        }
+      } else if (counterPrice < prevPmPrice) {
+        const flooredPrice = Math.min(
+          prevPmPrice,
+          vendorOffer.total_price - 0.01,
+        );
+        if (flooredPrice > counterPrice) {
+          counterPrice = Math.round(flooredPrice * 100) / 100;
+          strategy += ` (floored to previous PM counter ${prevPmPrice} — monotonic)`;
+        }
       }
     }
   }
@@ -777,10 +789,10 @@ export function decideNextMove(
       }
       return {
         action: "COUNTER",
-        utilityScore: 0,
+        utilityScore: totalUtility(config, counter),
         counterOffer: counter,
         reasons: [
-          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${max}. I can offer ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`,
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget ceiling of ${cs}${max}. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - can you work within this range?`,
         ],
       };
     }
@@ -1007,11 +1019,11 @@ export function decideNextMove(
 
     if (shouldEscalate) {
       return {
-        action: "ESCALATE",
+        action: "MESO",
         utilityScore: u,
-        counterOffer: counter,
+        counterOffer: null,
         reasons: [
-          `Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${dynamicCounter.price.toFixed(2)} with ${dynamicCounter.terms} - needs human review.`,
+          `Autonomous deadlock resolution: round ${round} stalled. Pivoting to Multiple Equivalent Simultaneous Offers (MESO) package trade-offs to break standoff.`,
         ],
       };
     }
@@ -1351,10 +1363,10 @@ export function decideWithWeightedUtility(
       );
       return {
         action: "COUNTER",
-        utilityScore: 0,
+        utilityScore: utilityResult.totalUtility,
         counterOffer,
         reasons: [
-          `Price ${cs}${vendorOffer.total_price} exceeds our budget of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
+          `Price ${cs}${vendorOffer.total_price} exceeds our budget ceiling of ${cs}${resolvedConfig.maxAcceptablePrice}. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms}.`,
         ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
@@ -1528,11 +1540,11 @@ export function decideWithWeightedUtility(
 
     if (shouldEscalate) {
       return {
-        action: "ESCALATE",
+        action: "MESO",
         utilityScore: u,
-        counterOffer,
+        counterOffer: null,
         reasons: [
-          `Utility ${(u * 100).toFixed(0)}% in escalate zone after ${round} rounds. No progress for 3+ consecutive rounds. Proposing ${cs}${counterOffer.total_price?.toFixed(2)} with ${counterOffer.payment_terms} - needs human review.`,
+          `Autonomous deadlock resolution: round ${round} stalled. Pivoting to Multiple Equivalent Simultaneous Offers (MESO) package trade-offs to break standoff.`,
         ],
         utilityBreakdown: {
           totalUtility: utilityResult.totalUtility,
@@ -1701,6 +1713,30 @@ function generateCounterOffer(
   }
 
   counterPrice = Math.round(counterPrice * 100) / 100;
+
+  // Monotonic floor + near-max convergence (vendor within 2% above ceiling → counter at max)
+  if (negotiationState?.pmCounterHistory?.length) {
+    const lastPm =
+      negotiationState.pmCounterHistory[
+        negotiationState.pmCounterHistory.length - 1
+      ].price;
+    counterPrice = enforcePmCounterMonotonicity(
+      counterPrice,
+      lastPm,
+      vendorOffer.total_price,
+      maxAcceptablePrice,
+      round,
+    );
+  } else if (
+    vendorOffer.total_price != null &&
+    vendorOffer.total_price > maxAcceptablePrice
+  ) {
+    const overPct =
+      (vendorOffer.total_price - maxAcceptablePrice) / maxAcceptablePrice;
+    if (overPct <= 0.02) {
+      counterPrice = maxAcceptablePrice;
+    }
+  }
 
   // Determine payment terms
   let counterTerms: string;

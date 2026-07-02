@@ -25,7 +25,10 @@ import type {
   NegotiationPhase,
 } from "./types.js";
 import { calculateWeightedUtilityFromResolved } from "./weighted-utility.js";
-import { humanRoundPrice } from "../../../negotiation/intent/build-negotiation-intent.js";
+import {
+  enforcePmCounterMonotonicity,
+  humanRoundPrice,
+} from "./build-negotiation-intent.js";
 import {
   formatCurrency,
   type SupportedCurrency,
@@ -389,7 +392,29 @@ export function generateMesoOptions(
     // If variance is too high, adjust offers
     if (maxVariance > variance_target) {
       // Re-adjust offers to bring them closer together
-      adjustOffersForVariance(options, config, avgUtility, variance_target);
+      adjustOffersForVariance(
+        options,
+        config,
+        avgUtility,
+        variance_target,
+        lastAccordoCounterPrice,
+        vendorOffer.total_price,
+        round,
+      );
+    }
+
+    // Final monotonic guard on all options (prevents NPV variance tuning from
+    // dropping nominal price below the last PM counter while vendor is still above us)
+    for (const option of options) {
+      if (option.offer.total_price != null) {
+        option.offer.total_price = enforcePmCounterMonotonicity(
+          option.offer.total_price,
+          lastAccordoCounterPrice,
+          vendorOffer.total_price,
+          config.maxAcceptablePrice,
+          round,
+        );
+      }
     }
 
     // Recalculate final variance
@@ -504,9 +529,9 @@ function calculateBasePrice(
   }
   basePrice = Math.min(basePrice, maxAcceptablePrice);
 
-  // Apply convergence floor in case we have one but vendor is outside band.
-  if (hasFloor) {
-    basePrice = Math.max(basePrice, lastAccordoCounterPrice as number);
+  // Apply strict convergence floor whenever lastAccordoCounterPrice is provided
+  if (lastAccordoCounterPrice != null && lastAccordoCounterPrice > 0 && lastAccordoCounterPrice <= maxAcceptablePrice * 1.1) {
+    basePrice = Math.max(basePrice, lastAccordoCounterPrice);
   }
 
   return humanRoundPrice(Math.round(basePrice * 100) / 100);
@@ -669,8 +694,11 @@ function generatePriceFocusedOffer(
   bestPrice = Math.max(priceFloor, bestPrice);
   bestPrice = humanRoundPrice(Math.round(bestPrice * 100) / 100);
 
-  // MEDIUM payment terms
-  const mediumPaymentDays = getMediumPaymentDays(config);
+  // MEDIUM payment terms (never less than vendor's current offer)
+  let mediumPaymentDays = getMediumPaymentDays(config);
+  if (vendorOffer.payment_terms_days != null && vendorOffer.payment_terms_days > mediumPaymentDays) {
+    mediumPaymentDays = vendorOffer.payment_terms_days;
+  }
 
   // BEST delivery (fastest)
   const bestDeliveryDays = getBestDeliveryDays(config, vendorOffer);
@@ -747,8 +775,11 @@ function generateBalancedOffer(
     lastAccordoCounterPrice,
   );
 
-  // MEDIUM payment terms
-  const mediumPaymentDays = getMediumPaymentDays(config);
+  // MEDIUM payment terms (never less than vendor's current offer)
+  let mediumPaymentDays = getMediumPaymentDays(config);
+  if (vendorOffer.payment_terms_days != null && vendorOffer.payment_terms_days > mediumPaymentDays) {
+    mediumPaymentDays = vendorOffer.payment_terms_days;
+  }
 
   // BEST delivery (fastest)
   const bestDeliveryDays = getBestDeliveryDays(config, vendorOffer);
@@ -774,6 +805,9 @@ function adjustOffersForVariance(
   config: ResolvedNegotiationConfig,
   targetUtility: number,
   maxVariance: number,
+  lastAccordoCounterPrice?: number | null,
+  vendorPrice?: number | null,
+  round: number = 1,
 ): void {
   // Simple adjustment: scale prices to bring utilities closer
   for (const option of options) {
@@ -788,11 +822,19 @@ function adjustOffersForVariance(
           Math.round((option.offer.total_price + priceAdjustment) * 100) / 100,
         );
 
-        // Ensure variance adjustment didn't push below target price floor
-        option.offer.total_price = Math.max(
+        let adjusted = applyConvergenceFloor(
           option.offer.total_price,
-          config.targetPrice,
+          config,
+          lastAccordoCounterPrice,
         );
+        adjusted = enforcePmCounterMonotonicity(
+          adjusted,
+          lastAccordoCounterPrice,
+          vendorPrice ?? null,
+          config.maxAcceptablePrice,
+          round,
+        );
+        option.offer.total_price = Math.max(adjusted, config.targetPrice);
 
         // Recalculate utility
         const newUtility = calculateWeightedUtilityFromResolved(
@@ -1240,7 +1282,27 @@ export function generateDynamicMesoOptions(
     );
 
     if (maxVariance > variance_target) {
-      adjustOffersForVariance(options, config, avgUtility, variance_target);
+      adjustOffersForVariance(
+        options,
+        config,
+        avgUtility,
+        variance_target,
+        lastAccordoCounterPrice,
+        vendorOffer.total_price,
+        round,
+      );
+    }
+
+    for (const option of options) {
+      if (option.offer.total_price != null) {
+        option.offer.total_price = enforcePmCounterMonotonicity(
+          option.offer.total_price,
+          lastAccordoCounterPrice,
+          vendorOffer.total_price,
+          config.maxAcceptablePrice,
+          round,
+        );
+      }
     }
 
     // Recalculate final variance

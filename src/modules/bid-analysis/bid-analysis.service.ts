@@ -20,7 +20,7 @@ import type {
   VendorNegotiationSummary,
   DealNegotiationMessage,
 } from './bid-analysis.types.js';
-import type { BidActionType, ActionDetails } from '../../models/bid-action-history.js';
+import type { BidActionType, ActionDetails } from '../../models/vendor/bid-action-history.js';
 
 const {
   Requisition,

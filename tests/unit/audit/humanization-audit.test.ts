@@ -12,7 +12,7 @@ import {
   humanRoundPrice,
   mapUtilityToFirmness,
   buildNegotiationIntent,
-} from "../../../src/negotiation/intent/build-negotiation-intent.js";
+} from "../../../src/modules/chatbot/engine/build-negotiation-intent.js";
 import {
   sanitizeText,
   validateLlmOutput,

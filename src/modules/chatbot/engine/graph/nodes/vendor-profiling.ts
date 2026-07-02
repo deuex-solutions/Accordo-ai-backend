@@ -1,5 +1,5 @@
 import { NegotiationState } from "../state.js";
-import { VendorNegotiationProfile } from "../../../../../models/vendor-negotiation-profile.js";
+import { VendorNegotiationProfile } from "../../../../../models/chatbot/vendor-negotiation-profile.js";
 import { buildPreferenceProfile } from "../../meso.js";
 
 /**

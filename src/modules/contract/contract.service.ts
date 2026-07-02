@@ -11,7 +11,7 @@ import {
   sendStatusChangeEmail,
 } from '../../services/email.service.js';
 import logger from '../../config/logger.js';
-import type { Contract } from '../../models/contract.js';
+import type { Contract } from '../../models/procurement/contract.js';
 import type { ContractData } from './contract.repo.js';
 
 export interface CreateContractOptions {

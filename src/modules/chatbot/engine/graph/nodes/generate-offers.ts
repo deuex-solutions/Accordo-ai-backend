@@ -90,26 +90,36 @@ export const generateOffersNode = async (state: NegotiationState) => {
       warranty_months: state.parsedOffer.warrantyMonths ?? null
     };
 
-    // Extract last accordo counter price from history if available
-    let lastAccordoCounterPrice = null;
-    if (state.counterOffer?.totalPrice) {
-      lastAccordoCounterPrice = state.counterOffer.totalPrice;
+    // Extract last accordo counter price from history or decision if available
+    let lastAccordoCounterPrice: number | null = null;
+    const decAny = state.decision as any;
+    if (decAny?.counterOffer) {
+      lastAccordoCounterPrice = decAny.counterOffer.total_price ?? decAny.counterOffer.totalPrice ?? null;
+    }
+    if (!lastAccordoCounterPrice && state.counterOffer) {
+      lastAccordoCounterPrice = (state.counterOffer as any).totalPrice ?? (state.counterOffer as any).total_price ?? null;
     }
 
     try {
-      // Call legacy MESO generator
+      // Call MESO generator with dynamic currency and last counter price
       const mesoResult = generateMesoOptions(
         state.config,
         extVendorOffer,
         state.round || 1,
         0.65,
-        "USD",
+        (state.config?.currency as any) || "INR",
         lastAccordoCounterPrice
       );
 
       if (mesoResult.success && mesoResult.options.length > 0) {
-        // Map back to State format
-        updates.mesoOptions = mesoResult.options.map(opt => mapToStateOffer(opt.offer));
+        // Map back to State format with customParameters for label/description
+        updates.mesoOptions = mesoResult.options.map(opt => ({
+          ...mapToStateOffer(opt.offer),
+          customParameters: {
+            label: opt.label,
+            description: opt.description
+          }
+        }));
         // Use the first MESO option as the primary counterOffer
         updates.counterOffer = mapToStateOffer(mesoResult.options[0].offer);
       } else {

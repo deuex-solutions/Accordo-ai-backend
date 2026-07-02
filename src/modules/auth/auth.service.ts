@@ -15,11 +15,10 @@ import {
   type ForgotPasswordData,
   type OtpData,
   type RefreshTokenData,
-} from "./auth.validator.js";
+} from "./auth.routes.js";
 import repo from "./auth.repo.js";
 import companyRepo from "../company/company.repo.js";
-import otpRepo from "./otp.repo.js";
-import { generateJWT, verifyJWT } from "../../middlewares/jwt.service.js";
+import { generateJWT, verifyJWT } from "../../middlewares/auth.middleware.js";
 import { getRoleService } from "../role/role.service.js";
 import { Role, RolePermission } from "../../models/index.js";
 import CustomError from "../../utils/custom-error.js";
@@ -187,7 +186,7 @@ export const forgotPasswordService = async (userData: ForgotPasswordData): Promi
   }
 
   const otp = crypto.randomInt(100000, 1000000);
-  await otpRepo.createOtp({
+  await repo.createOtp({
     user_id: user.id,
     for: "forgot_password",
     otp: String(otp),
