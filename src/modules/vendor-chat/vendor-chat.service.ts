@@ -19,13 +19,13 @@ import {
   type SupportedCurrency,
 } from "../../services/currency.service.js";
 import {
-  buildInitialDiscountPromptMessage,
-  buildVendorDiscountBubble,
-  buildDiscountAcknowledgement,
   buildPaymentTermsPromptMessage,
   buildVendorPaymentTermsBubble,
   formatPaymentTermsLabel,
 } from "./structured-prompts.js";
+import { buildVendorOpeningIntro } from "./vendor-opening-greeting.js";
+import { renderPmWelcomeMessage } from "../../llm/render-pm-welcome-message.js";
+import { PM_WELCOME_ACTION } from "../chatbot/pipeline/decision-actions.js";
 
 /**
  * Vendor Chat Service
@@ -413,7 +413,7 @@ export const getDealForVendor = async (
       name: rp.Product?.productName || "Unknown",
       quantity: rp.qty || 0,
       unit: rp.Product?.UOM || null,
-      // NO targetPrice, NO batna, NO maximum_price - hidden from vendors
+      // NO minUnitPrice, NO batna, NO maxUnitPrice - hidden from vendors
     })),
   };
 
@@ -451,103 +451,161 @@ export const getDealForVendor = async (
   };
 };
 
-/**
- * Vendor enters chat - creates opening message from quote if needed
- */
-export const vendorEnterChat = async (
+async function resolveOrCreateDealForContract(
+  contract: Contract,
+): Promise<ChatbotDeal> {
+  if (contract.chatbotDealId) {
+    const existing = await models.ChatbotDeal.findByPk(contract.chatbotDealId);
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const vendorName = (contract as any).Vendor?.name || "Vendor";
+  const requisitionTitle =
+    (contract.Requisition as any)?.title || "Requisition";
+
+  let negotiationConfig = null;
+  if (contract.requisitionId) {
+    try {
+      negotiationConfig = await buildConfigFromRequisition(
+        contract.requisitionId,
+      );
+    } catch (configError) {
+      logger.warn(
+        `Failed to build config from requisition: ${(configError as Error).message}`,
+      );
+    }
+  }
+
+  const deal = await models.ChatbotDeal.create({
+    id: uuidv4(),
+    title: `${vendorName} - ${requisitionTitle}`,
+    status: "NEGOTIATING",
+    mode: "CONVERSATION",
+    round: 0,
+    requisitionId: contract.requisitionId,
+    vendorId: contract.vendorId,
+    contractId: contract.id,
+    negotiationConfigJson: negotiationConfig,
+    latestOfferJson: null,
+    latestDecisionAction: null,
+    latestUtility: null,
+  });
+
+  await contract.update({ chatbotDealId: deal.id });
+  return deal;
+}
+
+async function findPmWelcomeMessage(
+  dealId: string,
+): Promise<ChatbotMessage | null> {
+  return models.ChatbotMessage.findOne({
+    where: { dealId, role: "ACCORDO", decisionAction: PM_WELCOME_ACTION },
+    order: [["createdAt", "ASC"]],
+  });
+}
+
+async function findVendorOpeningMessage(
+  dealId: string,
+): Promise<ChatbotMessage | null> {
+  return models.ChatbotMessage.findOne({
+    where: { dealId, role: "VENDOR" },
+    order: [["createdAt", "ASC"]],
+  });
+}
+
+function parseContractVendorQuote(contract: Contract): ContractDetails {
+  if (!contract.contractDetails) {
+    throw new CustomError("No quote found - please submit a quote first", 400);
+  }
+  try {
+    return typeof contract.contractDetails === "string"
+      ? JSON.parse(contract.contractDetails)
+      : contract.contractDetails;
+  } catch {
+    throw new CustomError("No quote found - please submit a quote first", 400);
+  }
+}
+
+export const ensurePmWelcomeMessage = async (
   uniqueToken: string,
 ): Promise<{
   deal: ChatbotDeal;
-  openingMessage: ChatbotMessage | null;
+  pmWelcomeMessage: ChatbotMessage;
+  created: boolean;
 }> => {
   const contract = await findContractByToken(uniqueToken);
   if (!contract) {
     throw new CustomError("Contract not found", 404);
   }
 
-  let deal: ChatbotDeal | null = null;
-
-  // If deal doesn't exist, create it (fallback for contracts created before deal auto-creation)
-  if (!contract.chatbotDealId) {
-    const vendorName = (contract as any).Vendor?.name || "Vendor";
-    const requisitionTitle =
-      (contract.Requisition as any)?.title || "Requisition";
-
-    // Build negotiation config from requisition (target prices, thresholds, etc.)
-    let negotiationConfig = null;
-    if (contract.requisitionId) {
-      try {
-        negotiationConfig = await buildConfigFromRequisition(
-          contract.requisitionId,
-        );
-        logger.info(
-          `Built negotiation config from requisition ${contract.requisitionId} for vendor enter chat`,
-        );
-      } catch (configError) {
-        logger.warn(
-          `Failed to build config from requisition: ${(configError as Error).message}`,
-        );
-      }
-    }
-
-    deal = await models.ChatbotDeal.create({
-      id: uuidv4(),
-      title: `${vendorName} - ${requisitionTitle}`,
-      status: "NEGOTIATING",
-      mode: "CONVERSATION",
-      round: 0,
-      requisitionId: contract.requisitionId,
-      vendorId: contract.vendorId,
-      contractId: contract.id,
-      negotiationConfigJson: negotiationConfig,
-      latestOfferJson: null,
-      latestDecisionAction: null,
-      latestUtility: null,
-    });
-
-    // Link the deal to the contract
-    await contract.update({ chatbotDealId: deal.id });
-  } else {
-    deal = await models.ChatbotDeal.findByPk(contract.chatbotDealId);
+  const deal = await resolveOrCreateDealForContract(contract);
+  const existing = await findPmWelcomeMessage(deal.id);
+  if (existing) {
+    return { deal, pmWelcomeMessage: existing, created: false };
   }
 
-  if (!deal) {
-    throw new CustomError("Failed to create negotiation deal", 500);
-  }
-
-  // Check if opening message already exists
-  const existingMessages = await models.ChatbotMessage.count({
-    where: { dealId: deal.id },
+  const requisition = (contract as any).Requisition;
+  const welcomeContent = await renderPmWelcomeMessage({
+    dealId: deal.id,
+    dealTitle: deal.title ?? undefined,
+    requisitionTitle: requisition?.subject ?? requisition?.rfqId ?? undefined,
+    buyerCompanyName: (contract as any).Company?.companyName ?? undefined,
+    vendorName: (contract as any).Vendor?.name ?? undefined,
+    productCategory: requisition?.category ?? undefined,
   });
 
-  if (existingMessages > 0) {
-    // Already has messages, just return deal
-    return { deal, openingMessage: null };
+  const welcomeId = uuidv4();
+  const pmWelcomeMessage = await models.ChatbotMessage.create({
+    id: welcomeId,
+    dealId: deal.id,
+    role: "ACCORDO",
+    content: welcomeContent,
+    extractedOffer: null,
+    counterOffer: null,
+    engineDecision: { action: PM_WELCOME_ACTION },
+    decisionAction: PM_WELCOME_ACTION,
+    utilityScore: null,
+    explainabilityJson: null,
+    round: 0,
+  });
+
+  await deal.update({ lastMessageAt: new Date() });
+  return { deal, pmWelcomeMessage, created: true };
+};
+
+export const ensureVendorOpeningMessage = async (
+  uniqueToken: string,
+): Promise<{
+  deal: ChatbotDeal;
+  vendorOpeningMessage: ChatbotMessage;
+  created: boolean;
+}> => {
+  const contract = await findContractByToken(uniqueToken);
+  if (!contract) {
+    throw new CustomError("Contract not found", 404);
   }
 
-  // Create opening message from vendor quote
-  let vendorQuote: ContractDetails | null = null;
-  if (contract.contractDetails) {
-    try {
-      vendorQuote =
-        typeof contract.contractDetails === "string"
-          ? JSON.parse(contract.contractDetails)
-          : contract.contractDetails;
-    } catch {
-      vendorQuote = null;
-    }
+  const deal = await resolveOrCreateDealForContract(contract);
+  const welcome = await findPmWelcomeMessage(deal.id);
+  if (!welcome) {
+    throw new CustomError(
+      "PM welcome message must be sent before vendor opening",
+      400,
+    );
   }
 
-  if (!vendorQuote) {
-    throw new CustomError("No quote found - please submit a quote first", 400);
+  const existing = await findVendorOpeningMessage(deal.id);
+  if (existing) {
+    return { deal, vendorOpeningMessage: existing, created: false };
   }
 
-  // Resolve currency from the requisition (source of truth)
+  const vendorQuote = parseContractVendorQuote(contract);
   const requisitionCurrency =
     ((contract.Requisition as any)?.typeOfCurrency as SupportedCurrency) ||
     "USD";
 
-  // Build opening message content from quote
   let grandTotal = 0;
   let totalUnits = 0;
   const productLines: string[] = [];
@@ -561,10 +619,9 @@ export const vendorEnterChat = async (
     const lineTotal = unitPrice * quantity;
     grandTotal += lineTotal;
     totalUnits += quantity;
-
     const productName = p.productName || "Unnamed Product";
     productLines.push(
-      `${productName}: ${quantity} units, total price = ${formatCurrency(lineTotal, requisitionCurrency)}`
+      `${productName}: ${quantity} units, total price = ${formatCurrency(lineTotal, requisitionCurrency)}`,
     );
   });
 
@@ -574,13 +631,11 @@ export const vendorEnterChat = async (
     termsText += `\nPayment terms: ${terms.paymentTerms === "net_payment" ? `Net ${terms.netPaymentDay || 30} days` : "Advance/Post payment"}`;
   }
 
-  const productBreakdownText = productLines.length > 0
-    ? `\n\n${productLines.join("\n")}`
-    : "";
+  const productBreakdownText =
+    productLines.length > 0 ? `\n\n${productLines.join("\n")}` : "";
+  const openingIntro = buildVendorOpeningIntro();
+  const openingContent = `${openingIntro}\n\nUnits: ${totalUnits}\nTotal price: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}${productBreakdownText}\n\nI look forward to discussing the details.`;
 
-  const openingContent = `Hello, I'm submitting my quotation for this requisition:\n\nUnits: ${totalUnits}\nTotal price: ${formatCurrency(grandTotal, requisitionCurrency)}${termsText}${productBreakdownText}\n\nI look forward to discussing the details.`;
-
-  // Build payment terms string for extracted offer
   const paymentTermsStr =
     terms?.paymentTerms === "net_payment"
       ? `Net ${terms?.netPaymentDay || 30}`
@@ -590,10 +645,6 @@ export const vendorEnterChat = async (
       ? Number(terms?.netPaymentDay || 30)
       : null;
 
-  // Build an AccumulatedOffer for the opening message so downstream rounds
-  // (which call mergeOffers / getMissingComponents) have a proper baseline
-  // with an `accumulation` block. Writing a plain Offer here would cause
-  // mergeOffers to throw on `base.accumulation.sourceMessageIds` next round.
   const openingMessageId = uuidv4();
   const { createAccumulatedOffer: createAccumulatedOfferForOpening } =
     await import("../chatbot/engine/offer-accumulator.js");
@@ -606,8 +657,7 @@ export const vendorEnterChat = async (
     openingMessageId,
   );
 
-  // Create the opening message with total_price (the format the decision engine expects)
-  const openingMessage = await models.ChatbotMessage.create({
+  const vendorOpeningMessage = await models.ChatbotMessage.create({
     id: openingMessageId,
     dealId: deal.id,
     role: "VENDOR",
@@ -621,52 +671,31 @@ export const vendorEnterChat = async (
     round: 1,
   });
 
-  // Update deal round + set latestVendorOffer baseline (AccumulatedOffer
-  // shape, so downstream mergeOffers calls don't crash).
   await deal.update({
     round: 1,
     latestVendorOffer: openingAccumulatedOffer as any,
+    lastMessageAt: new Date(),
   });
 
-  // Round-1 AI PM message is a deterministic templated "ask for initial
-  // discount" — the negotiation engine/LLM is NOT invoked on Round 1 anymore.
-  // The engine first runs after the vendor submits their discount reply via
-  // the dedicated /discount endpoint (see submitInitialDiscountService).
-  //
-  // Guardrail: only generate this if no ACCORDO message exists on the deal.
-  const existingAccordoCount = await models.ChatbotMessage.count({
-    where: { dealId: deal.id, role: "ACCORDO" },
-  });
-  if (existingAccordoCount === 0) {
-    const { content: promptContent, pendingPrompt } =
-      buildInitialDiscountPromptMessage(grandTotal, requisitionCurrency);
+  return { deal, vendorOpeningMessage, created: true };
+};
 
-    await models.ChatbotMessage.create({
-      id: uuidv4(),
-      dealId: deal.id,
-      role: "ACCORDO",
-      content: promptContent,
-      extractedOffer: null,
-      engineDecision: {
-        action: "DISCOUNT_PROMPT",
-        pendingPrompt,
-      } as any,
-      decisionAction: "DISCOUNT_PROMPT",
-      utilityScore: null,
-      counterOffer: null,
-      explainabilityJson: null,
-      round: 1,
-    });
-    logger.info(
-      `[VendorEnterChat] Round-1 discount prompt message created for deal ${deal.id}`,
-    );
-  } else {
-    logger.warn(
-      `[VendorEnterChat] Skipping discount prompt — deal ${deal.id} already has ${existingAccordoCount} ACCORDO message(s)`,
-    );
-  }
-
-  return { deal, openingMessage };
+/**
+ * Vendor enters chat — ensures PM welcome (step 1 of thread bootstrap).
+ */
+export const vendorEnterChat = async (
+  uniqueToken: string,
+): Promise<{
+  deal: ChatbotDeal;
+  openingMessage: ChatbotMessage | null;
+  pmWelcomeMessage: ChatbotMessage | null;
+}> => {
+  const result = await ensurePmWelcomeMessage(uniqueToken);
+  return {
+    deal: result.deal,
+    openingMessage: null,
+    pmWelcomeMessage: result.pmWelcomeMessage,
+  };
 };
 
 /**
@@ -874,175 +903,13 @@ export const generatePMResponse = async (
       explainability: sanitizedExplainability,
     };
   } catch (error) {
-    logger.error(
-      "Failed to generate PM response using LLM service, attempting direct engine fallback",
-      {
-        error: (error as Error).message,
-        stack: (error as Error).stack?.split("\n").slice(0, 5).join("\n"),
-        dealId: deal.id,
-        vendorMessageId,
-      },
-    );
-
-    // Fallback: run the decision engine directly (no LLM, template-based response)
-    try {
-      const { decideNextMove } = await import("../chatbot/engine/decide.js");
-      const { generateQuickFallback } =
-        await import("../chatbot/engine/response-generator.js");
-      const { parseOfferWithDelivery } =
-        await import("../chatbot/engine/parse-offer.js");
-
-      // Build config from deal or requisition
-      let config: any;
-      if (deal.negotiationConfigJson) {
-        const stored = deal.negotiationConfigJson as any;
-        config = {
-          parameters: stored.parameters,
-          accept_threshold: stored.accept_threshold,
-          escalate_threshold: stored.escalate_threshold,
-          walkaway_threshold: stored.walkaway_threshold,
-          max_rounds: stored.max_rounds,
-          priority: stored.priority,
-        };
-      } else if (deal.requisitionId) {
-        config = await buildConfigFromRequisition(deal.requisitionId);
-      } else {
-        throw new Error("No negotiation config available for fallback");
-      }
-
-      // Extract vendor offer
-      const vendorOffer =
-        (vendorMessage.extractedOffer as any) ||
-        parseOfferWithDelivery(vendorMessage.content);
-
-      // Run decision engine
-      const decision = decideNextMove(
-        config,
-        vendorOffer,
-        deal.round,
-        null,
-        null,
-      );
-
-      // Generate template-based response (no LLM)
-      const responseContent = generateQuickFallback({
-        decision,
-        config,
-        conversationHistory: [
-          { role: "VENDOR", content: vendorMessage.content },
-        ],
-        vendorOffer,
-        counterOffer: decision.counterOffer,
-        dealTitle: deal.title,
-        round: deal.round,
-        maxRounds: config.max_rounds,
-      });
-
-      const currentRound = vendorMessage.round || deal.round + 1;
-
-      const fallbackMessage = await models.ChatbotMessage.create({
-        id: uuidv4(),
-        dealId: deal.id,
-        role: "ACCORDO",
-        content: responseContent,
-        extractedOffer: null,
-        counterOffer: decision.counterOffer as any,
-        engineDecision: decision as any,
-        decisionAction: decision.action,
-        utilityScore: decision.utilityScore,
-        explainabilityJson: null,
-        round: currentRound,
-      });
-
-      let finalStatus:
-        | "NEGOTIATING"
-        | "ACCEPTED"
-        | "WALKED_AWAY"
-        | "ESCALATED" = deal.status;
-      if (decision.action === "ACCEPT") finalStatus = "ACCEPTED";
-      else if (decision.action === "WALK_AWAY") finalStatus = "WALKED_AWAY";
-      else if (decision.action === "ESCALATE") finalStatus = "ESCALATED";
-
-      await deal.update({
-        round: currentRound,
-        status: finalStatus,
-        latestOfferJson: decision.counterOffer as any,
-        latestDecisionAction: decision.action,
-        latestUtility: decision.utilityScore,
-      });
-      await deal.reload();
-
-      // Sync contract status when deal reaches terminal state (fire-and-forget)
-      if (["ACCEPTED", "WALKED_AWAY", "ESCALATED"].includes(finalStatus)) {
-        syncContractStatus(deal.id, finalStatus, deal.contractId).catch((err) =>
-          logger.error(
-            `[Fallback] Failed to sync contract status: ${(err as Error).message}`,
-          ),
-        );
-      }
-
-      logger.info(
-        `[Fallback] Direct engine response for vendor chat: ${decision.action} (utility: ${decision.utilityScore})`,
-      );
-
-      return {
-        pmMessage: fallbackMessage,
-        decision: {
-          action: decision.action as
-            | "ACCEPT"
-            | "COUNTER"
-            | "ESCALATE"
-            | "WALK_AWAY",
-          utilityScore: decision.utilityScore,
-          counterOffer: decision.counterOffer || null,
-          reasons: decision.reasons || [],
-        },
-        deal,
-        meso: null, // Fallback doesn't generate MESO
-        explainability: null,
-      };
-    } catch (fallbackError) {
-      logger.error("Direct engine fallback also failed", {
-        error: (fallbackError as Error).message,
-        stack: (fallbackError as Error).stack
-          ?.split("\n")
-          .slice(0, 5)
-          .join("\n"),
-      });
-
-      // Last resort: create a generic acknowledgment
-      const lastResortContent = `Thank you for your offer. I've reviewed the details and would like to discuss terms further. Could you share more about your pricing flexibility?`;
-
-      const lastResortMessage = await models.ChatbotMessage.create({
-        id: uuidv4(),
-        dealId: deal.id,
-        role: "ACCORDO",
-        content: lastResortContent,
-        extractedOffer: null,
-        counterOffer: null,
-        engineDecision: null,
-        decisionAction: "COUNTER",
-        utilityScore: null,
-        explainabilityJson: null,
-        round: deal.round + 1,
-      });
-
-      await deal.update({ round: deal.round + 1 });
-      await deal.reload();
-
-      return {
-        pmMessage: lastResortMessage,
-        decision: {
-          action: "COUNTER" as const,
-          utilityScore: 0,
-          counterOffer: null,
-          reasons: ["Engine fallback failed - generic response"],
-        },
-        deal,
-        meso: null, // Last resort doesn't generate MESO
-        explainability: null,
-      };
-    }
+    logger.error("Failed to generate PM response via P0 pipeline", {
+      error: (error as Error).message,
+      stack: (error as Error).stack?.split("\n").slice(0, 5).join("\n"),
+      dealId: deal.id,
+      vendorMessageId,
+    });
+    throw error;
   }
 };
 
@@ -1386,224 +1253,6 @@ export const confirmFinalOfferService = async (
 };
 
 // ============================================================================
-// Feature 1 — Initial discount submission
-// ============================================================================
-
-/**
- * Handle the vendor's answer to the Round-1 "ask for initial discount" prompt.
- * Persists a VENDOR message with the discounted total, writes the discount
- * summary to the deal, then runs the real negotiation engine for the first
- * time and prepends a templated acknowledgement to the engine's output.
- */
-export const submitInitialDiscountService = async (
-  uniqueToken: string,
-  percent: number,
-): Promise<{
-  vendorMessage: ChatbotMessage;
-  pmMessage: ChatbotMessage;
-  decision: {
-    action: "ACCEPT" | "COUNTER" | "ESCALATE" | "WALK_AWAY";
-    utilityScore: number;
-    counterOffer: any | null;
-    reasons: string[];
-  };
-  deal: ChatbotDeal;
-  meso: any | null;
-}> => {
-  // Validate
-  if (!Number.isFinite(percent)) {
-    throw new CustomError("Discount percent must be a number", 400);
-  }
-  if (!Number.isInteger(percent)) {
-    throw new CustomError("Discount percent must be a whole number", 400);
-  }
-  if (percent < 0 || percent > 100) {
-    throw new CustomError("Discount percent must be between 0 and 100", 400);
-  }
-
-  const contract = await findContractByToken(uniqueToken);
-  if (!contract) {
-    throw new CustomError("Contract not found", 404);
-  }
-  if (!contract.chatbotDealId) {
-    throw new CustomError("No negotiation deal found for this contract", 404);
-  }
-
-  const deal = await models.ChatbotDeal.findByPk(contract.chatbotDealId);
-  if (!deal) {
-    throw new CustomError("Deal not found", 404);
-  }
-  if (deal.status !== "NEGOTIATING") {
-    throw new CustomError(
-      `Cannot submit discount — negotiation is ${deal.status}`,
-      400,
-    );
-  }
-
-  // Verify the latest ACCORDO message is actually waiting on a discount reply
-  const latestAccordo = await models.ChatbotMessage.findOne({
-    where: { dealId: deal.id, role: "ACCORDO" },
-    order: [["createdAt", "DESC"]],
-  });
-  const latestPendingPrompt = (latestAccordo?.engineDecision as any)
-    ?.pendingPrompt;
-  if (!latestAccordo || latestPendingPrompt?.type !== "discount_percent") {
-    throw new CustomError("No discount prompt is pending for this deal", 400);
-  }
-
-  // Resolve currency + original total
-  const requisitionCurrency =
-    ((contract.Requisition as any)?.typeOfCurrency as SupportedCurrency) ||
-    "USD";
-  const originalTotal =
-    Number(latestPendingPrompt?.discount?.originalTotal) || 0;
-  if (originalTotal <= 0) {
-    throw new CustomError(
-      "Original quote total is missing from the pending prompt",
-      400,
-    );
-  }
-
-  // Compute the effective (discounted) total — use humanRoundPrice so the
-  // vendor sees a natural number (₹348,000 not ₹347,608.80).
-  const { humanRoundPrice } = await import(
-    "../../negotiation/intent/build-negotiation-intent.js"
-  );
-  const discountedTotal = humanRoundPrice(
-    Math.round(originalTotal * (1 - percent / 100) * 100) / 100,
-  );
-
-  // Carry forward payment terms from the opening vendor message (all fields
-  // on the quote form are compulsory, so these should exist).
-  const openingVendor = await models.ChatbotMessage.findOne({
-    where: { dealId: deal.id, role: "VENDOR" },
-    order: [["createdAt", "ASC"]],
-  });
-  const openingOffer = (openingVendor?.extractedOffer as any) || {};
-  const paymentTermsStr = openingOffer.payment_terms ?? null;
-  const paymentDays = openingOffer.payment_terms_days ?? null;
-  const openingDeliveryDate = openingOffer.delivery_date ?? null;
-  const openingDeliveryDays = openingOffer.delivery_days ?? null;
-
-  // Build an AccumulatedOffer for the discounted reply so downstream rounds
-  // have a valid baseline with an `accumulation` block.
-  const { createAccumulatedOffer } =
-    await import("../chatbot/engine/offer-accumulator.js");
-  const vendorMessageId = uuidv4();
-  const discountedAccumulatedOffer = createAccumulatedOffer(
-    {
-      total_price: discountedTotal,
-      payment_terms: paymentTermsStr,
-      payment_terms_days: paymentDays,
-      delivery_date: openingDeliveryDate,
-      delivery_days: openingDeliveryDays,
-    } as any,
-    vendorMessageId,
-  );
-
-  // Persist the vendor's discount-reply message
-  const vendorBubble = buildVendorDiscountBubble(percent);
-  const newRound = deal.round + 1;
-  const vendorMessage = await models.ChatbotMessage.create({
-    id: vendorMessageId,
-    dealId: deal.id,
-    role: "VENDOR",
-    content: vendorBubble,
-    extractedOffer: discountedAccumulatedOffer as any,
-    engineDecision: {
-      discountApplied: {
-        percent,
-        discountAppliedTo: originalTotal,
-      },
-    } as any,
-    decisionAction: null,
-    utilityScore: null,
-    counterOffer: null,
-    explainabilityJson: null,
-    round: newRound,
-  });
-
-  // Persist discount summary on the deal + update latestVendorOffer + round
-  const existingConfig = (deal.negotiationConfigJson as any) || {};
-  const updatedConfig = {
-    ...existingConfig,
-    initialDiscount: {
-      percent,
-      originalTotal,
-      discountedTotal,
-      appliedAt: new Date().toISOString(),
-    },
-  };
-  await deal.update({
-    negotiationConfigJson: updatedConfig as any,
-    latestVendorOffer: discountedAccumulatedOffer as any,
-    round: newRound,
-    lastMessageAt: new Date(),
-  });
-
-  logger.info(
-    `[Discount] Vendor applied ${percent}% discount to deal ${deal.id}: ` +
-      `${originalTotal} → ${discountedTotal} (${requisitionCurrency})`,
-  );
-
-  // Now run the real engine for the first time — it sees the discounted total
-  // as the vendor's effective offer and produces a real decision.
-  const engineResult = await generatePMResponseAsyncService({
-    dealId: deal.id,
-    vendorMessageId: vendorMessage.id,
-    userId: 0,
-  });
-
-  await deal.reload();
-
-  // Prepend a templated acknowledgement line to the engine's output.
-  const ack = buildDiscountAcknowledgement(
-    percent,
-    originalTotal,
-    discountedTotal,
-    requisitionCurrency,
-  );
-  let originalEngineContent = engineResult.message.content || "";
-  // Strip leading "Thank you" / "Thanks" from engine output when the ack
-  // already opens with one — prevents "Thank you for the discount. Thank you
-  // for working with us, here's our counter..." double-thanks.
-  if (/^thank/i.test(ack)) {
-    originalEngineContent = originalEngineContent
-      .replace(/^(thanks?\s+(you\s+)?)(for\s+\w+[\w\s,]*[.,]\s*)/i, "")
-      .replace(/^(thanks?\s+(you\s+)?[\w\s,]*[.,]\s*)/i, "")
-      .replace(/^\s+/, "");
-    // Capitalize the new first character after stripping.
-    if (originalEngineContent.length > 0) {
-      originalEngineContent =
-        originalEngineContent[0].toUpperCase() +
-        originalEngineContent.slice(1);
-    }
-  }
-  await engineResult.message.update({
-    content: ack + originalEngineContent,
-  });
-
-  const pmDecision = {
-    action: engineResult.decision.action as
-      | "ACCEPT"
-      | "COUNTER"
-      | "ESCALATE"
-      | "WALK_AWAY",
-    utilityScore: engineResult.decision.utilityScore || 0,
-    counterOffer: engineResult.decision.counterOffer || null,
-    reasons: engineResult.decision.reasons || [],
-  };
-
-  return {
-    vendorMessage,
-    pmMessage: engineResult.message,
-    decision: pmDecision,
-    deal,
-    meso: engineResult.meso || null,
-  };
-};
-
-// ============================================================================
 // Feature 2 — Payment terms submission
 // ============================================================================
 
@@ -1758,12 +1407,13 @@ export default {
   canEditQuote,
   editVendorQuote,
   getDealForVendor,
+  ensurePmWelcomeMessage,
+  ensureVendorOpeningMessage,
   vendorEnterChat,
   vendorSendMessageInstant,
   generatePMResponse,
   selectMesoOptionService,
   submitOthersService,
   confirmFinalOfferService,
-  submitInitialDiscountService,
   submitPaymentTermsService,
 };

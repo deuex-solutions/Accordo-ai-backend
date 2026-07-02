@@ -298,7 +298,7 @@ async function seedRequisitions(): Promise<void> {
       maxDeliveryDate: req.maxDeliveryDate,  // Hard deadline for delivery
       negotiationClosureDate: req.negotiationClosureDate,
       typeOfCurrency: 'USD',
-      totalPrice: req.estimatedValue,
+      minTotalPrice: req.estimatedValue,
       status: req.status,
       payment_terms: 'Net 30',
       net_payment_day: '30',
@@ -318,8 +318,8 @@ async function seedRequisitions(): Promise<void> {
         defaults: {
           requisitionId: req.id,
           productId: product.productId,
-          targetPrice: product.targetUnitPrice,
-          maximum_price: product.targetUnitPrice * 1.2,
+          minUnitPrice: product.targetUnitPrice,
+          maxUnitPrice: product.targetUnitPrice * 1.2,
           qty: product.quantity,
           createdBy: req.createdById,
         },

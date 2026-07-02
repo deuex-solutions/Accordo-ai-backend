@@ -22,11 +22,54 @@ import {
 } from "../chatbot/chatbot.service.js";
 import logger from "../../config/logger.js";
 
+const safeParseFloat = (value: unknown): number | null => {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = typeof value === "string" ? parseFloat(value) : Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const resolveMinUnitPrice = (product: ProductData): number | null =>
+  safeParseFloat(
+    product.minUnitPrice ??
+      product.targetPrice ??
+      (product as unknown as Record<string, unknown>).min_unit_price ??
+      (product as unknown as Record<string, unknown>).target_price,
+  );
+
+const resolveMaxUnitPrice = (product: ProductData): number | null =>
+  safeParseFloat(
+    product.maxUnitPrice ??
+      product.maximum_price ??
+      (product as unknown as Record<string, unknown>).max_unit_price,
+  );
+
+const normalizeRequisitionPricingFields = (
+  data: Record<string, unknown>,
+): void => {
+  if (data.minTotalPrice === undefined) {
+    if (data.totalPrice !== undefined) {
+      data.minTotalPrice = data.totalPrice;
+    } else if (data.total_price !== undefined) {
+      data.minTotalPrice = data.total_price;
+    }
+  }
+  if (data.maxTotalPrice === undefined && data.totalMaxPrice !== undefined) {
+    data.maxTotalPrice = data.totalMaxPrice;
+  }
+  delete data.totalPrice;
+  delete data.totalMaxPrice;
+  delete data.total_price;
+};
+
 export interface ProductData {
   productId: number | string;
   qty?: number | string;
   quantity?: number | string; // Alternative name for qty
+  minUnitPrice?: number | string;
+  maxUnitPrice?: number | string;
+  /** @deprecated legacy API key */
   targetPrice?: number | string;
+  /** @deprecated legacy API key */
   maximum_price?: number | string;
   unitPrice?: number;
   gstType?: string;
@@ -113,6 +156,8 @@ export const createRequisionService = async (
       cleanedData.maxDeliveryDate = cleanedData.maximum_delivery_date;
     }
     delete cleanedData.maximum_delivery_date;
+
+    normalizeRequisitionPricingFields(cleanedData);
 
     // Parse and validate date fields - multipart form data sends dates as strings
     const dateFields = [
@@ -229,8 +274,8 @@ export const createRequisionService = async (
             requisitionId: requisition.id,
             productId: safeParseInt(product.productId),
             qty: safeParseInt(product.qty) ?? safeParseInt(product.quantity),
-            targetPrice: safeParseFloat(product.targetPrice),
-            maximum_price: safeParseFloat(product.maximum_price),
+            minUnitPrice: resolveMinUnitPrice(product),
+            maxUnitPrice: resolveMaxUnitPrice(product),
             createdBy: userId, // Required field for RequisitionProduct
           };
           return repo.createRequisitionProduct(normalizedProduct);
@@ -408,8 +453,8 @@ export const updateRequisitionService = async (
       subject: oldRequisition.subject,
       deliveryDate: oldRequisition.deliveryDate,
       negotiationClosureDate: oldRequisition.negotiationClosureDate,
-      totalPrice: oldRequisition.totalPrice,
-      totalMaxPrice: oldRequisition.totalMaxPrice,
+      minTotalPrice: oldRequisition.minTotalPrice,
+      maxTotalPrice: oldRequisition.maxTotalPrice,
       maxDeliveryDate: oldRequisition.maxDeliveryDate,
       payment_terms: oldRequisition.payment_terms,
       net_payment_day: oldRequisition.net_payment_day,
@@ -425,6 +470,8 @@ export const updateRequisitionService = async (
       requisitionData.maxDeliveryDate = requisitionData.maximum_delivery_date;
     }
     delete requisitionData.maximum_delivery_date;
+
+    normalizeRequisitionPricingFields(requisitionData);
 
     // Parse productData from various formats (multipart form data can send it differently)
     let productData: ProductData[] = [];
@@ -460,8 +507,8 @@ export const updateRequisitionService = async (
       "negotiationClosureDate",
       "typeOfCurrency",
       "totalQuantity",
-      "totalPrice",
-      "totalMaxPrice",
+      "minTotalPrice",
+      "maxTotalPrice",
       "finalPrice",
       "status",
       "payment_terms",
@@ -477,8 +524,8 @@ export const updateRequisitionService = async (
     // Fields that are DOUBLE/numeric type - empty strings should become null
     const numericFields = [
       "totalQuantity",
-      "totalPrice",
-      "totalMaxPrice",
+      "minTotalPrice",
+      "maxTotalPrice",
       "finalPrice",
       "pre_payment_percentage",
       "post_payment_percentage",
@@ -603,8 +650,8 @@ export const updateRequisitionService = async (
           requisitionId,
           productId: safeParseInt(product.productId),
           qty: safeParseInt(product.qty) ?? safeParseInt(product.quantity),
-          targetPrice: safeParseFloat(product.targetPrice),
-          maximum_price: safeParseFloat(product.maximum_price),
+          minUnitPrice: resolveMinUnitPrice(product),
+          maxUnitPrice: resolveMaxUnitPrice(product),
           createdBy: userId, // Required field for RequisitionProduct
           // Note: 'id' is intentionally NOT included - let database auto-generate it
           // Note: 'createdAt' is auto-generated by Sequelize timestamps: true
@@ -693,8 +740,8 @@ export const updateRequisitionService = async (
         deliveryDate: cleanedData.deliveryDate ?? oldState.deliveryDate,
         negotiationClosureDate:
           cleanedData.negotiationClosureDate ?? oldState.negotiationClosureDate,
-        totalPrice: cleanedData.totalPrice ?? oldState.totalPrice,
-        totalMaxPrice: cleanedData.totalMaxPrice ?? oldState.totalMaxPrice,
+        minTotalPrice: cleanedData.minTotalPrice ?? oldState.minTotalPrice,
+        maxTotalPrice: cleanedData.maxTotalPrice ?? oldState.maxTotalPrice,
         maxDeliveryDate:
           cleanedData.maxDeliveryDate ?? oldState.maxDeliveryDate,
         payment_terms: cleanedData.payment_terms ?? oldState.payment_terms,

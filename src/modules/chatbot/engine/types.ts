@@ -232,7 +232,6 @@ export type NegotiationPhase =
   | 'STALL_QUESTION'        // "Is this your final offer?" shown
   | 'DEAL_ACCEPTED'         // Vendor selected MESO, deal closed
   | 'ESCALATED'             // Human PM takeover
-  | 'DISCOUNT_PROMPT'       // PM asked for initial discount, composer shows numeric % input
   | 'PAYMENT_TERMS_PROMPT'; // PM asked for payment terms, composer shows dropdown
 
 /**
@@ -444,7 +443,11 @@ export interface WeightedNegotiationConfig {
     total_price: {
       weight: number;
       anchor: number;
+      min_total_price?: number;
+      max_total_price?: number;
+      /** @deprecated use min_total_price */
       target: number;
+      /** @deprecated use max_total_price */
       max_acceptable: number;
       concession_step: number;
     };
@@ -647,8 +650,8 @@ export interface AdaptiveFeaturesConfig {
  * Used when user doesn't modify values in the Deal Wizard
  */
 export const ACCORDO_DEFAULTS = {
-  targetUnitPrice: null as number | null,
-  maxAcceptablePrice: null as number | null,
+  minTotalPrice: null as number | null,
+  maxTotalPrice: null as number | null,
   paymentTermsMinDays: 30,        // Net 30
   paymentTermsMaxDays: 60,        // Net 60
   warrantyPeriodMonths: 12,       // 1 year
@@ -657,18 +660,18 @@ export const ACCORDO_DEFAULTS = {
   maxRounds: 50,                  // Feb 2026: Increased from 10 to 50 for extended negotiations
   walkawayThreshold: 20,          // 20%
   priority: 'MEDIUM' as 'HIGH' | 'MEDIUM' | 'LOW',
-  mode: 'CONVERSATION' as 'INSIGHTS' | 'CONVERSATION',
+  mode: 'CONVERSATION' as const,
 } as const;
 
 /**
  * Accordo default WEIGHTS from Step 4 of the Deal Wizard
  * Used when user keeps AI-suggested weights (aiSuggested = true)
  * Updated Feb 2026: Simplified to 5 core utility parameters
- * Primary (70-85%): targetUnitPrice(40) + paymentTerms(25) + deliveryDate(20)
+ * Primary (70-85%): minTotalPrice(40) + paymentTerms(25) + deliveryDate(20)
  * Secondary (15-20%): warrantyPeriod(10) + qualityStandards(5)
  */
 export const DEFAULT_WEIGHTS = {
-  targetUnitPrice: 40,
+  minTotalPrice: 40,
   paymentTerms: 25,
   deliveryDate: 20,
   warrantyPeriod: 10,
@@ -725,7 +728,11 @@ export interface ExtendedOffer {
 export interface WizardConfig {
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   priceQuantity: {
+    minTotalPrice: number | null;
+    maxTotalPrice: number | null;
+    /** @deprecated use minTotalPrice — stores total contract minimum */
     targetUnitPrice: number | null;
+    /** @deprecated use maxTotalPrice — stores total contract maximum */
     maxAcceptablePrice: number | null;
     minOrderQuantity: number | null;
     preferredQuantity?: number | null;
@@ -782,8 +789,8 @@ export interface WizardConfig {
  */
 export interface ResolvedNegotiationConfig {
   // Resolved VALUES (user if provided, else default)
-  targetPrice: number;
-  maxAcceptablePrice: number;
+  minTotalPrice: number;
+  maxTotalPrice: number;
   paymentTermsMinDays: number;
   paymentTermsMaxDays: number;
   deliveryDate: Date | null;

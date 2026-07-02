@@ -36,6 +36,16 @@ import {
   parsePaymentTermsDays,
   getDefaultParameterConfigs,
 } from "./parameter-utility.js";
+import {
+  buildResolvedPriceFields,
+  normalizePriceWeightKey,
+  readEngineMaxTotalPrice,
+  readEngineMinTotalPrice,
+  readPriceWeight,
+  readWizardMaxTotalPrice,
+  readWizardMinTotalPrice,
+  PRICE_WEIGHT_KEY,
+} from "./pricing-field-keys.js";
 
 /**
  * Calculate weighted utility from parsed vendor offer and configuration
@@ -551,31 +561,36 @@ export function resolveNegotiationConfig(
   // Resolve VALUES from wizard or legacy config
   // ============================================
 
-  // Price values
-  let targetPrice: number;
-  let maxAcceptablePrice: number;
+  // Price values (dual-read wizard + legacy engine keys)
+  let minTotalPrice: number;
+  let maxTotalPrice: number;
 
-  if (wizardConfig?.priceQuantity?.targetUnitPrice != null) {
-    targetPrice = wizardConfig.priceQuantity.targetUnitPrice;
-    sources['targetPrice'] = 'user';
-  } else if (legacyConfig?.total_price?.target != null) {
-    targetPrice = legacyConfig.total_price.target;
-    sources['targetPrice'] = 'user';
+  const wizardMin = readWizardMinTotalPrice(wizardConfig?.priceQuantity);
+  const wizardMax = readWizardMaxTotalPrice(wizardConfig?.priceQuantity);
+
+  if (wizardMin != null) {
+    minTotalPrice = wizardMin;
+    sources["minTotalPrice"] = "user";
+  } else if (legacyConfig?.total_price != null) {
+    minTotalPrice = readEngineMinTotalPrice(legacyConfig.total_price, 1000);
+    sources["minTotalPrice"] = "user";
   } else {
-    targetPrice = 1000; // Fallback default
-    sources['targetPrice'] = 'default';
+    minTotalPrice = 1000;
+    sources["minTotalPrice"] = "default";
   }
 
-  if (wizardConfig?.priceQuantity?.maxAcceptablePrice != null) {
-    maxAcceptablePrice = wizardConfig.priceQuantity.maxAcceptablePrice;
-    sources['maxAcceptablePrice'] = 'user';
-  } else if (legacyConfig?.total_price?.max_acceptable != null) {
-    maxAcceptablePrice = legacyConfig.total_price.max_acceptable;
-    sources['maxAcceptablePrice'] = 'user';
+  if (wizardMax != null) {
+    maxTotalPrice = wizardMax;
+    sources["maxTotalPrice"] = "user";
+  } else if (legacyConfig?.total_price != null) {
+    maxTotalPrice = readEngineMaxTotalPrice(legacyConfig.total_price, minTotalPrice * 1.25);
+    sources["maxTotalPrice"] = "user";
   } else {
-    maxAcceptablePrice = targetPrice * 1.25; // 25% above target
-    sources['maxAcceptablePrice'] = 'calculated';
+    maxTotalPrice = minTotalPrice * 1.25;
+    sources["maxTotalPrice"] = "calculated";
   }
+
+  const resolvedPrices = buildResolvedPriceFields(minTotalPrice, maxTotalPrice);
 
   // Payment terms
   const paymentTermsMinDays = getValueWithSource(
@@ -677,6 +692,7 @@ export function resolveNegotiationConfig(
   }
 
   // Ensure all default weights exist (for backwards compatibility)
+  weights = normalizePriceWeightKey(weights);
   for (const [key, value] of Object.entries(DEFAULT_WEIGHTS)) {
     if (!(key in weights)) {
       weights[key] = value;
@@ -728,19 +744,17 @@ export function resolveNegotiationConfig(
   // Calculate price-related values
   // ============================================
 
-  const anchorPrice = legacyConfig?.total_price?.anchor ?? targetPrice * 0.85;
+  const anchorPrice = legacyConfig?.total_price?.anchor ?? minTotalPrice * 0.85;
   sources['anchorPrice'] = legacyConfig?.total_price?.anchor != null ? 'user' : 'calculated';
 
-  const priceRange = maxAcceptablePrice - targetPrice;
+  const priceRange = maxTotalPrice - minTotalPrice;
   sources['priceRange'] = 'calculated';
 
   const concessionStep = priceRange / (maxRounds > 0 ? maxRounds : 10);
   sources['concessionStep'] = 'calculated';
 
   return {
-    // Values
-    targetPrice,
-    maxAcceptablePrice,
+    ...resolvedPrices,
     paymentTermsMinDays,
     paymentTermsMaxDays,
     deliveryDate,
@@ -790,28 +804,30 @@ export function calculateWeightedUtilityFromResolved(
   // Price Parameters
   // ============================================
 
-  // Target Price Utility
-  if (weights.targetUnitPrice > 0 && vendorOffer.total_price != null) {
+  const priceWeight = readPriceWeight(weights);
+
+  // Minimum total price utility
+  if (priceWeight > 0 && vendorOffer.total_price != null) {
     const priceUtility = calculatePriceUtility(
       vendorOffer.total_price,
-      resolvedConfig.targetPrice,
-      resolvedConfig.maxAcceptablePrice
+      resolvedConfig.minTotalPrice,
+      resolvedConfig.maxTotalPrice
     );
-    const contribution = priceUtility * (weights.targetUnitPrice / 100);
-    parameterUtilities['targetUnitPrice'] = {
-      parameterId: 'targetUnitPrice',
-      parameterName: 'Target Price',
+    const contribution = priceUtility * (priceWeight / 100);
+    parameterUtilities[PRICE_WEIGHT_KEY] = {
+      parameterId: PRICE_WEIGHT_KEY,
+      parameterName: 'Minimum Price (Total)',
       utility: priceUtility,
-      weight: weights.targetUnitPrice,
+      weight: priceWeight,
       contribution,
       currentValue: vendorOffer.total_price,
-      targetValue: resolvedConfig.targetPrice,
-      maxValue: resolvedConfig.maxAcceptablePrice,
+      targetValue: resolvedConfig.minTotalPrice,
+      maxValue: resolvedConfig.maxTotalPrice,
       status: getStatusFromScore(priceUtility),
       color: getColorFromScore(priceUtility),
     };
     totalUtility += contribution;
-    totalWeight += weights.targetUnitPrice;
+    totalWeight += priceWeight;
   }
 
   // Payment Terms Utility (longer terms = better for buyer)

@@ -30,24 +30,43 @@ function makeIntent(
     acknowledgeConcerns: [],
     vendorTone: "formal",
     currencySymbol: "$",
+    roundNumber: 2,
     ...overrides,
   };
 }
 
-function makeAcceptIntent(): NegotiationIntent {
-  return makeIntent({ action: "ACCEPT", allowedPrice: undefined });
+function makeAcceptIntent(
+  overrides: Partial<NegotiationIntent> = {},
+): NegotiationIntent {
+  return makeIntent({
+    action: "ACCEPT",
+    allowedPrice: undefined,
+    ...overrides,
+  });
 }
 
 function makeWalkAwayIntent(): NegotiationIntent {
   return makeIntent({ action: "WALK_AWAY", allowedPrice: undefined });
 }
 
-/** Build a COUNTER response that meets the 25-word floor and contains $95,000. */
+/** Build a COUNTER response that meets the 40-word floor and contains $95,000. */
 function counterBody(
-  prefix = "Thanks for the proposal. After review,",
-  suffix = "we believe this reflects fair value given the current scope and our budget for this quarter.",
+  prefix = "Thanks for the proposal. After reviewing the scope and delivery expectations with our team,",
+  suffix = "we believe this reflects fair value given the current volume, timeline, and the commercial framework we need to stay within for this quarter.",
 ): string {
   return `${prefix} our counter is $95,000 with Net 30. ${suffix}`;
+}
+
+const WORD_PAD =
+  "We appreciate the commercial details shared so far and want to keep this discussion constructive and moving toward a fair close on this order.";
+
+/** Pad text to meet the 40-word PM floor used in production validation. */
+function padWords(text: string, min = 40): string {
+  let out = text.trim();
+  while (out.split(/\s+/).filter(Boolean).length < min) {
+    out += ` ${WORD_PAD}`;
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────
@@ -127,7 +146,9 @@ describe("validateLlmOutput – tier-2 strategy-leak bans", () => {
 
   it('does NOT reject "what\'s your target delivery date" (target without price)', () => {
     const intent = makeAcceptIntent();
-    const response = `Quick question — what's your target delivery date so we can plan accordingly on the procurement and onboarding side?`;
+    const response = padWords(
+      `Quick question — what's your target delivery date so we can plan accordingly on the procurement and onboarding side?`,
+    );
     expect(() => validateLlmOutput(response, intent)).not.toThrow();
   });
 
@@ -140,7 +161,9 @@ describe("validateLlmOutput – tier-2 strategy-leak bans", () => {
 
   it('does NOT reject "engine team" without strategy context', () => {
     const intent = makeAcceptIntent();
-    const response = `Thanks — looping in our engine team to confirm spec details, but the commercial side is good to proceed from here.`;
+    const response = padWords(
+      `Thanks — looping in our engine team to confirm spec details, but the commercial side is good to proceed from here.`,
+    );
     expect(() => validateLlmOutput(response, intent)).not.toThrow();
   });
 });
@@ -150,7 +173,7 @@ describe("validateLlmOutput – tier-2 strategy-leak bans", () => {
 // ─────────────────────────────────────────────
 
 describe("validateLlmOutput – per-action length bounds", () => {
-  it("rejects COUNTER below 25-word floor", () => {
+  it("rejects COUNTER below 40-word floor", () => {
     const response = `Counter at $95,000 Net 30.`;
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
@@ -165,8 +188,8 @@ describe("validateLlmOutput – per-action length bounds", () => {
     }
   });
 
-  it("rejects COUNTER above 110-word ceiling", () => {
-    const tooLong = `Our counter is $95,000 with Net 30. ${"This is a filler word repeated many times. ".repeat(20)}`;
+  it("rejects COUNTER above 150-word ceiling", () => {
+    const tooLong = `${counterBody()} ${"This is a filler word repeated many times. ".repeat(25)}`;
     expect(() => validateLlmOutput(tooLong, makeIntent())).toThrow(
       ValidationError,
     );
@@ -181,23 +204,27 @@ describe("validateLlmOutput – per-action length bounds", () => {
     }
   });
 
-  it("ACCEPT accepts an 8+ word reply", () => {
-    const response = `Accepted — thanks for working through this with us today.`;
-    expect(() => validateLlmOutput(response, makeAcceptIntent())).not.toThrow();
+  it("ACCEPT accepts compact reply when vendor at/below max", () => {
+    const response = `Accepted — thanks for working through this with us today. We are glad to move ahead together on this order.`;
+    expect(() =>
+      validateLlmOutput(response, makeAcceptIntent({ compactAccept: true })),
+    ).not.toThrow();
   });
 
-  it("ACCEPT rejects a 1-word reply (under 8-word floor)", () => {
-    expect(() => validateLlmOutput("Accepted.", makeAcceptIntent())).toThrow(
-      ValidationError,
-    );
+  it("ACCEPT rejects a 1-word reply even in compact mode", () => {
+    expect(() =>
+      validateLlmOutput("Accepted.", makeAcceptIntent({ compactAccept: true })),
+    ).toThrow(ValidationError);
   });
 
-  it("ASK_CLARIFY accepts a 10+ word brief response", () => {
+  it("ASK_CLARIFY accepts a 40+ word response", () => {
     const intent = makeIntent({
       action: "ASK_CLARIFY",
       allowedPrice: undefined,
     });
-    const response = `Could you share the total price and payment terms so we can proceed?`;
+    const response = padWords(
+      `Could you share the total price and payment terms so we can proceed?`,
+    );
     expect(() => validateLlmOutput(response, intent)).not.toThrow();
   });
 });
@@ -236,27 +263,37 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   });
 
   it("passes for price written as $95K (K notation)", () => {
-    const body = `Thanks for circling back. Our counter is $95K on Net 30, which reflects fair value given our budget for this quarter and the project scope we agreed last week.`;
+    const body = padWords(
+      `Thanks for circling back. Our counter is $95K on Net 30, which reflects fair value given our budget for this quarter and the project scope we agreed last week.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).not.toThrow();
   });
 
   it('passes for price written as "95 thousand"', () => {
-    const body = `Thanks for circling back on this. Our counter is 95 thousand dollars on Net 30, reflecting current scope and budget for this work and we are open to discussing further on a call this week.`;
+    const body = padWords(
+      `Thanks for circling back on this. Our counter is 95 thousand dollars on Net 30, reflecting current scope and budget for this work and we are open to discussing further on a call this week.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).not.toThrow();
   });
 
   it("passes for price written as $95,000.00", () => {
-    const body = `Thanks for the revised proposal. Our counter is $95,000.00 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`;
+    const body = padWords(
+      `Thanks for the revised proposal. Our counter is $95,000.00 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).not.toThrow();
   });
 
   it("passes for price within 0.5% tolerance ($95,400 vs $95,000)", () => {
-    const body = `Thanks for the revised proposal. Our counter is $95,400 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`;
+    const body = padWords(
+      `Thanks for the revised proposal. Our counter is $95,400 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).not.toThrow();
   });
 
   it("fails when COUNTER response has NO price at all (and is long enough)", () => {
-    const body = `Thanks for the proposal. After internal review, we would like to come back with revised terms and ensure both sides reach a workable arrangement that fits the project budget.`;
+    const body = padWords(
+      `Thanks for the proposal. After internal review, we would like to come back with revised terms and ensure both sides reach a workable arrangement that fits the project budget.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).toThrow(
       ValidationError,
     );
@@ -265,7 +302,9 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   it('error reason is "missing_price" when no price is present', () => {
     try {
       validateLlmOutput(
-        "Thanks for the proposal. After internal review, we would like to come back with revised terms and ensure both sides reach a workable arrangement that fits the project budget.",
+        padWords(
+          "Thanks for the proposal. After internal review, we would like to come back with revised terms and ensure both sides reach a workable arrangement that fits the project budget.",
+        ),
         makeIntent(),
       );
     } catch (e: any) {
@@ -274,7 +313,9 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   });
 
   it("fails when price in response is far from allowedPrice ($50,000 vs $95,000)", () => {
-    const body = `Thanks for the revised proposal. Our counter is $50,000 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`;
+    const body = padWords(
+      `Thanks for the revised proposal. Our counter is $50,000 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).toThrow(
       ValidationError,
     );
@@ -283,7 +324,9 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   it('error reason is "wrong_price" when price deviates significantly', () => {
     try {
       validateLlmOutput(
-        `Thanks for the revised proposal. Our counter is $50,000 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`,
+        padWords(
+          `Thanks for the revised proposal. Our counter is $50,000 with Net 30 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`,
+        ),
         makeIntent(),
       );
     } catch (e: any) {
@@ -292,7 +335,9 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   });
 
   it("fails when an unauthorized rogue price appears alongside correct price", () => {
-    const body = `Thanks for the proposal. Our counter is $95,000 on Net 30. However for the extended scope of additional services it would actually be $200,000 with the same terms.`;
+    const body = padWords(
+      `Thanks for the proposal. Our counter is $95,000 on Net 30. However for the extended scope of additional services it would actually be $200,000 with the same terms.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).toThrow(
       ValidationError,
     );
@@ -301,7 +346,9 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   it('error reason is "unauthorized_price" when rogue price appears', () => {
     try {
       validateLlmOutput(
-        `Thanks for the proposal. Our counter is $95,000 on Net 30. However for the extended scope of additional services it would actually be $200,000 with the same terms.`,
+        padWords(
+          `Thanks for the proposal. Our counter is $95,000 on Net 30. However for the extended scope of additional services it would actually be $200,000 with the same terms.`,
+        ),
         makeIntent(),
       );
     } catch (e: any) {
@@ -310,20 +357,65 @@ describe("validateLlmOutput – COUNTER price validation", () => {
   });
 
   it("passes when allowedPrice is undefined (no price check needed)", () => {
-    const intent = makeIntent({ allowedPrice: undefined });
-    const body = `Thanks for circling back. We are reviewing the latest set of terms and will respond shortly with our position once internal sign-off is complete on our end this week.`;
+    const intent = makeIntent({
+      allowedPrice: undefined,
+      allowedPaymentTerms: undefined,
+    });
+    const body = padWords(
+      `Thanks for circling back. We are reviewing the latest set of terms and will respond shortly with our position once internal sign-off is complete on our end this week.`,
+    );
     expect(() => validateLlmOutput(body, intent)).not.toThrow();
   });
 
   it("handles million-dollar prices correctly ($4.5M)", () => {
-    const intent = makeIntent({ allowedPrice: 4_500_000 });
-    const body = `Thanks for the revised proposal. Our counter is $4.5M on Net 60 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`;
+    const intent = makeIntent({
+      allowedPrice: 4_500_000,
+      allowedPaymentTerms: "Net 60",
+    });
+    const body = padWords(
+      `Thanks for the revised proposal. Our counter is $4.5M on Net 60 payment terms, reflecting fair value for the scope we discussed and happy to discuss any concerns on your end before we finalize.`,
+    );
     expect(() => validateLlmOutput(body, intent)).not.toThrow();
   });
 
   it("handles plain number $95000 without comma", () => {
-    const body = `Thanks for the revised proposal. Counter: $95000 with Net 30 payment terms, which reflects fair value for the scope we discussed and our budget for the current quarter overall.`;
+    const body = padWords(
+      `Thanks for the revised proposal. Counter: $95000 with Net 30 payment terms, which reflects fair value for the scope we discussed and our budget for the current quarter overall.`,
+    );
     expect(() => validateLlmOutput(body, makeIntent())).not.toThrow();
+  });
+
+  it('rejects Net 90 when intent requires Net 60', () => {
+    const intent = makeIntent({
+      allowedPaymentTerms: "Net 60",
+      allowedPrice: 53_300,
+    });
+    const body = padWords(
+      `I appreciate the offer. Our counter: $53,300 total, Net 90. Hope we can meet in the middle!`,
+    );
+    expect(() => validateLlmOutput(body, intent)).toThrow(ValidationError);
+    try {
+      validateLlmOutput(body, intent);
+    } catch (e: any) {
+      expect(e.reason).toBe("wrong_terms");
+    }
+  });
+
+  it("rejects $ when intent currency is ₹", () => {
+    const intent = makeIntent({
+      currencySymbol: "₹",
+      allowedPrice: 57_000,
+      allowedPaymentTerms: "Net 60",
+    });
+    const body = padWords(
+      `I appreciate the offer of $57,500. Our counter: $57,000 total, Net 60. Hope we can meet in the middle on this order!`,
+    );
+    expect(() => validateLlmOutput(body, intent)).toThrow(ValidationError);
+    try {
+      validateLlmOutput(body, intent);
+    } catch (e: any) {
+      expect(e.reason).toBe("wrong_currency_symbol");
+    }
   });
 });
 
@@ -333,12 +425,16 @@ describe("validateLlmOutput – COUNTER price validation", () => {
 
 describe("validateLlmOutput – ACCEPT/WALK_AWAY skip price validation", () => {
   it("ACCEPT passes without any price in response", () => {
-    const response = `Accepted — thanks for working through this with us. Excited to move ahead.`;
+    const response = padWords(
+      `Accepted — thanks for working through this with us. Excited to move ahead.`,
+    );
     expect(() => validateLlmOutput(response, makeAcceptIntent())).not.toThrow();
   });
 
   it("WALK_AWAY passes without any price in response", () => {
-    const response = `Unfortunately the terms do not align with our requirements this quarter, but we appreciate the engagement and hope to work together in future.`;
+    const response = padWords(
+      `Unfortunately the terms do not align with our requirements this quarter, but we appreciate the engagement and hope to work together in future.`,
+    );
     expect(() =>
       validateLlmOutput(response, makeWalkAwayIntent()),
     ).not.toThrow();
@@ -346,7 +442,9 @@ describe("validateLlmOutput – ACCEPT/WALK_AWAY skip price validation", () => {
 
   it("ESCALATE passes without any price in response", () => {
     const intent = makeIntent({ action: "ESCALATE", allowedPrice: undefined });
-    const response = `This needs senior management review on our side, so a colleague will follow up directly within the next two business days.`;
+    const response = padWords(
+      `This needs senior management review on our side, so a colleague will follow up directly within the next two business days.`,
+    );
     expect(() => validateLlmOutput(response, intent)).not.toThrow();
   });
 });
@@ -382,17 +480,23 @@ describe("validateLlmOutput – MESO price containment", () => {
   });
 
   it("passes when response only mentions MESO variant prices", () => {
-    const response = `We have prepared three options for your review. Option A is $88,000 with Net 30. Option B is $90,000 with Net 60. Option C is $92,000 with Net 90 — happy to discuss whichever works best.`;
+    const response = padWords(
+      `We have prepared three options for your review. Option A is $88,000 with Net 30. Option B is $90,000 with Net 60. Option C is $92,000 with Net 90 — happy to discuss whichever works best.`,
+    );
     expect(() => validateLlmOutput(response, mesoIntent)).not.toThrow();
   });
 
   it("passes when response mentions no prices at all (intro MESO message)", () => {
-    const response = `We have prepared several alternatives that may work for both parties. Please take a look and let us know which direction works best on your side.`;
+    const response = padWords(
+      `We have prepared several alternatives that may work for both parties. Please take a look and let us know which direction works best on your side.`,
+    );
     expect(() => validateLlmOutput(response, mesoIntent)).not.toThrow();
   });
 
   it("fails when response contains a price not in MESO variants", () => {
-    const response = `Here are our options for your review: $88,000 with Net 30, or $100,000 with Net 60 — happy to discuss whichever works best on your end.`;
+    const response = padWords(
+      `Here are our options for your review: $88,000 with Net 30, or $100,000 with Net 60 — happy to discuss whichever works best on your end.`,
+    );
     expect(() => validateLlmOutput(response, mesoIntent)).toThrow(
       ValidationError,
     );
@@ -401,7 +505,9 @@ describe("validateLlmOutput – MESO price containment", () => {
   it('error reason is "meso_unauthorized_price" for rogue MESO price', () => {
     try {
       validateLlmOutput(
-        `Here are the options for your review: Option A at $88,000 on Net 30, or Option D at $150,000 on Net 90 with extended terms — happy to discuss.`,
+        padWords(
+          `Here are the options for your review: Option A at $88,000 on Net 30, or Option D at $150,000 on Net 90 with extended terms — happy to discuss.`,
+        ),
         mesoIntent,
       );
     } catch (e: any) {
@@ -410,7 +516,9 @@ describe("validateLlmOutput – MESO price containment", () => {
   });
 
   it("passes for MESO with K notation matching a variant", () => {
-    const response = `Here are the options for your review. Option A costs $88K with Net 30, while Option B is $90K with Net 60 — happy to discuss whichever direction works.`;
+    const response = padWords(
+      `Here are the options for your review. Option A costs $88K with Net 30, while Option B is $90K with Net 60 — happy to discuss whichever direction works.`,
+    );
     expect(() => validateLlmOutput(response, mesoIntent)).not.toThrow();
   });
 });
@@ -448,7 +556,9 @@ describe("ValidationError", () => {
 describe("Persona: ACCEPT and ASK_CLARIFY responses", () => {
   it("a brief but non-trivial ACCEPT response passes all checks", () => {
     const result = validateLlmOutput(
-      "Accepted — thanks for working through this with us today.",
+      padWords(
+        "Accepted — thanks for working through this with us today.",
+      ),
       makeAcceptIntent(),
     );
     expect(result.length).toBeGreaterThan(0);
@@ -459,49 +569,69 @@ describe("Persona: ACCEPT and ASK_CLARIFY responses", () => {
       action: "ASK_CLARIFY",
       allowedPrice: undefined,
     });
-    const response = `Could you share the total price and payment terms so we can proceed?`;
+    const response = padWords(
+      `Could you share the total price and payment terms so we can proceed?`,
+    );
     expect(() => validateLlmOutput(response, intent)).not.toThrow();
   });
 });
 
 describe("Persona: LLM hallucination scenarios", () => {
   it('catches LLM mentioning "utility score"', () => {
-    const response = `Based on your utility score of 0.65, we counter at $95,000 on Net 30 — please confirm if that works for your team.`;
+    const response = counterBody(
+      "Based on your utility score of 0.65,",
+      "please confirm if that works for your team.",
+    );
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
     );
   });
 
   it('catches LLM mentioning "our algorithm"', () => {
-    const response = `Our algorithm determined $95,000 is the right counter on Net 30 — please confirm whether that works for your team and timeline.`;
+    const response = counterBody(
+      "Our algorithm determined this is fair, so",
+      "please confirm whether that works for your team and timeline.",
+    );
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
     );
   });
 
   it("catches LLM revealing it is a GPT system", () => {
-    const response = `As a GPT assistant, I can offer $95,000 on Net 30 terms — please let us know whether that works for your team and timeline.`;
+    const response = counterBody(
+      "As a GPT assistant, I can offer",
+      "please let us know whether that works for your team and timeline.",
+    );
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
     );
   });
 
   it("catches LLM mentioning BATNA", () => {
-    const response = `Our BATNA in this deal supports a counter of $95,000 on Net 30 — please let us know if that works for your team.`;
+    const response = counterBody(
+      "Our BATNA in this deal supports this position, so",
+      "please let us know if that works for your team.",
+    );
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
     );
   });
 
   it("catches LLM referencing decision tree", () => {
-    const response = `Following the decision tree, we propose $95,000 on Net 30 — please let us know whether that works for your team and timeline.`;
+    const response = counterBody(
+      "Following the decision tree, we propose",
+      "please let us know whether that works for your team and timeline.",
+    );
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
     );
   });
 
   it('catches LLM mentioning "automated system"', () => {
-    const response = `Our automated system has determined $95,000 is the right price on Net 30 — please confirm whether that works for your team.`;
+    const response = counterBody(
+      "Our automated system has determined this is fair, so",
+      "please confirm whether that works for your team.",
+    );
     expect(() => validateLlmOutput(response, makeIntent())).toThrow(
       ValidationError,
     );
@@ -510,15 +640,52 @@ describe("Persona: LLM hallucination scenarios", () => {
 
 describe("Persona: experienced vendor — complex but valid LLM response", () => {
   it("accepts sophisticated professional language without internal keywords", () => {
-    const response = `Thank you for your revised proposal. After thorough internal review, we would like to counter with a total of $95,000 on Net 30 terms. We believe this reflects fair value for both parties and hope to reach a mutually agreeable arrangement.`;
+    const response = padWords(
+      counterBody(
+        "Thank you for your revised proposal. After thorough internal review,",
+        "We believe this reflects fair value for both parties and hope to reach a mutually agreeable arrangement.",
+      ),
+    );
     expect(() => validateLlmOutput(response, makeIntent())).not.toThrow();
   });
 
   it("strips narrow soft phrases from verbose response and still passes", () => {
-    const response = `Happy to help — our position is $95,000 on Net 30, which we believe is fair given current market conditions. Please note that we are committed to a long-term partnership going forward.`;
+    const response = `Happy to help — ${counterBody()}`.replace(
+      /^Thanks/,
+      "Good morning. Thanks",
+    );
     const result = validateLlmOutput(response, makeIntent());
     expect(result).not.toMatch(/happy to help/i);
     expect(result).not.toMatch(/please note that/i);
     expect(result).toContain("$95,000");
+  });
+});
+
+describe("validateLlmOutput – round 1 social salutation", () => {
+  it('rejects thank-you-only opener on round 1 COUNTER', () => {
+    const intent = makeIntent({ roundNumber: 1 });
+    const response = padWords(
+      counterBody(
+        "Thank you for your quotation. After internal review,",
+        "we believe this is a fair landing point for both sides on this order.",
+      ),
+    );
+    expect(() => validateLlmOutput(response, intent)).toThrow(ValidationError);
+    try {
+      validateLlmOutput(response, intent);
+    } catch (e: any) {
+      expect(e.reason).toBe("missing_greeting");
+    }
+  });
+
+  it("accepts Good morning salutation before acknowledgment on round 1", () => {
+    const intent = makeIntent({ roundNumber: 1 });
+    const response = padWords(
+      counterBody(
+        "Good morning. Thank you for your quotation. After internal review,",
+        "we believe this is a fair landing point for both sides on this order.",
+      ),
+    );
+    expect(() => validateLlmOutput(response, intent)).not.toThrow();
   });
 });

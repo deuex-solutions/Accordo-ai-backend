@@ -27,6 +27,7 @@ function makeInput(
     tone: "formal",
     targetPrice: 80000,
     maxAcceptablePrice: 100000,
+    currencyCode: "INR",
     ...overrides,
   };
 }

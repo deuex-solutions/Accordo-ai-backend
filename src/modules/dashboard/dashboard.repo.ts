@@ -102,7 +102,7 @@ const repo = {
           model: models.Requisition,
           as: "Requisition",
           required: true,
-          attributes: ["id", "rfqId", "subject", "totalPrice", "category"],
+          attributes: ["id", "rfqId", "subject", "minTotalPrice", "category"],
           include: [
             {
               model: models.Project,

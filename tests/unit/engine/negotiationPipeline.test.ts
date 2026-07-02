@@ -27,9 +27,11 @@ function makeWizardConfig(overrides: Partial<WizardConfig> = {}): WizardConfig {
   return {
     priority: 'MEDIUM',
     priceQuantity: {
-      targetUnitPrice: 90000,
-      maxAcceptablePrice: 110000,
+      minTotalPrice: 90000,
+      maxTotalPrice: 110000,
       minOrderQuantity: 100,
+      targetUnitPrice: null,
+      maxAcceptablePrice: null,
     },
     paymentTerms: {
       minDays: 30,
@@ -58,10 +60,10 @@ function makeWizardConfig(overrides: Partial<WizardConfig> = {}): WizardConfig {
 // ─────────────────────────────────────────────
 
 describe('resolveNegotiationConfig — full wizard config resolution', () => {
-  it('resolves correct targetPrice from wizard priceQuantity.targetUnitPrice', () => {
+  it('resolves correct minTotalPrice from wizard priceQuantity', () => {
     const resolved = resolveNegotiationConfig(makeWizardConfig());
-    expect(resolved.targetPrice).toBe(90000);
-    expect(resolved.maxAcceptablePrice).toBe(110000);
+    expect(resolved.minTotalPrice).toBe(90000);
+    expect(resolved.maxTotalPrice).toBe(110000);
   });
 
   it('resolves paymentTerms min/max from wizard', () => {
@@ -84,7 +86,7 @@ describe('resolveNegotiationConfig — full wizard config resolution', () => {
 
   it('uses DEFAULT_WEIGHTS when no parameterWeights in wizard', () => {
     const resolved = resolveNegotiationConfig(makeWizardConfig());
-    expect(resolved.weights.targetUnitPrice).toBe(DEFAULT_WEIGHTS.targetUnitPrice);
+    expect(resolved.weights.minTotalPrice).toBe(DEFAULT_WEIGHTS.minTotalPrice);
     expect(resolved.weights.paymentTerms).toBe(DEFAULT_WEIGHTS.paymentTerms);
     expect(resolved.weightsAreUserModified).toBe(false);
   });
@@ -93,7 +95,7 @@ describe('resolveNegotiationConfig — full wizard config resolution', () => {
     const wizard = makeWizardConfig({
       aiSuggested: false,
       parameterWeights: {
-        targetUnitPrice: 50,
+        minTotalPrice: 50,
         paymentTerms: 20,
         deliveryDate: 20,
         warrantyPeriod: 5,
@@ -101,7 +103,7 @@ describe('resolveNegotiationConfig — full wizard config resolution', () => {
       },
     });
     const resolved = resolveNegotiationConfig(wizard);
-    expect(resolved.weights.targetUnitPrice).toBe(50);
+    expect(resolved.weights.minTotalPrice).toBe(50);
     expect(resolved.weights.paymentTerms).toBe(20);
     expect(resolved.weightsAreUserModified).toBe(true);
   });
@@ -145,7 +147,7 @@ describe('Full negotiation pipeline — wizard to utility score', () => {
     // totalWeight = 65, normalized: 0.65 * (100/65) = 1.0
     expect(result.totalUtility).toBeCloseTo(1.0, 2);
     expect(result.recommendation).toBe('ACCEPT');
-    expect(result.parameterUtilities['targetUnitPrice']?.utility).toBe(1.0);
+    expect(result.parameterUtilities['minTotalPrice']?.utility).toBe(1.0);
     expect(result.parameterUtilities['paymentTerms']?.utility).toBeCloseTo(1.0, 2);
   });
 
@@ -252,7 +254,7 @@ describe('weakestPrimaryParameter — selection logic', () => {
     };
 
     const result = calculateWeightedUtilityFromResolved(offer, resolved);
-    const priceUtility = result.parameterUtilities['targetUnitPrice']?.utility ?? 1;
+    const priceUtility = result.parameterUtilities['minTotalPrice']?.utility ?? 1;
     const termsUtility = result.parameterUtilities['paymentTerms']?.utility ?? 1;
 
     expect(priceUtility).toBeLessThan(termsUtility);
@@ -272,7 +274,7 @@ describe('weakestPrimaryParameter — selection logic', () => {
     };
 
     const result = calculateWeightedUtilityFromResolved(offer, resolved);
-    const priceUtility = result.parameterUtilities['targetUnitPrice']?.utility ?? 1;
+    const priceUtility = result.parameterUtilities['minTotalPrice']?.utility ?? 1;
     const termsUtility = result.parameterUtilities['paymentTerms']?.utility ?? 1;
 
     expect(termsUtility).toBeLessThan(priceUtility);
@@ -291,7 +293,7 @@ describe('weakestPrimaryParameter — selection logic', () => {
     };
 
     const result = calculateWeightedUtilityFromResolved(offer, resolved);
-    const priceUtility = result.parameterUtilities['targetUnitPrice']?.utility ?? 1;
+    const priceUtility = result.parameterUtilities['minTotalPrice']?.utility ?? 1;
 
     // This mimics the conversationService logic
     let weakestPrimaryParameter: 'price' | 'terms' | 'delivery' | undefined;
@@ -306,8 +308,9 @@ describe('weakestPrimaryParameter — selection logic', () => {
       counterPaymentTerms: 'Net 90',
       concerns: [],
       tone: 'formal',
-      targetPrice: 90000,
-      maxAcceptablePrice: 110000,
+      minTotalPrice: 90000,
+      maxTotalPrice: 110000,
+      currencyCode: "INR",
       weakestPrimaryParameter,
     });
 
@@ -328,7 +331,7 @@ describe('Weight override behaviour', () => {
     const wizard = makeWizardConfig({
       aiSuggested: false,
       parameterWeights: {
-        targetUnitPrice: 60,
+        minTotalPrice: 60,
         paymentTerms: 10,
         deliveryDate: 20,
         warrantyPeriod: 5,
@@ -337,7 +340,7 @@ describe('Weight override behaviour', () => {
     });
     const resolved = resolveNegotiationConfig(wizard);
 
-    expect(resolved.weights.targetUnitPrice).toBe(60);
+    expect(resolved.weights.minTotalPrice).toBe(60);
     expect(resolved.weights.paymentTerms).toBe(10);
     expect(resolved.weightsAreUserModified).toBe(true);
   });
@@ -348,7 +351,7 @@ describe('Weight override behaviour', () => {
     const highPriceWizard = makeWizardConfig({
       aiSuggested: false,
       parameterWeights: {
-        targetUnitPrice: 80, // very high price weight
+        minTotalPrice: 80, // very high price weight
         paymentTerms: 10,
         deliveryDate: 5,
         warrantyPeriod: 3,

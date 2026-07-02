@@ -63,7 +63,7 @@ const generateVendorAttachedEmailHTML = (
     title: string;
     projectName: string;
     dueDate?: Date;
-    products: Array<{ name: string; quantity: number; targetPrice: number }>;
+    products: Array<{ name: string; quantity: number; minUnitPrice: number }>;
   },
   portalLink: string,
   chatbotLink?: string
@@ -74,7 +74,7 @@ const generateVendorAttachedEmailHTML = (
     <tr>
       <td style="padding: 8px; border: 1px solid #ddd;">${p.name}</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${p.quantity}</td>
-      <td style="padding: 8px; border: 1px solid #ddd;">$${p.targetPrice.toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">$${p.minUnitPrice.toFixed(2)}</td>
     </tr>
   `
     )
@@ -106,7 +106,7 @@ const generateVendorAttachedEmailHTML = (
               <tr style="background-color: #f8f9fa;">
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Product</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Quantity</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Target Price</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Minimum Unit Price</th>
               </tr>
             </thead>
             <tbody>
@@ -138,13 +138,13 @@ const generateVendorAttachedEmailText = (
     title: string;
     projectName: string;
     dueDate?: Date;
-    products: Array<{ name: string; quantity: number; targetPrice: number }>;
+    products: Array<{ name: string; quantity: number; minUnitPrice: number }>;
   },
   portalLink: string,
   chatbotLink?: string
 ): string => {
   const productsText = requisitionData.products
-    .map((p) => `  - ${p.name}: Qty ${p.quantity}, Target Price $${p.targetPrice.toFixed(2)}`)
+    .map((p) => `  - ${p.name}: Qty ${p.quantity}, Minimum Unit Price $${p.minUnitPrice.toFixed(2)}`)
     .join('\n');
 
   return `
@@ -379,7 +379,7 @@ export const sendVendorAttachedEmail = async (
       products: (requisition.Products || []).map((p: any) => ({
         name: p.name || 'Unknown Product',
         quantity: p.quantity || 0,
-        targetPrice: p.targetPrice || 0,
+        minUnitPrice: p.minUnitPrice || p.targetPrice || 0,
       })),
     };
 
@@ -1060,12 +1060,12 @@ interface DealCreatedEmailData {
   products: Array<{
     name: string;
     quantity: number;
-    targetPrice: number;
+    minUnitPrice: number;
     unit?: string;
   }>;
   priceConfig?: {
-    targetUnitPrice: number;
-    maxAcceptablePrice: number;
+    minTotalPrice: number;
+    maxTotalPrice: number;
   };
   paymentTerms?: {
     minDays: number;
@@ -1087,13 +1087,13 @@ const generateDealCreatedEmailHTML = (
     <tr>
       <td style="padding: 12px; border: 1px solid #e5e7eb;">${p.name}</td>
       <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: center;">${p.quantity}${p.unit ? ` ${p.unit}` : ''}</td>
-      <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: right;">$${p.targetPrice.toFixed(2)}</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: right;">$${p.minUnitPrice.toFixed(2)}</td>
     </tr>
   `
     )
     .join('');
 
-  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.targetPrice, 0);
+  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.minUnitPrice, 0);
 
   return `
     <!DOCTYPE html>
@@ -1159,7 +1159,7 @@ const generateDealCreatedEmailHTML = (
               <tr style="background-color: #f1f5f9;">
                 <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: left; font-weight: 600; color: #475569;">Product</th>
                 <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: center; font-weight: 600; color: #475569;">Quantity</th>
-                <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: #475569;">Target Price</th>
+                <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: #475569;">Minimum Unit Price</th>
               </tr>
             </thead>
             <tbody>
@@ -1221,10 +1221,10 @@ const generateDealCreatedEmailText = (
   chatbotLink: string
 ): string => {
   const productsText = data.products
-    .map((p) => `  - ${p.name}: Qty ${p.quantity}, Target Price $${p.targetPrice.toFixed(2)}`)
+    .map((p) => `  - ${p.name}: Qty ${p.quantity}, Minimum Unit Price $${p.minUnitPrice.toFixed(2)}`)
     .join('\n');
 
-  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.targetPrice, 0);
+  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.minUnitPrice, 0);
 
   return `
 NEW NEGOTIATION INVITATION
@@ -1370,7 +1370,7 @@ interface ContinuedNegotiationEmailData {
   products: Array<{
     name: string;
     quantity: number;
-    targetPrice: number;
+    minUnitPrice: number;
     unit?: string;
   }>;
   paymentTerms?: {
@@ -1395,13 +1395,13 @@ const generateContinuedNegotiationEmailHTML = (
     <tr>
       <td style="padding: 12px; border: 1px solid #e5e7eb;">${p.name}</td>
       <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: center;">${p.quantity}${p.unit ? ` ${p.unit}` : ''}</td>
-      <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: right;">$${p.targetPrice.toFixed(2)}</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: right;">$${p.minUnitPrice.toFixed(2)}</td>
     </tr>
   `
     )
     .join('');
 
-  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.targetPrice, 0);
+  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.minUnitPrice, 0);
 
   return `
     <!DOCTYPE html>
@@ -1473,7 +1473,7 @@ const generateContinuedNegotiationEmailHTML = (
               <tr style="background-color: #f1f5f9;">
                 <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: left; font-weight: 600; color: #475569;">Product</th>
                 <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: center; font-weight: 600; color: #475569;">Quantity</th>
-                <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: #475569;">Target Price</th>
+                <th style="padding: 12px; border: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: #475569;">Minimum Unit Price</th>
               </tr>
             </thead>
             <tbody>
@@ -1535,10 +1535,10 @@ const generateContinuedNegotiationEmailText = (
   vendorChatLink: string
 ): string => {
   const productsText = data.products
-    .map((p) => `  - ${p.name}: Qty ${p.quantity}, Target Price $${p.targetPrice.toFixed(2)}`)
+    .map((p) => `  - ${p.name}: Qty ${p.quantity}, Minimum Unit Price $${p.minUnitPrice.toFixed(2)}`)
     .join('\n');
 
-  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.targetPrice, 0);
+  const totalValue = data.products.reduce((sum, p) => sum + p.quantity * p.minUnitPrice, 0);
 
   return `
 CONTINUE NEGOTIATION

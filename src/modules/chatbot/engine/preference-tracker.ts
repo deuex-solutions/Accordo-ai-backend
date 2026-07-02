@@ -161,6 +161,7 @@ function normalizePreferenceKey(key: string): string {
     price: 'price',
     total_price: 'price',
     targetUnitPrice: 'price',
+    minTotalPrice: 'price',
     payment_terms: 'paymentTerms',
     paymentTerms: 'paymentTerms',
     paymentTermsRange: 'paymentTerms',
@@ -392,7 +393,7 @@ export function applyPreferencesToWeights(
  */
 function mapPreferenceToWeightKey(preference: string): string | null {
   const mapping: Record<string, string> = {
-    price: 'targetUnitPrice',
+    price: 'minTotalPrice',
     paymentTerms: 'paymentTermsRange',
     delivery: 'deliveryDate',
     warranty: 'warrantyPeriod',

@@ -16,8 +16,8 @@ export class RequisitionProduct extends Model<
   declare id: CreationOptional<number>;
   declare requisitionId: ForeignKey<number> | null;
   declare productId: ForeignKey<number> | null;
-  declare targetPrice: number | null;
-  declare maximum_price: number | null;
+  declare minUnitPrice: number | null;
+  declare maxUnitPrice: number | null;
   declare qty: number | null;
   declare createdBy: number | null;
   declare createdAt: CreationOptional<Date>;
@@ -44,8 +44,8 @@ export default function requisitionProductModel(sequelize: Sequelize): typeof Re
       },
       requisitionId: DataTypes.INTEGER,
       productId: DataTypes.INTEGER,
-      targetPrice: DataTypes.DOUBLE,
-      maximum_price: DataTypes.DOUBLE,
+      minUnitPrice: DataTypes.DOUBLE,
+      maxUnitPrice: DataTypes.DOUBLE,
       qty: DataTypes.INTEGER,
       createdBy: DataTypes.INTEGER,
       createdAt: DataTypes.DATE,

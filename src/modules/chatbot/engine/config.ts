@@ -4,6 +4,8 @@ export const negotiationConfig = {
       weight: 0.6,
       direction: "lower_better",
       anchor: 75,
+      min_total_price: 85,
+      max_total_price: 100,
       target: 85,
       max_acceptable: 100,
       concession_step: 2

@@ -112,14 +112,9 @@ export const finalOfferConfirmSchema = Joi.object({
 });
 
 // ============================================================================
-// Structured Prompt Schemas (April 2026)
-// Feature 1: initial discount ask; Feature 2: payment terms dropdown
+// Structured Prompt Schemas
+// Payment terms dropdown when vendor sends price without terms
 // ============================================================================
-
-export const submitDiscountSchema = Joi.object({
-  uniqueToken: Joi.string().required().min(10).max(100),
-  percent: Joi.number().required().integer().min(0).max(100),
-});
 
 export const submitPaymentTermsSchema = Joi.object({
   uniqueToken: Joi.string().required().min(10).max(100),
@@ -141,6 +136,5 @@ export default {
   mesoSelectSchema,
   mesoOthersSchema,
   finalOfferConfirmSchema,
-  submitDiscountSchema,
   submitPaymentTermsSchema,
 };

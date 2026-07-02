@@ -382,8 +382,8 @@ export async function getRequisitionBidDetail(
     lowest: prices.length > 0 ? Math.min(...prices) : null,
     highest: prices.length > 0 ? Math.max(...prices) : null,
     average: prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : null,
-    targetPrice: requisition.totalPrice ? Number(requisition.totalPrice) : null,
-    maxAcceptablePrice: requisition.discountedValue ? Number(requisition.discountedValue) : null,
+    minTotalPrice: requisition.minTotalPrice ? Number(requisition.minTotalPrice) : null,
+    maxTotalPrice: requisition.maxTotalPrice ? Number(requisition.maxTotalPrice) : null,
   };
 
   // Get total vendors from contracts
@@ -403,8 +403,8 @@ export async function getRequisitionBidDetail(
       subject: requisition.subject || 'Untitled',
       description: requisition.category || null, // Using category as description
       category: requisition.category,
-      targetPrice: requisition.totalPrice ? Number(requisition.totalPrice) : null,
-      maxAcceptablePrice: requisition.discountedValue ? Number(requisition.discountedValue) : null,
+      minTotalPrice: requisition.minTotalPrice ? Number(requisition.minTotalPrice) : null,
+      maxTotalPrice: requisition.maxTotalPrice ? Number(requisition.maxTotalPrice) : null,
       negotiationClosureDate: requisition.negotiationClosureDate,
       deliveryDate: requisition.deliveryDate,
       status: requisition.status || '',

@@ -31,6 +31,7 @@ function makeInput(
     tone: "formal",
     targetPrice: 80000,
     maxAcceptablePrice: 100000,
+    currencyCode: "INR",
     ...overrides,
   };
 }
@@ -494,6 +495,7 @@ describe("Persona: tech-novice vendor — incomplete/missing offer", () => {
       counterPrice: null,
       concerns: [],
       tone: "casual",
+      currencyCode: "INR",
     });
     expect(intent.action).toBe("ASK_CLARIFY");
     expect(intent.firmness).toBe(0.9); // utility=0 → walk-away zone firmness
@@ -509,6 +511,7 @@ describe("Persona: tech-novice vendor — incomplete/missing offer", () => {
         counterPrice: null,
         concerns: [],
         tone: "confused" as any, // unknown tone — shouldn't crash
+        currencyCode: "INR",
       });
       expect(intent.action).toBe("ASK_CLARIFY");
     }
@@ -566,6 +569,7 @@ describe("Persona: firm vendor — take it or leave it", () => {
       utilityScore: 0.2,
       concerns: ["this is our final offer"],
       tone: "firm",
+      currencyCode: "INR",
     });
     expect(intent.action).toBe("WALK_AWAY");
     expect(intent.firmness).toBe(0.9);
@@ -590,6 +594,7 @@ describe("Persona: complex deal — escalation path", () => {
       tone: "formal",
       targetPrice: 80000,
       maxAcceptablePrice: 100000,
+      currencyCode: "INR",
     });
     expect(intent.action).toBe("ESCALATE");
     expect(intent.allowedPrice).toBeUndefined();

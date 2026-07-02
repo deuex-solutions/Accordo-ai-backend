@@ -23,8 +23,8 @@ export interface DealContext {
   negotiationConfig: NegotiationConfig;
   wizardConfig?: {
     priceQuantity?: {
-      targetUnitPrice: number;      // Now represents Total Target Price
-      maxAcceptablePrice: number;   // Now represents Total Maximum Price
+      minTotalPrice: number;      // Total contract minimum price
+      maxTotalPrice: number;      // Total contract maximum price
       minOrderQuantity: number;     // Total Order Quantity
       preferredQuantity?: number;
     };
@@ -118,8 +118,8 @@ export function buildSystemPrompt(
   const { negotiationConfig, wizardConfig, priority, vendorName } = context;
 
   // Extract key parameters - now using total_price
-  const targetPrice = negotiationConfig.parameters?.total_price?.target || wizardConfig?.priceQuantity?.targetUnitPrice || 0;
-  const maxPrice = negotiationConfig.parameters?.total_price?.max_acceptable || wizardConfig?.priceQuantity?.maxAcceptablePrice || 0;
+  const targetPrice = negotiationConfig.parameters?.total_price?.target || wizardConfig?.priceQuantity?.minTotalPrice || wizardConfig?.priceQuantity?.targetUnitPrice || 0;
+  const maxPrice = negotiationConfig.parameters?.total_price?.max_acceptable || wizardConfig?.priceQuantity?.maxTotalPrice || wizardConfig?.priceQuantity?.maxAcceptablePrice || 0;
   const minPaymentDays = wizardConfig?.paymentTerms?.minDays || 30;
   const maxPaymentDays = wizardConfig?.paymentTerms?.maxDays || 60;
   const totalQuantity = wizardConfig?.priceQuantity?.minOrderQuantity || 0;
@@ -153,7 +153,7 @@ ${vendorHistory.notes.length > 0 ? `- Notes: ${vendorHistory.notes.join('; ')}` 
       negotiationStyle = `
 ## Negotiation Priority: MEDIUM
 - This is a standard procurement. Balance firmness with flexibility.
-- Aim for target price but show reasonable flexibility.
+- Aim for the minimum price (total) but show reasonable flexibility.
 - Consider trade-offs between price and other terms.
 `;
       break;
@@ -181,8 +181,8 @@ ${vendorHistory.notes.length > 0 ? `- Notes: ${vendorHistory.notes.join('; ')}` 
 ${totalQuantity > 0 ? `- Total Order Quantity: ${totalQuantity} units` : ''}
 
 ## Negotiation Parameters
-- **Total Target Price**: $${targetPrice.toFixed(2)} (for the entire order)
-- **Maximum Acceptable Total Price**: $${maxPrice.toFixed(2)}
+- **Minimum Price (Total)**: $${targetPrice.toFixed(2)} (for the entire order)
+- **Maximum Price (Total)**: $${maxPrice.toFixed(2)}
 - **Preferred Payment Terms**: ${minPaymentDays}-${maxPaymentDays} days
 ${wizardConfig?.delivery?.requiredDate ? `- **Required Delivery Date**: ${wizardConfig.delivery.requiredDate}` : ''}
 ${wizardConfig?.contractSla?.warrantyPeriod ? `- **Warranty Period**: ${wizardConfig.contractSla.warrantyPeriod}` : ''}
@@ -193,8 +193,8 @@ ${vendorHistorySection}
 
 ## Guidelines
 1. **Always respond professionally** - Never be rude, condescending, or unprofessional.
-2. **Stay within parameters** - Do not accept total prices above the maximum acceptable price.
-3. **Negotiate systematically** - Start from target total price and make concessions gradually.
+2. **Stay within parameters** - Do not accept total prices above the maximum price (total).
+3. **Negotiate systematically** - Start from the minimum price (total) and make concessions gradually.
 4. **Justify your position** - When pushing back, provide business rationale.
 5. **Seek win-win outcomes** - Look for creative solutions that benefit both parties.
 6. **Document key points** - Summarize agreements and next steps clearly.

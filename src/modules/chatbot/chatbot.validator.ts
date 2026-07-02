@@ -14,7 +14,7 @@ export const createDealSchema = Joi.object({
   }),
   counterparty: Joi.string().allow('', null).optional(),
   mode: Joi.string()
-    .valid('INSIGHTS', 'CONVERSATION')
+    .valid('CONVERSATION')
     .default('CONVERSATION')
     .optional(),
   templateId: Joi.string().uuid().allow(null).optional(),
@@ -34,8 +34,8 @@ export const createDealWithConfigSchema = Joi.object({
   }),
   counterparty: Joi.string().allow('', null).optional(),
   mode: Joi.string()
-    .valid('INSIGHTS', 'CONVERSATION')
-    .default('INSIGHTS')
+    .valid('CONVERSATION')
+    .default('CONVERSATION')
     .required(),
   requisitionId: Joi.number().integer().positive().required().messages({
     'any.required': 'Requisition ID is required',
@@ -50,20 +50,45 @@ export const createDealWithConfigSchema = Joi.object({
     .default('MEDIUM')
     .required(),
 
-  // Price & Quantity
+  // Price & Quantity (accept canonical or legacy keys during transition)
   priceQuantity: Joi.object({
-    targetUnitPrice: Joi.number().positive().required().messages({
-      'any.required': 'Target unit price is required',
-      'number.positive': 'Target unit price must be positive',
+    minTotalPrice: Joi.number().positive().optional().messages({
+      'number.positive': 'Minimum total price must be positive',
     }),
-    maxAcceptablePrice: Joi.number().positive().required().messages({
-      'any.required': 'Maximum acceptable price is required',
+    maxTotalPrice: Joi.number().positive().optional().messages({
+      'number.positive': 'Maximum total price must be positive',
+    }),
+    targetUnitPrice: Joi.number().positive().optional().messages({
+      'number.positive': 'Minimum total price must be positive',
+    }),
+    maxAcceptablePrice: Joi.number().positive().optional().messages({
+      'number.positive': 'Maximum total price must be positive',
     }),
     minOrderQuantity: Joi.number().integer().positive().required().messages({
       'any.required': 'Minimum order quantity is required',
     }),
     preferredQuantity: Joi.number().integer().positive().allow(null).optional(),
-  }).required(),
+  })
+    .custom((value, helpers) => {
+      const minTotalPrice = value.minTotalPrice ?? value.targetUnitPrice;
+      const maxTotalPrice = value.maxTotalPrice ?? value.maxAcceptablePrice;
+      if (minTotalPrice == null) {
+        return helpers.error('any.custom', {
+          message: 'Minimum total price is required (minTotalPrice or targetUnitPrice)',
+        });
+      }
+      if (maxTotalPrice == null) {
+        return helpers.error('any.custom', {
+          message: 'Maximum total price is required (maxTotalPrice or maxAcceptablePrice)',
+        });
+      }
+      return {
+        ...value,
+        minTotalPrice,
+        maxTotalPrice,
+      };
+    })
+    .required(),
 
   // Payment Terms
   paymentTerms: Joi.object({
@@ -242,26 +267,13 @@ export const nestedDealSchema = Joi.object({
 });
 
 /**
- * Schema for mode query parameter (merged INSIGHTS/CONVERSATION)
- */
-export const modeQuerySchema = Joi.object({
-  mode: Joi.string()
-    .valid('INSIGHTS', 'CONVERSATION')
-    .default('INSIGHTS')
-    .optional()
-    .messages({
-      'any.only': 'Mode must be either INSIGHTS or CONVERSATION',
-    }),
-});
-
-/**
  * Schema for list deals query parameters
  */
 export const listDealsQuerySchema = Joi.object({
   status: Joi.string()
     .valid('NEGOTIATING', 'ACCEPTED', 'WALKED_AWAY', 'ESCALATED')
     .optional(),
-  mode: Joi.string().valid('INSIGHTS', 'CONVERSATION').optional(),
+  mode: Joi.string().valid('CONVERSATION').optional(),
   archived: Joi.string().valid('true', 'false').optional(),
   deleted: Joi.string().valid('true', 'false').optional(),
   userId: Joi.number().integer().positive().optional(),

@@ -1,6 +1,9 @@
 /**
  * process-negotiation-core.ts
  *
+ * @deprecated Orphan — not imported by active runtime. INSIGHTS mode removed.
+ * Negotiation core stays in conversation-service / decide.ts until pipeline P0.4+.
+ *
  * Shared negotiation core used by BOTH INSIGHTS and CONVERSATION modes.
  * Extracts the deterministic decision pipeline:
  *   1. Load deal + config

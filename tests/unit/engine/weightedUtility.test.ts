@@ -26,8 +26,8 @@ function makeResolvedConfig(overrides: Partial<ResolvedNegotiationConfig> = {}):
   const preferredDate = new Date('2026-05-15'); // 17 days before required
 
   return {
-    targetPrice: 90000,
-    maxAcceptablePrice: 110000,
+    minTotalPrice: 90000,
+    maxTotalPrice: 110000,
     paymentTermsMinDays: 30,
     paymentTermsMaxDays: 90,
     deliveryDate: requiredDate,
@@ -76,7 +76,7 @@ describe('DEFAULT_WEIGHTS', () => {
   });
 
   it('has correct weight distribution', () => {
-    expect(DEFAULT_WEIGHTS.targetUnitPrice).toBe(40);
+    expect(DEFAULT_WEIGHTS.minTotalPrice).toBe(40);
     expect(DEFAULT_WEIGHTS.paymentTerms).toBe(25);
     expect(DEFAULT_WEIGHTS.deliveryDate).toBe(20);
     expect(DEFAULT_WEIGHTS.warrantyPeriod).toBe(10);
@@ -84,7 +84,7 @@ describe('DEFAULT_WEIGHTS', () => {
   });
 
   it('primary params (price+terms+delivery) cover 85% of total weight', () => {
-    const primaryWeight = DEFAULT_WEIGHTS.targetUnitPrice + DEFAULT_WEIGHTS.paymentTerms + DEFAULT_WEIGHTS.deliveryDate;
+    const primaryWeight = DEFAULT_WEIGHTS.minTotalPrice + DEFAULT_WEIGHTS.paymentTerms + DEFAULT_WEIGHTS.deliveryDate;
     expect(primaryWeight).toBe(85);
   });
 });
@@ -98,28 +98,28 @@ describe('calculateWeightedUtilityFromResolved — price parameter', () => {
     const cfg = makeResolvedConfig();
     const offer = makeOffer({ total_price: 90000, payment_terms: null });
     const result = calculateWeightedUtilityFromResolved(offer, cfg);
-    expect(result.parameterUtilities['targetUnitPrice']?.utility).toBe(1);
+    expect(result.parameterUtilities['minTotalPrice']?.utility).toBe(1);
   });
 
   it('scores 0.0 when price equals max_acceptable', () => {
     const cfg = makeResolvedConfig();
     const offer = makeOffer({ total_price: 110000 });
     const result = calculateWeightedUtilityFromResolved(offer, cfg);
-    expect(result.parameterUtilities['targetUnitPrice']?.utility).toBe(0);
+    expect(result.parameterUtilities['minTotalPrice']?.utility).toBe(0);
   });
 
   it('scores 0.5 at the midpoint between target and max', () => {
     const cfg = makeResolvedConfig();
     const offer = makeOffer({ total_price: 100000 }); // midpoint of 90000-110000
     const result = calculateWeightedUtilityFromResolved(offer, cfg);
-    expect(result.parameterUtilities['targetUnitPrice']?.utility).toBeCloseTo(0.5, 3);
+    expect(result.parameterUtilities['minTotalPrice']?.utility).toBeCloseTo(0.5, 3);
   });
 
   it('does NOT score price when total_price is null', () => {
     const cfg = makeResolvedConfig();
     const offer = makeOffer({ total_price: null });
     const result = calculateWeightedUtilityFromResolved(offer, cfg);
-    expect(result.parameterUtilities['targetUnitPrice']).toBeUndefined();
+    expect(result.parameterUtilities['minTotalPrice']).toBeUndefined();
   });
 });
 
@@ -371,7 +371,7 @@ describe('calculateWeightedUtilityFromResolved — total utility normalization',
 describe('resolveNegotiationConfig — weight resolution', () => {
   it('uses DEFAULT_WEIGHTS when no wizardConfig', () => {
     const resolved = resolveNegotiationConfig(null);
-    expect(resolved.weights.targetUnitPrice).toBe(DEFAULT_WEIGHTS.targetUnitPrice);
+    expect(resolved.weights.minTotalPrice).toBe(DEFAULT_WEIGHTS.minTotalPrice);
     expect(resolved.weights.paymentTerms).toBe(DEFAULT_WEIGHTS.paymentTerms);
     expect(resolved.weights.deliveryDate).toBe(DEFAULT_WEIGHTS.deliveryDate);
     expect(resolved.weights.warrantyPeriod).toBe(DEFAULT_WEIGHTS.warrantyPeriod);
@@ -380,7 +380,7 @@ describe('resolveNegotiationConfig — weight resolution', () => {
 
   it('uses user-modified weights when aiSuggested=false', () => {
     const customWeights = {
-      targetUnitPrice: 50,
+      minTotalPrice: 50,
       paymentTerms: 20,
       deliveryDate: 20,
       warrantyPeriod: 5,
@@ -390,22 +390,22 @@ describe('resolveNegotiationConfig — weight resolution', () => {
       aiSuggested: false,
       parameterWeights: customWeights,
       priority: 'MEDIUM',
-      priceQuantity: { targetUnitPrice: 90000, maxAcceptablePrice: 110000, minOrderQuantity: 1 },
+      priceQuantity: { minTotalPrice: 90000, maxTotalPrice: 110000, minOrderQuantity: 1, targetUnitPrice: null, maxAcceptablePrice: null },
       paymentTerms: { minDays: 30, maxDays: 90 },
       delivery: { requiredDate: '2026-06-01', preferredDate: '2026-05-15', partialDelivery: { allowed: false } },
       contractSla: { warrantyPeriod: '1_YEAR', lateDeliveryPenaltyPerDay: 1 },
       negotiationControl: { maxRounds: 50, walkawayThreshold: 20 },
     });
-    expect(resolved.weights.targetUnitPrice).toBe(50);
+    expect(resolved.weights.minTotalPrice).toBe(50);
     expect(resolved.weightsAreUserModified).toBe(true);
   });
 
   it('falls back to DEFAULT_WEIGHTS keys that are missing in parameterWeights', () => {
     const resolved = resolveNegotiationConfig({
       aiSuggested: false,
-      parameterWeights: { targetUnitPrice: 100 }, // missing other keys
+      parameterWeights: { targetUnitPrice: 100 }, // legacy key — normalized on read
       priority: 'MEDIUM',
-      priceQuantity: { targetUnitPrice: 90000, maxAcceptablePrice: 110000, minOrderQuantity: 1 },
+      priceQuantity: { targetUnitPrice: 90000, maxAcceptablePrice: 110000, minOrderQuantity: 1, minTotalPrice: null, maxTotalPrice: null },
       paymentTerms: { minDays: 30, maxDays: 90 },
       delivery: { requiredDate: '2026-06-01', preferredDate: '2026-05-15', partialDelivery: { allowed: false } },
       contractSla: { warrantyPeriod: '1_YEAR', lateDeliveryPenaltyPerDay: 1 },

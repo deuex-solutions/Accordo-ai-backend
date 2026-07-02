@@ -9,14 +9,16 @@
  *   config objects, scoring formulas, or MESO reasoning.
  * - The LLM may ONLY express a decision — not make one.
  * - Injects allowedPrice explicitly when action is COUNTER.
- * - Response length adapts per action type (8–140 words).
+ * - Response length: 40–150 words (compact ACCEPT 15–80 when vendor at/below max).
  * - Temperature: 0.7 for natural variation across rounds.
  */
 
 import { generateCompletion } from "../services/openai.service.js";
-import { getFallbackResponse } from "./fallback-templates.js";
 import logger from "../config/logger.js";
-import type { NegotiationIntent } from "../negotiation/intent/build-negotiation-intent.js";
+import type {
+  NegotiationIntent,
+  PersuasionAngle,
+} from "../negotiation/intent/build-negotiation-intent.js";
 
 // ─────────────────────────────────────────────
 // Non-commercial context (safe to pass to LLM)
@@ -31,6 +33,8 @@ export interface PersonaContext {
   productCategory?: string;
   /** Compact negotiation arc summary (deterministic, safe fields only) */
   arcSummary?: string;
+  /** Injected when a validation retry is needed */
+  validationRetryHint?: string;
 }
 
 // ─────────────────────────────────────────────
@@ -70,7 +74,7 @@ Structure rules:
 11. If the vendor asked a direct question AND stated a price, address the price first, the question second.
 12. If the vendor asked questions previously that weren't answered, address those briefly before the negotiation thread.
 13. If the vendor is just making smalltalk, give a short warm reply and redirect to the deal.
-14. Adapt length to the vendor: short message → short reply, longer message → longer reply. Stay within the bounds you'll be given.
+14. Write 40–150 words for substantive negotiation replies unless told this is a compact acceptance. Include genuine synthesized reasoning when countering.
 15. Single message only. No bullet points unless presenting MESO options.
 16. NEVER invent, infer, or fabricate vendor concerns, motivations, or financial situations. Only acknowledge concerns explicitly listed in the instruction below. If no concerns are listed, do NOT reference ANY vendor concern or circumstance. Specifically banned when no concerns are listed: "cash flow", "budget", "financial considerations", "financial needs", "margin pressure", "cash flow considerations", "budget constraints", "financial arrangements", "overhead", "cost structure". Do not use "given your/their..." or "considering your/their..." followed by any financial term. Do not use "[X] is a factor" or "[X] is a consideration" when referencing the vendor's situation.
 17. Never output dates in YYYY-MM-DD format. Always use Month Day format (e.g. June 5 or June 5, 2026).`;
@@ -110,26 +114,42 @@ function getCounterReasoningHint(round: number): string {
   return COUNTER_REASONING_HINTS[idx];
 }
 
+const PERSUASION_ANGLE_HINTS: Record<PersuasionAngle, string> = {
+  partnership:
+    "Synthesize 2–4 sentences on long-term partnership, repeat business, and growing the relationship. Invent the reasoning yourself.",
+  philosophy:
+    "Synthesize 2–4 sentences on fair dealing, balanced risk, and what makes a sustainable agreement. Invent the reasoning yourself.",
+  economics:
+    "Synthesize 2–4 sentences on order-of-magnitude business economics (scale, efficiency, stewardship) without citing internal targets, margins, or our budget limits. Invent the reasoning yourself.",
+};
+
 // Length guidance the LLM aims for; the validator enforces hard bounds.
-function lengthHintForAction(action: string, vendorWordCount: number): string {
-  // Adapt to vendor: short vendor message → shorter reply, but never below per-action floor.
+function lengthHintForAction(
+  action: string,
+  _vendorWordCount: number,
+  roundNumber: number,
+  compactAccept?: boolean,
+): string {
+  if (action === "ACCEPT" && compactAccept) {
+    return "Aim for ~15–60 words: warm acceptance and brief next steps. No prices.";
+  }
+
   switch (action) {
     case "COUNTER":
     case "MESO":
-      return vendorWordCount < 15
-        ? "Aim for ~30–50 words."
-        : "Aim for ~50–80 words.";
+      if (roundNumber <= 1) {
+        return "Aim for ~50–90 words: salutation (Good morning/afternoon/evening), acknowledgment of their quotation, 2–4 sentences of synthesized business reasoning, then your exact counter.";
+      }
+      return "Aim for ~40–120 words: acknowledge their position, 2–4 sentences of synthesized reasoning that supports our counter, then state the exact counter clearly.";
     case "WALK_AWAY":
     case "ESCALATE":
-      return "Aim for ~30–60 words.";
+      return "Aim for ~40–100 words.";
     case "ACCEPT":
-      return vendorWordCount < 8
-        ? "Aim for ~10–25 words."
-        : "Aim for ~20–45 words.";
+      return "Aim for ~40–80 words: warm acceptance and next steps. No prices.";
     case "ASK_CLARIFY":
-      return "Aim for ~15–35 words.";
+      return "Aim for ~40–80 words.";
     default:
-      return "Aim for ~30–60 words.";
+      return "Aim for ~40–100 words.";
   }
 }
 
@@ -173,9 +193,12 @@ function buildInstruction(
       ? `Reply in ${LANGUAGE_NAMES[style.language] ?? "the vendor's language"}. Currency symbols and prices stay in the format given to you (do not localize numbers).`
       : "Reply in English.";
 
-  const greetingHint = isFirstRound
-    ? `This is the first round — start with a brief, general greeting. Use one of these opener styles (pick the one that fits the vendor's tone): "Thanks for your offer", "Good to connect with you on this", "Thanks for getting back to us", "Appreciate you putting this together", "Good to hear from you". Do NOT reference specific terms (payment, delivery, warranty, price) in your opening sentence — keep it general.`
-    : "This is an ongoing chat — do NOT greet, just continue the conversation.";
+  const greetingHint =
+    isFirstRound && intent.priorPmWelcomeSent
+      ? "A standalone welcome was already sent on this deal. Do NOT greet with Good morning/Hi/Hello again. Open with one brief sentence acknowledging their quotation, then state your exact counter price and terms."
+      : isFirstRound
+        ? `This is the first procurement manager reply on this deal. REQUIRED structure: (1) time-appropriate salutation first (Good morning, Good afternoon, or Good evening — match the time of day), (2) one short sentence thanking them and acknowledging their quotation (units, price, terms, or delivery if mentioned), (3) state your exact counter price and terms, (4) optional brief reasoning. Do NOT open with only "Thank you" — the salutation must come first. Do NOT reference internal targets or budgets.`
+        : "This is an ongoing chat — do NOT greet with Good morning/Hi/Hello, just continue the conversation.";
 
   const firmnessInstruction =
     intent.firmness >= 0.85
@@ -223,7 +246,32 @@ function buildInstruction(
       ? `Vary your opener — you have already used these patterns in this deal: ${intent.phrasingHistory.slice(-6).join(" | ")}. Do not start with the same opening words.`
       : "";
 
-  const lengthHint = lengthHintForAction(intent.action, style?.length ?? 0);
+  const lengthHint = lengthHintForAction(
+    intent.action,
+    style?.length ?? 0,
+    round,
+    intent.compactAccept,
+  );
+
+  const persuasionHint = intent.persuasionBrief
+    ? [
+        PERSUASION_ANGLE_HINTS[intent.persuasionBrief.angle],
+        intent.persuasionBrief.vendorMovedTowardUs
+          ? "The vendor has moved toward our position — acknowledge that positively before making the case for our counter."
+          : "",
+        intent.persuasionBrief.gapNarrative === "small"
+          ? "The gap is small — keep reasoning collaborative and focused on closing."
+          : intent.persuasionBrief.gapNarrative === "significant"
+            ? "The gap is meaningful — explain why our counter is a fair landing point without revealing internal limits."
+            : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
+
+  const retryHint = context?.validationRetryHint
+    ? `RETRY: ${context.validationRetryHint}`
+    : "";
 
   // Vendor price echo — when present, LLM uses this exact string instead of
   // inventing its own formatting (prevents "355000" instead of "₹3,55,000").
@@ -252,7 +300,10 @@ function buildInstruction(
         const ceilingHint = intent.atCeiling
           ? ` This is our best position on price. Convey firmness without saying "maximum", "limit", "ceiling", "cap", or "final offer". Use phrases like "this is where we are", "our best position", "the best we can do on this", or "we've stretched as far as we can". Be clear we're firm but not confrontational.`
           : "";
-        actionInstruction = `Counter the vendor's offer. The EXACT counter is: total price ${intent.currencySymbol}${formattedCounter}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Frame it naturally around ${reasonHint}.${ceilingHint} Do NOT invent any vendor concern or motivation that isn't listed in this instruction.`;
+        const orderHint = isFirstRound
+          ? "REQUIRED order: salutation (Good morning/afternoon/evening) → thank them and acknowledge their quotation → state counter. "
+          : "";
+        actionInstruction = `Counter the vendor's offer. ${orderHint}The EXACT counter is: total price ${intent.currencySymbol}${formattedCounter}${termsText}${deliveryText}. You MUST include this exact price with the ${intent.currencySymbol} symbol. Write 40–150 words total. After the greeting and counter, include 2–4 sentences of genuine business reasoning (synthesized by you — not from a template) that supports asking them to move toward our counter. Frame it around ${reasonHint}.${ceilingHint} Do NOT invent any vendor concern or motivation that isn't listed in this instruction.`;
       } else {
         actionInstruction =
           "Indicate that the current offer needs improvement and ask the vendor to reconsider their terms. Be polite but clear.";
@@ -309,8 +360,10 @@ function buildInstruction(
     smalltalkHint,
     openQuestionsHint,
     phrasingHint,
+    retryHint,
     firmnessInstruction,
     concernsText,
+    persuasionHint,
     `Position context: ${intent.commercialPosition}`,
     "",
     `${lengthHint} Single message, no bullet points (except for MESO options).`,
@@ -325,8 +378,8 @@ function buildInstruction(
 
 export interface RenderResult {
   message: string;
-  /** Whether the response was generated by LLM (true) or a fallback template (false) */
-  fromLlm: boolean;
+  /** Always true — LLM failures throw; no template fallback on P0 path */
+  fromLlm: true;
 }
 
 /**
@@ -337,7 +390,7 @@ export interface RenderResult {
  * - The NegotiationIntent fields (no commercial data except allowedPrice for COUNTER)
  * - The vendor's message (for tone mirroring)
  *
- * Returns a RenderResult. If LLM fails, returns a humanized fallback template.
+ * Throws on LLM failure — callers must retry or surface 503.
  */
 export async function renderNegotiationMessage(
   intent: NegotiationIntent,
@@ -363,8 +416,8 @@ export async function renderNegotiationMessage(
     const response = await generateCompletion(messages, {
       // Slight bump from 0.5 → 0.7 for natural variation across rounds.
       temperature: 0.7,
-      // ~140 words ceiling (MESO max) plus formatting buffer.
-      maxTokens: 260,
+      // ~150 words ceiling plus formatting buffer.
+      maxTokens: 480,
     });
 
     logger.info("[PersonaRenderer] LLM response received", {
@@ -376,17 +429,14 @@ export async function renderNegotiationMessage(
 
     return {
       message: response.content,
-      fromLlm: true,
+      fromLlm: true as const,
     };
   } catch (error) {
-    logger.warn("[PersonaRenderer] LLM call failed, using fallback template", {
+    logger.warn("[PersonaRenderer] LLM call failed", {
       action: intent.action,
       error: error instanceof Error ? error.message : String(error),
     });
 
-    return {
-      message: getFallbackResponse(intent),
-      fromLlm: false,
-    };
+    throw error;
   }
 }

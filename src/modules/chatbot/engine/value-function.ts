@@ -142,13 +142,13 @@ export function createValueFunctions(
   // Formula: Direct price difference
   // ============================================
 
-  functions['targetUnitPrice'] = {
-    parameterId: 'targetUnitPrice',
-    parameterName: 'Price',
-    unitValue: 1, // $1 per $1
+  functions['minTotalPrice'] = {
+    parameterId: 'minTotalPrice',
+    parameterName: 'Minimum Price (Total)',
+    unitValue: 1,
     unitDescription: 'per dollar',
     calculate: (current, proposed) => {
-      const currentPrice = current ?? config.targetPrice;
+      const currentPrice = current ?? config.minTotalPrice;
       const proposedPrice = proposed ?? currentPrice;
       const dollarImpact = currentPrice - proposedPrice;
       const unitChange = proposedPrice - currentPrice;
@@ -301,12 +301,12 @@ export function calculateOfferValue(
   let totalDollarImpact = 0;
 
   // Calculate price impact
-  if (valueFunctions['targetUnitPrice']) {
-    const impact = valueFunctions['targetUnitPrice'].calculate(
+  if (valueFunctions['minTotalPrice']) {
+    const impact = valueFunctions['minTotalPrice'].calculate(
       currentOffer.total_price,
       proposedOffer.total_price
     );
-    parameterImpacts['targetUnitPrice'] = impact;
+    parameterImpacts['minTotalPrice'] = impact;
     totalDollarImpact += impact.dollarImpact;
   }
 

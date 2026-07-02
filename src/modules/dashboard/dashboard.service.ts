@@ -139,7 +139,7 @@ const buildCategorySummary = (requisitions: any[]) => {
       total_price: 0,
       actual_price: 0,
     };
-    current.total_price += parseNumber(req.totalPrice);
+    current.total_price += parseNumber(req.minTotalPrice);
     current.actual_price += calculateActualPrice(req);
     categoryTotals.set(category, current);
   });
@@ -167,7 +167,7 @@ const buildRfqSummaries = (requisitions: any[]) => {
 
   const totalPriceRfq = latest.map((req) => ({
     rfqId: req.rfqId,
-    totalPrice: parseNumber(req.totalPrice),
+    minTotalPrice: parseNumber(req.minTotalPrice),
   }));
 
   const actualPriceRfq = latest.map((req) => ({
@@ -177,7 +177,7 @@ const buildRfqSummaries = (requisitions: any[]) => {
 
   const priceSavingRfq = totalPriceRfq.map((item, index) => ({
     rfqId: item.rfqId,
-    savingPrice: item.totalPrice - (actualPriceRfq[index]?.actualPrice ?? 0),
+    savingPrice: item.minTotalPrice - (actualPriceRfq[index]?.actualPrice ?? 0),
   }));
 
   return { totalPriceRfq, actualPriceRfq, priceSavingRfq };
@@ -194,7 +194,7 @@ const computeTotals = (requisitions: any[]) => {
     if (!hasAcceptedContract) {
       return;
     }
-    totalBudget += parseNumber(req.totalPrice);
+    totalBudget += parseNumber(req.minTotalPrice);
     actualPrice += calculateActualPrice(req);
   });
 
@@ -300,7 +300,7 @@ const computeSavings = (requisitions: any[]): number => {
       (c: any) => c.status === "Accepted",
     );
     if (!hasAccepted) return;
-    const budget = parseNumber(req.totalPrice);
+    const budget = parseNumber(req.minTotalPrice);
     const actual = calculateActualPrice(req);
     total += Math.max(0, budget - actual);
   });
@@ -334,7 +334,7 @@ const computeAvgDealImprovement = (
       (c: any) => c.status === "Accepted",
     );
     if (!hasAccepted) return;
-    const budget = parseNumber(req.totalPrice);
+    const budget = parseNumber(req.minTotalPrice);
     if (budget <= 0) return;
     const actual = calculateActualPrice(req);
     const improvement = ((budget - actual) / budget) * 100;
@@ -472,7 +472,7 @@ const buildSavingsTimeline = (requisitions: any[], period: Period) => {
     if (!acceptedContract) return;
     const savings =
       parseNumber(req.savingsInPrice) ||
-      Math.max(0, parseNumber(req.totalPrice) - calculateActualPrice(req));
+      Math.max(0, parseNumber(req.minTotalPrice) - calculateActualPrice(req));
     const date = new Date(
       acceptedContract.updatedAt || acceptedContract.createdAt || req.createdAt,
     );
@@ -528,7 +528,7 @@ const buildSpendByCategory = (requisitions: any[]) => {
 
   requisitions.forEach((req) => {
     const cat = req.category || "Unknown";
-    const price = parseNumber(req.totalPrice);
+    const price = parseNumber(req.minTotalPrice);
     totals.set(cat, (totals.get(cat) || 0) + price);
     grandTotal += price;
   });

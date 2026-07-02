@@ -19,7 +19,7 @@ export type DealStatus =
   | "ACCEPTED"
   | "WALKED_AWAY"
   | "ESCALATED";
-export type DealMode = "INSIGHTS" | "CONVERSATION";
+export type DealMode = "CONVERSATION";
 
 export class ChatbotDeal extends Model<
   InferAttributes<ChatbotDeal>,

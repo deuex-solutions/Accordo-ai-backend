@@ -1,6 +1,9 @@
 /**
  * Process Conversation Turn
  *
+ * @deprecated Orphan — not imported by active runtime. Superseded by
+ * `pipeline/run-agent-turn.ts` (planned P0.2). Do not extend; remove in P4 cleanup.
+ *
  * Main orchestrator for processing vendor messages and generating Accordo responses.
  * Integrates conversation templates, enhanced router, and decision engine.
  */
@@ -16,6 +19,7 @@ import {
   type ConvoIntent,
   type TemplateVariables,
 } from './conversation-templates.js';
+import { getPriceBoundariesFromDeal } from '../pipeline/load-negotiation-config-from-deal.js';
 import {
   classifyVendorIntent,
   classifyRefusal,
@@ -328,17 +332,23 @@ async function prepareTemplateVariables(
       );
       break;
 
-    case 'COUNTER':
-      // Extract pricing info from template/deal
-      variables.targetPrice = templateParams?.targetPrice || 100;
+    case 'COUNTER': {
+      const boundaries = getPriceBoundariesFromDeal(deal);
+      const minTotal =
+        boundaries.minTotalPrice ??
+        templateParams?.minTotalPrice ??
+        100;
+      variables.minTotalPrice = minTotal;
+      variables.targetPrice = minTotal;
       variables.currentPrice = extractCurrentPrice(vendorMessage, deal);
       variables.paymentTerms = templateParams?.paymentTerms || 'Net 30';
       variables.reason = generateCounterReason(
         templateParams,
-        variables.targetPrice,
+        minTotal,
         variables.currentPrice
       );
       break;
+    }
 
     case 'ACCEPT':
       variables.currentPrice = extractCurrentPrice(vendorMessage, deal);
@@ -500,8 +510,9 @@ function generateWalkAwayReason(
     return "we haven't been able to establish clear terms for collaboration";
   }
 
-  if (templateParams?.maxAcceptablePrice) {
-    return `the pricing exceeds our maximum acceptable threshold of $${templateParams.maxAcceptablePrice}`;
+  if (templateParams?.maxTotalPrice ?? templateParams?.maxAcceptablePrice) {
+    const maxTotal = templateParams.maxTotalPrice ?? templateParams.maxAcceptablePrice;
+    return `the pricing exceeds our maximum total threshold of $${maxTotal}`;
   }
 
   return 'the terms do not align with our business requirements';
@@ -599,13 +610,6 @@ export function validateDealForConversation(deal: ChatbotDeal): void {
   if (deal.status === 'ESCALATED') {
     throw new CustomError(
       'Cannot process messages for escalated deals',
-      400
-    );
-  }
-
-  if (deal.mode !== 'CONVERSATION') {
-    throw new CustomError(
-      'Deal is not in CONVERSATION mode',
       400
     );
   }

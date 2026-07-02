@@ -87,14 +87,10 @@ export interface GenerateVendorReplyInput {
    * Vendor prices should be ABOVE PM's target price
    */
   pmPriceConfig?: {
-    /**
-     * PM's target unit price (what PM wants to pay - lowest)
-     */
-    targetUnitPrice: number;
-    /**
-     * PM's maximum acceptable price (ceiling - vendor should start above this for HARD)
-     */
-    maxAcceptablePrice: number;
+    /** PM's minimum total price (what PM wants to pay - lowest) */
+    minTotalPrice: number;
+    /** PM's maximum total price (ceiling - vendor should start above this for HARD) */
+    maxTotalPrice: number;
   };
 }
 

@@ -57,8 +57,8 @@ export class Requisition extends Model<
   declare negotiationClosureDate: Date | null;
   declare typeOfCurrency: RequisitionCurrency | null;
   declare totalQuantity: number | null;
-  declare totalPrice: number | null;
-  declare totalMaxPrice: number | null;
+  declare minTotalPrice: number | null;
+  declare maxTotalPrice: number | null;
   declare finalPrice: number | null;
   declare status: RequisitionStatus | null;
   declare savingsInPrice: number | null;
@@ -131,8 +131,8 @@ export default function requisitionModel(sequelize: Sequelize): typeof Requisiti
       negotiationClosureDate: DataTypes.DATE,
       typeOfCurrency: DataTypes.ENUM(...currencyEnum),
       totalQuantity: DataTypes.INTEGER,
-      totalPrice: DataTypes.DOUBLE,
-      totalMaxPrice: DataTypes.DOUBLE,
+      minTotalPrice: DataTypes.DOUBLE,
+      maxTotalPrice: DataTypes.DOUBLE,
       finalPrice: DataTypes.DOUBLE,
       status: DataTypes.ENUM(...statusEnum),
       savingsInPrice: DataTypes.DOUBLE,

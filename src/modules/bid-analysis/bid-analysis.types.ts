@@ -108,8 +108,8 @@ export interface RequisitionBidDetail {
     subject: string;
     description: string | null;
     category: string | null;
-    targetPrice: number | null;
-    maxAcceptablePrice: number | null;
+    minTotalPrice: number | null;
+    maxTotalPrice: number | null;
     negotiationClosureDate: Date | null;
     deliveryDate: Date | null;
     status: string;
@@ -124,8 +124,8 @@ export interface RequisitionBidDetail {
     lowest: number | null;
     highest: number | null;
     average: number | null;
-    targetPrice: number | null;
-    maxAcceptablePrice: number | null;
+    minTotalPrice: number | null;
+    maxTotalPrice: number | null;
   };
   topBids: TopBidInfo[];
   allBids: BidWithDetails[];

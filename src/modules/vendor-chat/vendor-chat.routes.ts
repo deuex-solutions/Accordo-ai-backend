@@ -5,12 +5,12 @@ import {
   editQuote,
   getDeal,
   enterChat,
+  postVendorOpening,
   sendMessage,
   getPMResponse,
   selectMesoOption,
   submitOthers,
   confirmFinalOffer,
-  submitDiscount,
   submitPaymentTerms,
 } from './vendor-chat.controller.js';
 
@@ -29,6 +29,7 @@ vendorChatRouter.put('/quote', editQuote);
 // Deal/chat access
 vendorChatRouter.get('/deal', getDeal);
 vendorChatRouter.post('/enter', enterChat);
+vendorChatRouter.post('/vendor-opening', postVendorOpening);
 
 // Messaging (two-phase pattern)
 vendorChatRouter.post('/message', sendMessage);
@@ -48,11 +49,10 @@ vendorChatRouter.post('/meso/others', submitOthers);
 vendorChatRouter.post('/final-offer/confirm', confirmFinalOffer);
 
 // ============================================================================
-// Structured Prompt Routes (April 2026)
-// Feature 1: initial discount ask; Feature 2: payment terms dropdown
+// Structured Prompt Routes
+// Payment terms dropdown when vendor sends price without terms
 // ============================================================================
 
-vendorChatRouter.post('/discount', submitDiscount);
 vendorChatRouter.post('/payment-terms', submitPaymentTerms);
 
 export default vendorChatRouter;

@@ -34,7 +34,7 @@ interface RequisitionContext {
   subject: string;
   category: string;
   deliveryDate?: Date;
-  totalPrice?: number;
+  minTotalPrice?: number;
   products?: unknown[];
 }
 
@@ -101,7 +101,7 @@ export async function getRequisitionContext(requisitionId: number): Promise<Requ
       subject: requisition.subject || '',
       category: requisition.category || '',
       deliveryDate: requisition.deliveryDate || undefined,
-      totalPrice: requisition.totalPrice || undefined,
+      minTotalPrice: requisition.minTotalPrice || undefined,
     };
   } catch (error) {
     logger.error('Failed to get requisition context:', error);
@@ -163,8 +163,8 @@ export function buildContextString(context: NegotiationContext | RequisitionCont
     if (reqContext.category) {
       parts.push(`Category: ${reqContext.category}`);
     }
-    if (reqContext.totalPrice) {
-      parts.push(`Total Price: ${reqContext.totalPrice}`);
+    if (reqContext.minTotalPrice) {
+      parts.push(`Total Price: ${reqContext.minTotalPrice}`);
     }
   }
 
