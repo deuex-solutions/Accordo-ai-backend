@@ -586,6 +586,12 @@ export function resolveNegotiationConfig(
     sources['maxAcceptablePrice'] = 'calculated';
   }
 
+  const costOfCapital = getValueWithSource(
+    'costOfCapital',
+    wizardConfig?.costOfCapital,
+    0.1000 // 10% default
+  );
+
   // Payment terms
   const paymentTermsMinDays = getValueWithSource(
     'paymentTermsMinDays',
@@ -750,6 +756,7 @@ export function resolveNegotiationConfig(
     // Values
     targetPrice,
     maxAcceptablePrice,
+    costOfCapital,
     paymentTermsMinDays,
     paymentTermsMaxDays,
     deliveryDate,
@@ -793,95 +800,76 @@ export function calculateWeightedUtilityFromResolved(
   let totalUtility = 0;
   let totalWeight = 0;
 
-  const { weights } = resolvedConfig;
+  const ecWeight = 60;
+  const deliveryWeight = 25;
+  const warrantyWeight = 15;
 
   // ============================================
-  // Price Parameters
+  // 1. Effective Cost (NPV) Utility (60% Weight)
   // ============================================
+  if (vendorOffer.total_price != null) {
+    const vendorDays = vendorOffer.payment_terms_days
+      ?? (vendorOffer.payment_terms ? parseInt(vendorOffer.payment_terms.replace(/\D/g, ''), 10) || null : null)
+      ?? 30; // default to 30 days if not specified
 
-  // Target Price Utility
-  if (weights.targetUnitPrice > 0 && vendorOffer.total_price != null) {
-    const priceUtility = calculatePriceUtility(
-      vendorOffer.total_price,
-      resolvedConfig.targetPrice,
-      resolvedConfig.maxAcceptablePrice
-    );
-    const contribution = priceUtility * (weights.targetUnitPrice / 100);
-    parameterUtilities['targetUnitPrice'] = {
-      parameterId: 'targetUnitPrice',
-      parameterName: 'Target Price',
+    const vendorEffectiveCost = vendorOffer.total_price * (1 - (resolvedConfig.costOfCapital / 365) * vendorDays);
+    const targetEffectiveCost = resolvedConfig.targetPrice * (1 - (resolvedConfig.costOfCapital / 365) * resolvedConfig.paymentTermsMaxDays);
+    const maxEffectiveCost = resolvedConfig.maxAcceptablePrice * (1 - (resolvedConfig.costOfCapital / 365) * resolvedConfig.paymentTermsMinDays);
+
+    let priceUtility = 0;
+    if (vendorEffectiveCost <= targetEffectiveCost) {
+      priceUtility = 1.0;
+    } else if (vendorEffectiveCost >= maxEffectiveCost) {
+      priceUtility = 0.0;
+    } else {
+      const ecRange = maxEffectiveCost - targetEffectiveCost;
+      priceUtility = ecRange > 0 ? 1.0 - (vendorEffectiveCost - targetEffectiveCost) / ecRange : 0.0;
+    }
+
+    const contribution = priceUtility * (ecWeight / 100);
+    parameterUtilities['effectiveCost'] = {
+      parameterId: 'effectiveCost',
+      parameterName: 'Effective Cost (NPV)',
       utility: priceUtility,
-      weight: weights.targetUnitPrice,
+      weight: ecWeight,
       contribution,
-      currentValue: vendorOffer.total_price,
-      targetValue: resolvedConfig.targetPrice,
-      maxValue: resolvedConfig.maxAcceptablePrice,
+      currentValue: Math.round(vendorEffectiveCost * 100) / 100,
+      targetValue: Math.round(targetEffectiveCost * 100) / 100,
+      maxValue: Math.round(maxEffectiveCost * 100) / 100,
       status: getStatusFromScore(priceUtility),
       color: getColorFromScore(priceUtility),
     };
     totalUtility += contribution;
-    totalWeight += weights.targetUnitPrice;
-  }
-
-  // Payment Terms Utility (longer terms = better for buyer)
-  // Only scored when vendor explicitly provides payment terms in their offer
-  if (weights.paymentTerms > 0 && vendorOffer.payment_terms != null) {
-    const vendorDays = vendorOffer.payment_terms_days
-      ?? (vendorOffer.payment_terms ? parseInt(vendorOffer.payment_terms.replace(/\D/g, ''), 10) || null : null);
-    if (vendorDays != null) {
-      const termsUtilityScore = calculatePaymentTermsUtility(
-        vendorDays,
-        resolvedConfig.paymentTermsMinDays,
-        resolvedConfig.paymentTermsMaxDays
-      );
-      const contribution = termsUtilityScore * (weights.paymentTerms / 100);
-      parameterUtilities['paymentTerms'] = {
-        parameterId: 'paymentTerms',
-        parameterName: 'Payment Terms',
-        utility: termsUtilityScore,
-        weight: weights.paymentTerms,
-        contribution,
-        currentValue: vendorOffer.payment_terms,
-        targetValue: `Net ${resolvedConfig.paymentTermsMaxDays}`,
-        status: getStatusFromScore(termsUtilityScore),
-        color: getColorFromScore(termsUtilityScore),
-      };
-      totalUtility += contribution;
-      totalWeight += weights.paymentTerms;
-    }
+    totalWeight += ecWeight;
   }
 
   // ============================================
-  // Delivery Parameters
+  // 2. Delivery Date Utility (25% Weight)
   // ============================================
-
-  // Delivery Date Utility
-  // Only scored when vendor explicitly provides delivery info in their offer
-  if (weights.deliveryDate > 0 && vendorOffer.delivery_days != null && resolvedConfig.deliveryDate) {
+  if (vendorOffer.delivery_days != null && resolvedConfig.deliveryDate) {
     const requiredDays = Math.ceil(
       (resolvedConfig.deliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
-    // Derive tolerance from preferredDeliveryDate vs requiredDeliveryDate gap.
-    // preferredDate is always set (mandatory in wizard); difference gives natural tolerance.
     const toleranceDays = resolvedConfig.preferredDeliveryDate && resolvedConfig.deliveryDate
       ? Math.max(
-          7, // minimum 7-day tolerance
+          7,
           Math.ceil(
             Math.abs(
               resolvedConfig.preferredDeliveryDate.getTime() - resolvedConfig.deliveryDate.getTime()
             ) / (1000 * 60 * 60 * 24)
           )
         )
-      : 30; // fallback only if preferredDate unexpectedly absent
+      : 30;
+
     const deliveryUtility = vendorOffer.delivery_days <= requiredDays
       ? 1
       : Math.max(0, 1 - (vendorOffer.delivery_days - requiredDays) / toleranceDays);
-    const contribution = deliveryUtility * (weights.deliveryDate / 100);
+    const contribution = deliveryUtility * (deliveryWeight / 100);
     parameterUtilities['deliveryDate'] = {
       parameterId: 'deliveryDate',
       parameterName: 'Delivery Date',
       utility: deliveryUtility,
-      weight: weights.deliveryDate,
+      weight: deliveryWeight,
       contribution,
       currentValue: vendorOffer.delivery_days,
       targetValue: requiredDays,
@@ -889,25 +877,23 @@ export function calculateWeightedUtilityFromResolved(
       color: getColorFromScore(deliveryUtility),
     };
     totalUtility += contribution;
-    totalWeight += weights.deliveryDate;
+    totalWeight += deliveryWeight;
   }
 
   // ============================================
-  // Contract Parameters
+  // 3. Warranty Period Utility (15% Weight)
   // ============================================
-
-  // Warranty Period Utility (higher is better)
-  if (weights.warrantyPeriod > 0 && vendorOffer.warranty_months != null) {
+  if (vendorOffer.warranty_months != null) {
     const warrantyUtility = Math.min(
       1,
       vendorOffer.warranty_months / resolvedConfig.warrantyPeriodMonths
     );
-    const contribution = warrantyUtility * (weights.warrantyPeriod / 100);
+    const contribution = warrantyUtility * (warrantyWeight / 100);
     parameterUtilities['warrantyPeriod'] = {
       parameterId: 'warrantyPeriod',
       parameterName: 'Warranty Period',
       utility: warrantyUtility,
-      weight: weights.warrantyPeriod,
+      weight: warrantyWeight,
       contribution,
       currentValue: vendorOffer.warranty_months,
       targetValue: resolvedConfig.warrantyPeriodMonths,
@@ -915,53 +901,16 @@ export function calculateWeightedUtilityFromResolved(
       color: getColorFromScore(warrantyUtility),
     };
     totalUtility += contribution;
-    totalWeight += weights.warrantyPeriod;
-  }
-
-  // Quality Standards Utility
-  // Only scored when:
-  // 1. qualityStandards weight is configured
-  // 2. Required certifications are actually specified in config (non-empty)
-  // 3. Vendor explicitly mentioned certifications in their offer
-  // Rationale: if no certs required, quality isn't a negotiation dimension; exclude from total weight
-  if (weights.qualityStandards > 0 && vendorOffer.quality_certifications) {
-    const requiredCerts = resolvedConfig.qualityStandards ?? [];
-    const offeredCerts = vendorOffer.quality_certifications ?? [];
-    // Skip entirely when no certs are configured — avoids phantom 100% score inflating utility
-    if (requiredCerts.length > 0) {
-      const matchCount = offeredCerts.length > 0
-        ? requiredCerts.filter((c) =>
-            offeredCerts.some((o) => o.toLowerCase().includes(c.toLowerCase()))
-          ).length
-        : 0;
-      const qualityUtility = matchCount / requiredCerts.length;
-      const contribution = qualityUtility * (weights.qualityStandards / 100);
-      parameterUtilities['qualityStandards'] = {
-        parameterId: 'qualityStandards',
-        parameterName: 'Quality Standards',
-        utility: qualityUtility,
-        weight: weights.qualityStandards,
-        contribution,
-        currentValue: offeredCerts.join(', '),
-        targetValue: requiredCerts.join(', '),
-        status: getStatusFromScore(qualityUtility),
-        color: getColorFromScore(qualityUtility),
-      };
-      totalUtility += contribution;
-      totalWeight += weights.qualityStandards;
-    }
+    totalWeight += warrantyWeight;
   }
 
   // ============================================
-  // Normalize and finalize
+  // Normalize and Finalize
   // ============================================
-
-  // Normalize if weights don't sum to 100
   if (totalWeight > 0 && totalWeight !== 100) {
     totalUtility = totalUtility * (100 / totalWeight);
   }
 
-  // Clamp to [0, 1]
   totalUtility = Math.max(0, Math.min(1, totalUtility));
 
   const thresholds: ThresholdConfig = {

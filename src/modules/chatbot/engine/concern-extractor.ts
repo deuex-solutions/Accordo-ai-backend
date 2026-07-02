@@ -432,11 +432,9 @@ export function getAcknowledgmentSentence(concerns: VendorConcern[]): string | n
   const topConcern = concerns[0];
 
   const templates = [
-    `I understand ${topConcern.text} is a factor in your pricing.`,
-    `Given ${topConcern.text}, I appreciate your position.`,
     `I recognize the challenges around ${topConcern.text}.`,
-    `Considering ${topConcern.text}, I understand where you're coming from.`,
-    `I appreciate you sharing about ${topConcern.text}.`
+    `I understand ${topConcern.text} is a factor here.`,
+    `Given ${topConcern.text}, I appreciate where you're coming from.`,
   ];
 
   return templates[Math.floor(Math.random() * templates.length)];

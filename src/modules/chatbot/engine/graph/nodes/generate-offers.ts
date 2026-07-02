@@ -112,8 +112,14 @@ export const generateOffersNode = async (state: NegotiationState) => {
       );
 
       if (mesoResult.success && mesoResult.options.length > 0) {
-        // Map back to State format
-        updates.mesoOptions = mesoResult.options.map(opt => mapToStateOffer(opt.offer));
+        // Map back to State format with customParameters for label/description
+        updates.mesoOptions = mesoResult.options.map(opt => ({
+          ...mapToStateOffer(opt.offer),
+          customParameters: {
+            label: opt.label,
+            description: opt.description
+          }
+        }));
         // Use the first MESO option as the primary counterOffer
         updates.counterOffer = mapToStateOffer(mesoResult.options[0].offer);
       } else {

@@ -40,6 +40,12 @@ export class ChatbotDeal extends Model<
   declare openQuestions: CreationOptional<
     Array<{ question: string; askedAtRound: number }>
   >;
+  declare targetEffectiveCost: CreationOptional<number | null>;
+  declare maxEffectiveCost: CreationOptional<number | null>;
+  declare costOfCapital: CreationOptional<number>;
+  declare mesoOptionsSent: CreationOptional<object | null>;
+  declare vendorTermPref: CreationOptional<string | null>;
+  declare effectiveCostTrajectory: CreationOptional<object | null>;
   declare templateId: ForeignKey<string> | null;
   declare requisitionId: ForeignKey<number> | null;
   declare contractId: ForeignKey<number> | null;
@@ -161,6 +167,37 @@ export function initChatbotDealModel(sequelize: Sequelize): typeof ChatbotDeal {
         allowNull: false,
         defaultValue: [],
         field: "open_questions",
+      },
+      targetEffectiveCost: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+        field: "target_effective_cost",
+      },
+      maxEffectiveCost: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+        field: "max_effective_cost",
+      },
+      costOfCapital: {
+        type: DataTypes.DECIMAL(5, 4),
+        allowNull: false,
+        defaultValue: 0.1000,
+        field: "cost_of_capital",
+      },
+      mesoOptionsSent: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: "meso_options_sent",
+      },
+      vendorTermPref: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: "vendor_term_pref",
+      },
+      effectiveCostTrajectory: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: "effective_cost_trajectory",
       },
       templateId: {
         type: DataTypes.UUID,

@@ -37,6 +37,7 @@ export const weightedUtilityNode = async (state: NegotiationState) => {
     weights,
     targetPrice: config.priceQuantity?.targetUnitPrice || 0,
     maxAcceptablePrice: config.priceQuantity?.maxAcceptablePrice || 0,
+    costOfCapital: config.costOfCapital !== undefined ? config.costOfCapital : 0.1000,
     paymentTermsMinDays: config.paymentTerms?.minDays || 0,
     paymentTermsMaxDays: config.paymentTerms?.maxDays || 0,
     deliveryDate: config.deliveryDate ? new Date(config.deliveryDate) : undefined,

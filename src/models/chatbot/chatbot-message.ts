@@ -27,6 +27,10 @@ export class ChatbotMessage extends Model<
   declare counterOffer: object | null;
   declare explainabilityJson: object | null;
   declare round: number | null;  // Which negotiation round this message belongs to
+  declare messageType: string | null;
+  declare classificationRoute: string | null;
+  declare classificationConfidence: number | null;
+  declare effectiveCost: number | null;
   declare createdAt: CreationOptional<Date>;
 
   // Associations
@@ -96,6 +100,26 @@ export function initChatbotMessageModel(sequelize: Sequelize): typeof ChatbotMes
         type: DataTypes.INTEGER,
         allowNull: true,
         field: 'round',
+      },
+      messageType: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'message_type',
+      },
+      classificationRoute: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'classification_route',
+      },
+      classificationConfidence: {
+        type: DataTypes.DECIMAL(5, 4),
+        allowNull: true,
+        field: 'classification_confidence',
+      },
+      effectiveCost: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+        field: 'effective_cost',
       },
       createdAt: {
         type: DataTypes.DATE,

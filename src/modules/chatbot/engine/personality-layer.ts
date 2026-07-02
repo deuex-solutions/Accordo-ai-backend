@@ -161,8 +161,10 @@ const PERSONALITY_TEMPLATES: Record<
 
   long_negotiation: {
     formal: {
-      prefixes: ['We appreciate your continued engagement in these discussions.'],
-      suffixes: ['Your patience in this process is valued.'],
+      prefixes: [
+        'We appreciate your continued engagement and patience, and this process is valued.',
+      ],
+      suffixes: [],
     },
     casual: {
       prefixes: ["We've been at this for a while — let's find that sweet spot."],

@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildNegotiationIntent,
+  enforcePmCounterMonotonicity,
   mapUtilityToFirmness,
   type BuildIntentInput,
   type NegotiationAction,
@@ -34,6 +35,57 @@ function makeInput(
     ...overrides,
   };
 }
+
+// ─────────────────────────────────────────────
+// enforcePmCounterMonotonicity
+// ─────────────────────────────────────────────
+
+describe("enforcePmCounterMonotonicity", () => {
+  it("floors counter at last PM price when vendor is still above and MESO tries to drop", () => {
+    const result = enforcePmCounterMonotonicity(
+      49500,
+      49875,
+      60000,
+      59900,
+      6,
+    );
+    expect(result).toBeGreaterThanOrEqual(49875);
+  });
+
+  it("steps counter upward toward vendor when vendor remains far above last PM counter", () => {
+    const result = enforcePmCounterMonotonicity(
+      48900,
+      49875,
+      60000,
+      59900,
+      6,
+    );
+    expect(result).toBeGreaterThan(49875);
+    expect(result).toBeLessThanOrEqual(59900);
+  });
+
+  it("counters at max when vendor is within 2% above ceiling", () => {
+    const result = enforcePmCounterMonotonicity(
+      49500,
+      49875,
+      60000,
+      59900,
+      6,
+    );
+    expect(result).toBe(59900);
+  });
+
+  it("does not exceed maxAcceptablePrice", () => {
+    const result = enforcePmCounterMonotonicity(
+      61000,
+      58000,
+      65000,
+      59900,
+      4,
+    );
+    expect(result).toBeLessThanOrEqual(59900);
+  });
+});
 
 // ─────────────────────────────────────────────
 // mapUtilityToFirmness

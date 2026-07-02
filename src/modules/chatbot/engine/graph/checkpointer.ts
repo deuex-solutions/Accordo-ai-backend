@@ -92,6 +92,15 @@ export async function getCheckpointer() {
   
   // Apply the compression decorator
   checkpointer.serde = wrapSerializer(checkpointer.serde);
+
+  try {
+    logger.info("[Checkpointer] Auto-initializing database schema...");
+    await checkpointer.setup();
+  } catch (err) {
+    logger.warn("[Checkpointer] Schema auto-initialization failed (it may already exist)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
   
   return checkpointer;
 }

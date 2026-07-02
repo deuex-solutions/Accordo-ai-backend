@@ -21,7 +21,7 @@ import {
   termsUtility,
   NegotiationConfig,
 } from "./utility.js";
-import { getCurrencySymbol } from "./build-negotiation-intent.js";
+import { getCurrencySymbol, enforcePmCounterMonotonicity } from "./build-negotiation-intent.js";
 import {
   calculateWeightedUtility,
   resolveNegotiationConfig,
@@ -1713,6 +1713,30 @@ function generateCounterOffer(
   }
 
   counterPrice = Math.round(counterPrice * 100) / 100;
+
+  // Monotonic floor + near-max convergence (vendor within 2% above ceiling → counter at max)
+  if (negotiationState?.pmCounterHistory?.length) {
+    const lastPm =
+      negotiationState.pmCounterHistory[
+        negotiationState.pmCounterHistory.length - 1
+      ].price;
+    counterPrice = enforcePmCounterMonotonicity(
+      counterPrice,
+      lastPm,
+      vendorOffer.total_price,
+      maxAcceptablePrice,
+      round,
+    );
+  } else if (
+    vendorOffer.total_price != null &&
+    vendorOffer.total_price > maxAcceptablePrice
+  ) {
+    const overPct =
+      (vendorOffer.total_price - maxAcceptablePrice) / maxAcceptablePrice;
+    if (overPct <= 0.02) {
+      counterPrice = maxAcceptablePrice;
+    }
+  }
 
   // Determine payment terms
   let counterTerms: string;

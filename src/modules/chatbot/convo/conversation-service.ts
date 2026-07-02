@@ -656,6 +656,35 @@ export async function processConversationMessage(
         }
       }
 
+      // 7-pre-B2. Near-max counter: vendor within 2% ABOVE max_acceptable after round 5+.
+      // Counter at ceiling instead of a low stale price — e.g. vendor ₹60,000 vs max ₹59,900.
+      if (
+        decision.action === "COUNTER" &&
+        !isVendorAffirmative &&
+        deal.round >= 5 &&
+        vendorOffer.total_price != null &&
+        maxAcceptableForProximity != null &&
+        maxAcceptableForProximity > 0 &&
+        vendorOffer.total_price > maxAcceptableForProximity
+      ) {
+        const overPct =
+          (vendorOffer.total_price - maxAcceptableForProximity) /
+          maxAcceptableForProximity;
+        if (overPct <= 0.02 && decision.counterOffer?.total_price != null) {
+          logger.info(
+            "[ConversationService] Near-max counter: vendor within 2% above max_acceptable — countering at ceiling",
+            {
+              dealId,
+              vendorPrice: vendorOffer.total_price,
+              maxAcceptable: maxAcceptableForProximity,
+              engineCounter: decision.counterOffer.total_price,
+              overPct: (overPct * 100).toFixed(2) + "%",
+            },
+          );
+          decision.counterOffer.total_price = maxAcceptableForProximity;
+        }
+      }
+
       // 7-pre-C. Graduated response for offers ABOVE max_acceptable (late rounds).
       //   Strict rule: NEVER accept above max_acceptable.
       //   Within 10% above max → COUNTER at max (handled by endgame flow in section 11a)
@@ -1357,9 +1386,31 @@ export async function processConversationMessage(
         convoState?.lastCeilingMesoRound === deal.round;
 
       if (lastWasCeilingMeso) {
-        decision.action = "WALK_AWAY";
-        decision.counterOffer = null;
-        escapeHatchApplied = "post-meso-walk";
+        const overMaxPct =
+          maxAcceptablePrice != null &&
+          vendorStyle.lastVendorPrice != null &&
+          vendorStyle.lastVendorPrice > maxAcceptablePrice
+            ? (vendorStyle.lastVendorPrice - maxAcceptablePrice) /
+              maxAcceptablePrice
+            : null;
+
+        // Tiny gap above max (≤2%): counter at ceiling again — do not walk away.
+        if (overMaxPct != null && overMaxPct <= 0.02) {
+          decision.action = "COUNTER";
+          decision.counterOffer = {
+            ...(decision.counterOffer || {}),
+            total_price: maxAcceptablePrice,
+            payment_terms:
+              vendorOffer.payment_terms ??
+              decision.counterOffer?.payment_terms ??
+              "Net 60",
+          } as any;
+          escapeHatchApplied = "ceiling-meso";
+        } else {
+          decision.action = "WALK_AWAY";
+          decision.counterOffer = null;
+          escapeHatchApplied = "post-meso-walk";
+        }
       } else if (
         maxAcceptablePrice != null &&
         vendorStyle.lastVendorPrice <= maxAcceptablePrice
@@ -1386,6 +1437,37 @@ export async function processConversationMessage(
           repeatedOfferCount: vendorStyle.repeatedOfferCount,
           vendorPrice: vendorStyle.lastVendorPrice,
         });
+      }
+    }
+
+    // 11c. Post-escape guard: never walk away when vendor is ≤2% above max (trivial gap)
+    if (
+      decision.action === "WALK_AWAY" &&
+      maxAcceptablePrice != null &&
+      vendorOffer.total_price != null &&
+      vendorOffer.total_price > maxAcceptablePrice
+    ) {
+      const overPct =
+        (vendorOffer.total_price - maxAcceptablePrice) / maxAcceptablePrice;
+      if (overPct <= 0.02) {
+        logger.info(
+          "[ConversationService] Overriding WALK_AWAY → COUNTER at max (near-max gap)",
+          {
+            dealId,
+            vendorPrice: vendorOffer.total_price,
+            maxAcceptablePrice,
+            overPct: (overPct * 100).toFixed(2) + "%",
+          },
+        );
+        decision.action = "COUNTER";
+        decision.counterOffer = {
+          ...(decision.counterOffer || {}),
+          total_price: maxAcceptablePrice,
+          payment_terms:
+            vendorOffer.payment_terms ??
+            decision.counterOffer?.payment_terms ??
+            "Net 60",
+        } as any;
       }
     }
 

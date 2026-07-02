@@ -724,6 +724,7 @@ export interface ExtendedOffer {
  */
 export interface WizardConfig {
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  costOfCapital?: number | null;
   priceQuantity: {
     targetUnitPrice: number | null;
     maxAcceptablePrice: number | null;
@@ -784,6 +785,7 @@ export interface ResolvedNegotiationConfig {
   // Resolved VALUES (user if provided, else default)
   targetPrice: number;
   maxAcceptablePrice: number;
+  costOfCapital: number;
   paymentTermsMinDays: number;
   paymentTermsMaxDays: number;
   deliveryDate: Date | null;

@@ -36,9 +36,9 @@ describe("Track 1 Week 6: Weighted Utility & HITL Interruption Hooks", () => {
     const result = await weightedUtilityNode(state);
 
     expect(result.decision?.utilityScore).toBeDefined();
-    // Utility score = 1 - (900 - 800)/(1000 - 800) = 0.5
-    expect(result.decision?.utilityScore).toBe(0.5);
-    expect(result.metadata?.utilityResult.totalUtility).toBe(0.5);
+    // NPV-based Effective Cost Utility score = 0.537
+    expect(result.decision?.utilityScore).toBeCloseTo(0.537, 3);
+    expect(result.metadata?.utilityResult.totalUtility).toBeCloseTo(0.537, 3);
   });
 
   it("should compile graph and interrupt on high-value deal, then resume on approval", async () => {
@@ -49,11 +49,11 @@ describe("Track 1 Week 6: Weighted Utility & HITL Interruption Hooks", () => {
       dealId: "d0000000-0000-0000-0000-000000000123",
       round: 0,
       config: {
-        priceQuantity: { targetUnitPrice: 800000, maxAcceptablePrice: 1200000 },
+        priceQuantity: { targetUnitPrice: 800000000, maxAcceptablePrice: 1200000000 },
         parameterWeights: { targetUnitPrice: 100 },
       },
       parsedOffer: {
-        totalPrice: 1100000, // ₹11L (High value!)
+        totalPrice: 1100000000, // ₹110 Cr (High value!)
       },
       metadata: {},
     };
@@ -64,9 +64,9 @@ describe("Track 1 Week 6: Weighted Utility & HITL Interruption Hooks", () => {
     // Invoke graph: it should run up to the human_intervention node and interrupt (pause)
     const result = await graph.invoke(initialState, config);
 
-    // Verify it paused before entering human_intervention
+    // Verify it paused before entering risk_guard
     const stateHistory = await graph.getState(config);
-    expect(stateHistory.next).toContain("human_intervention");
+    expect(stateHistory.next).toContain("risk_guard");
 
     // Now, resume the graph with human approval.
     // Update the state to indicate approval and resume

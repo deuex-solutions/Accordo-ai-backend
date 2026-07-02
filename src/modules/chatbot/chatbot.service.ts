@@ -4357,8 +4357,35 @@ export const getBehavioralDataService = async (
       createdAt: m.createdAt,
     }));
 
-    // Compute behavioral signals
-    const signals = analyzeBehavior(analyzableMessages, deal.round);
+    // Try to retrieve persisted analysis from latest ACCORDO message
+    const latestAccordoMsg = [...allMessages]
+      .reverse()
+      .find(m => m.role === "ACCORDO" && (m.explainabilityJson as any)?.analysis);
+    
+    let signals;
+    if (latestAccordoMsg && (latestAccordoMsg.explainabilityJson as any).analysis) {
+      const persistedAnalysis = (latestAccordoMsg.explainabilityJson as any).analysis;
+      const computedSignals = analyzeBehavior(analyzableMessages, deal.round);
+      
+      const mappedSentiment = (persistedAnalysis.tone?.sentiment || "neutral").toLowerCase() as any;
+      const mappedConcessionVelocity = persistedAnalysis.behavior?.concessionVelocity === "FAST" ? 3.0 
+        : persistedAnalysis.behavior?.concessionVelocity === "STEADY" ? 1.0 
+        : persistedAnalysis.behavior?.concessionVelocity === "SLOW" ? 0.3 
+        : 0.0;
+        
+      signals = {
+        ...computedSignals,
+        latestSentiment: mappedSentiment === "negative" ? "resistant" : mappedSentiment,
+        concessionVelocity: mappedConcessionVelocity,
+        momentum: persistedAnalysis.behavior?.momentum === "ACCELERATING" ? 0.8 
+          : persistedAnalysis.behavior?.momentum === "DECELERATING" ? -0.8 
+          : 0.0,
+        isStalling: persistedAnalysis.behavior?.concessionVelocity === "STALLED" || persistedAnalysis.behavior?.rigidityScore > 0.7,
+        isDiverging: persistedAnalysis.behavior?.rigidityScore > 0.8,
+      };
+    } else {
+      signals = analyzeBehavior(analyzableMessages, deal.round);
+    }
 
     // Compute adaptive strategy if config available
     let strategyLabel = "Matching Pace";
@@ -7038,6 +7065,7 @@ export const vendorSendMessageService = async (
       explainabilityJson: {
         reasoning: pmDecision.reasoning,
         utility: pmDecision.utility,
+        analysis: graphResult?.analysis || null,
       } as any,
     });
 

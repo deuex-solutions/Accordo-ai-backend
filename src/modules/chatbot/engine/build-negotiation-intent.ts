@@ -77,6 +77,66 @@ export function humanRoundPrice(price: number): number {
 }
 
 /**
+ * Ensures PM counter price never regresses below the previous PM counter when
+ * the vendor is still above us. When the vendor has not moved on price, the PM
+ * should only move UP toward the vendor (within maxAcceptablePrice).
+ */
+export function enforcePmCounterMonotonicity(
+  counterPrice: number,
+  lastPmCounterPrice: number | null | undefined,
+  vendorPrice: number | null | undefined,
+  maxAcceptablePrice: number,
+  round: number = 1,
+): number {
+  if (counterPrice <= 0) return counterPrice;
+  if (lastPmCounterPrice == null || lastPmCounterPrice <= 0) {
+    return Math.min(counterPrice, maxAcceptablePrice);
+  }
+
+  // Vendor slightly above ceiling (within 2%): hold at max acceptable, never drop.
+  if (vendorPrice != null && vendorPrice > maxAcceptablePrice) {
+    const overPct = (vendorPrice - maxAcceptablePrice) / maxAcceptablePrice;
+    if (overPct <= 0.02) {
+      return Math.max(
+        counterPrice,
+        lastPmCounterPrice,
+        maxAcceptablePrice,
+      );
+    }
+  }
+
+  const cappedVendor =
+    vendorPrice != null ? Math.min(vendorPrice, maxAcceptablePrice) : null;
+
+  // Vendor still above our last counter: only concede upward, never drop nominal.
+  if (cappedVendor != null && cappedVendor > lastPmCounterPrice) {
+    if (counterPrice <= lastPmCounterPrice) {
+      const gap = cappedVendor - lastPmCounterPrice;
+      const gapStep = Math.max(gap * Math.min(0.35, 0.15 + round * 0.02), 50);
+      const stepped = Math.min(lastPmCounterPrice + gapStep, cappedVendor - 0.01);
+      if (stepped > counterPrice && stepped <= maxAcceptablePrice) {
+        return humanRoundPrice(Math.round(stepped * 100) / 100);
+      }
+      return humanRoundPrice(Math.round(lastPmCounterPrice * 100) / 100);
+    }
+    return Math.min(counterPrice, maxAcceptablePrice);
+  }
+
+  // Vendor at or below our last counter: still never drop below last PM price.
+  if (counterPrice < lastPmCounterPrice) {
+    const floored = Math.min(
+      lastPmCounterPrice,
+      cappedVendor != null ? cappedVendor - 0.01 : lastPmCounterPrice,
+    );
+    if (floored > counterPrice) {
+      return humanRoundPrice(Math.round(floored * 100) / 100);
+    }
+  }
+
+  return Math.min(counterPrice, maxAcceptablePrice);
+}
+
+/**
  * Convert ISO-style dates to human-readable format for vendor-facing messages.
  * "2026-03-15" → "March 15, 2026"
  * "2026-03-15T00:00:00Z" → "March 15, 2026"
@@ -383,6 +443,10 @@ function selectCommercialPosition(
 ): string {
   const pool = COMMERCIAL_POSITIONS[action];
   const round = roundNumber ?? 1;
+
+  if (!pool) {
+    return "We are working toward a mutually beneficial agreement.";
+  }
 
   let phrases: string[];
 

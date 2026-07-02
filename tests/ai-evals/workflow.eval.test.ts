@@ -97,7 +97,7 @@ describe("AI Eval: Multi-Agent Workflow Integrated", () => {
     // Verify decision ran
     expect(result.decision).toBeDefined();
     expect(result.decision.action).toBe("COUNTER");
-    expect(result.decision.utilityScore).toBe(0.5); // verified that weightedUtilityNode ran!
+    expect(result.decision.utilityScore).toBeCloseTo(0.502, 3); // verified that weightedUtilityNode ran!
 
     // Verify RAG context was assembled and fused in metadata
     expect(result.metadata.ragContext).toBeDefined();

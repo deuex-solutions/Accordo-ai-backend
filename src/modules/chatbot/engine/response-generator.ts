@@ -535,7 +535,21 @@ export async function generateHumanLikeResponse(
     currentUtility: input.decision.utilityScore,
   };
   const milestone = detectMilestone(milestoneInput);
-  const enrichment = getPersonalityEnrichment(milestone, tone);
+  let enrichment = getPersonalityEnrichment(milestone, tone);
+  let concernsForFallback = concerns;
+
+  // Merge milestone opener + concern ack into one natural block (avoid triple-stacking)
+  if (milestone === "long_negotiation" && concerns.length > 0) {
+    const concernSentence = getAcknowledgmentSentence(concerns);
+    if (concernSentence && enrichment.prefix) {
+      enrichment = {
+        ...enrichment,
+        prefix: `${enrichment.prefix} ${concernSentence}`,
+        suffix: "",
+      };
+      concernsForFallback = [];
+    }
+  }
 
   if (milestone !== "none") {
     logger.info("[ResponseGenerator] Personality milestone detected", {
@@ -585,7 +599,7 @@ export async function generateHumanLikeResponse(
 
   // Fallback to enhanced templates
   logger.info("[ResponseGenerator] Using fallback templates");
-  const fallbackResponse = generateFallback(input, tone, concerns);
+  const fallbackResponse = generateFallback(input, tone, concernsForFallback);
   const elapsed = Date.now() - startTime;
 
   return {
